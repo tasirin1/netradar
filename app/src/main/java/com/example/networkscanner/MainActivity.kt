@@ -8,11 +8,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.Button
 import android.widget.TextView
+import com.google.android.material.button.MaterialButton
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.button.MaterialButton
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -60,12 +61,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.preWan).setOnClickListener { inputTarget.setText("157.66.50.147") }
         findViewById<TextView>(R.id.preHost).setOnClickListener { inputTarget.setText("barayacell.com") }
 
-        findViewById<MaterialButton>(R.id.btnClear).setOnClickListener {
+        findViewById<View>(R.id.btnClear) as Button.setOnClickListener {
             tvResults.text = ""
             tvSummary.text = ""
             status("Ready", "#455A64", false)
         }
-        findViewById<MaterialButton>(R.id.btnCopy).setOnClickListener {
+        findViewById<View>(R.id.btnCopy) as Button.setOnClickListener {
             val text = tvResults.text.toString()
             if (text.isNotEmpty()) {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
@@ -285,51 +286,121 @@ class MainActivity : AppCompatActivity() {
         return if (isWeb) probeHttp(ip, port, mode) else probeTcp(ip, port, sock, mode)
     }
 
+    private val webPaths = listOf(
+        "/", "/index.htm", "/index.html", "/index.php", "/login.htm", "/login.html", "/login.php",
+        "/login", "/admin.htm", "/admin.html", "/admin", "/admin/", "/admin/index.htm",
+        "/status", "/status.htm", "/status.html", "/status.asp",
+        "/config", "/config.htm", "/config.html", "/config.asp",
+        "/setup", "/setup.htm", "/setup.html", "/setup.asp",
+        "/manager", "/manager.htm", "/manager.html", "/manager.asp",
+        "/cgi-bin/", "/cgi-bin/login", "/cgi-bin/status",
+        "/backup", "/backup.htm", "/backup.html",
+        "/wps", "/wps.htm", "/upnp", "/upnp.xml",
+        "/dlf", "/HNAP", "/HNAP1", "/goform", "/goform/",
+        "/startup.htm", "/startup.asp",
+        "/WAN.htm", "/WAN.asp", "/LAN.htm", "/LAN.asp",
+        "/WIFI.htm", "/WIFI.asp", "/wireless.htm",
+        "/dhcp.htm", "/dhcp.asp", "/static.htm",
+        "/password.htm", "/password.asp",
+        "/user.htm", "/user.asp", "/users.htm",
+        "/system.htm", "/system.asp", "/info.htm", "/info.asp",
+        "/reboot", "/reboot.htm", "/reboot.asp", "/restart",
+        "/upgrade", "/upgrade.htm", "/upgrade.asp",
+        "/log", "/log.htm", "/log.asp", "/logs.htm",
+        "/error.htm", "/404.htm", "/test.htm",
+        "/shell", "/cmd", "/command", "/exec",
+        "/debug", "/debug.htm", "/debug.asp",
+        "/telnet", "/ssh", "/vnc",
+        "/proxy", "/proxy.htm",
+        "/favicon.ico", "/robots.txt", "/sitemap.xml",
+        "/.env", "/config.json", "/config.xml", "/config.txt",
+        "/webconfig", "/web.xml", "/WEB-INF/web.xml"
+    )
+
     // ─── HTTP probe ───
     private fun probeHttp(ip: String, port: Int, mode: String): String {
         try {
             val protocol = if (port == 443 || port == 8443 || port == 7443 || port == 8243 || port == 9443 || port == 4443 || port == 4343 || port == 444 || port == 8531 || port == 8444) "https" else "http"
-            val conn = URL("$protocol://$ip:$port/").openConnection() as HttpURLConnection
-            conn.connectTimeout = if (mode == "Nmap-Style") 2000 else 1200
-            conn.readTimeout = 1500
-            conn.instanceFollowRedirects = false
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetScan/1.1")
-            conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,*/*")
+            val base = "$protocol://$ip:$port"
 
-            val code = try { conn.responseCode } catch (_: Exception) { 0 }
-            val msg = try { conn.responseMessage } catch (_: Exception) { "" }
-            val server = conn.getHeaderField("Server") ?: ""
-            val loc = conn.getHeaderField("Location") ?: ""
-            val ct = conn.getHeaderField("Content-Type") ?: ""
-            val www = conn.getHeaderField("WWW-Authenticate") ?: ""
-            val xpwr = conn.getHeaderField("X-Powered-By") ?: ""
+            // First check root
+            val rootResult = checkHttpPath(base, "/", mode)
+            if (rootResult == null) return "Port $port (${guessService(port)}) [TCP open]"
 
-            // Page title
-            var title = ""
-            try {
-                val reader = BufferedReader(InputStreamReader(if (code in 200..399) conn.inputStream else conn.errorStream, "UTF-8"), 512)
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    val m = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(line ?: "")
-                    if (m != null) { title = m.groupValues[1].take(60).trim(); break }
-                }
-                reader.close()
-            } catch (_: Exception) { }
-            conn.disconnect()
+            // Then probe common paths (limited to save time)
+            val foundPaths = mutableListOf<String>()
+            val pathsToProbe = if (mode == "Nmap-Style") webPaths else webPaths.take(30)
+
+            for (path in pathsToProbe) {
+                if (path == "/") continue
+                val result = checkHttpPath(base, path, mode)
+                if (result != null) foundPaths.add(result)
+                if (foundPaths.size >= 15) break  // cap at 15 found paths
+            }
 
             val parts = mutableListOf<String>()
             parts.add("Port $port (${guessService(port)})")
-            if (code > 0) parts.add("HTTP $code${if (msg.isNotEmpty()) " $msg" else ""}")
-            if (server.isNotEmpty()) parts.add("· $server")
-            if (xpwr.isNotEmpty()) parts.add("[$xpwr]")
-            if (loc.isNotEmpty() && loc.length < 70) parts.add("→ $loc")
-            if (www.isNotEmpty()) parts.add("🔒 Auth")
-            if (title.isNotEmpty()) parts.add("📄 \"$title\"")
-            if (ct.isNotEmpty() && !ct.startsWith("text/html") && !ct.startsWith("text/plain")) parts.add("[$ct]")
-            return parts.joinToString(" ")
+            if (rootResult.isNotEmpty()) parts.add(rootResult)
+            if (foundPaths.isNotEmpty()) {
+                parts.add("| Paths:")
+                foundPaths.forEach { parts.add("  \u2514 $it") }
+            }
+            return parts.joinToString("\n")
         } catch (_: Exception) {
             return "Port $port (${guessService(port)}) [TCP open]"
         }
+    }
+
+    private fun checkHttpPath(base: String, path: String, mode: String): String? {
+        return try {
+            val conn = URL("$base$path").openConnection() as HttpURLConnection
+            conn.connectTimeout = if (mode == "Nmap-Style") 1500 else 800
+            conn.readTimeout = 1000
+            conn.instanceFollowRedirects = false
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetScan/1.1")
+            conn.setRequestProperty("Accept", "text/html,*/*")
+
+            val code = try { conn.responseCode } catch (_: Exception) { 0 }
+            if (code == 0 || code == 404 || code == 410) { conn.disconnect(); return null }
+
+            val msg = try { conn.responseMessage } catch (_: Exception) { "" }
+            val loc = conn.getHeaderField("Location") ?: ""
+            val ct = conn.getHeaderField("Content-Type") ?: ""
+            val www = conn.getHeaderField("WWW-Authenticate") ?: ""
+
+            // Get page title or size indication
+            var title = ""
+            var size = 0
+            try {
+                val stream = if (code in 200..399) conn.inputStream else conn.errorStream
+                val reader = BufferedReader(InputStreamReader(stream, "UTF-8"), 512)
+                var line: String?
+                var found = false
+                while (reader.readLine().also { line = it } != null) {
+                    size += (line?.length ?: 0) + 1
+                    if (!found) {
+                        val m = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(line ?: "")
+                        if (m != null) { title = m.groupValues[1].take(50).trim(); found = true }
+                    }
+                    if (found && size > 2048) break
+                }
+                reader.close()
+            } catch (_: Exception) { }
+
+            conn.disconnect()
+
+            val info = mutableListOf<String>()
+            info.add("$path")
+            info.add("HTTP $code${if (msg.isNotEmpty()) " $msg" else ""}")
+            if (title.isNotEmpty()) info.add(""$title"")
+            if (www.isNotEmpty()) info.add("Auth")
+            if (loc.isNotEmpty() && loc.length < 60) info.add("-> $loc")
+            if (path != "/") {
+                val sizeKb = size / 1024
+                if (sizeKb > 0) info.add("[${sizeKb}KB]")
+            }
+            return info.joinToString(" ")
+        } catch (_: Exception) { null }
     }
 
     // ─── TCP banner grab ───
@@ -378,15 +449,20 @@ class MainActivity : AppCompatActivity() {
         val sorted = results.entries.sortedBy { it.key }
         var hostNum = 1
         for ((host, svcs) in sorted) {
-            // Host header
-            sb.append("═ $hostNum. http://$host/ ")
-            val osGuess = os[host]
-            if (osGuess != null) sb.append("[$osGuess]")
-            sb.append("\n")
+            // Host header - make it a clickable link
+            sb.appendLine("═ $hostNum. http://$host/ ${os[host]?.let { "[$it]" } ?: ""}")
             for (svc in svcs) {
-                sb.append("   \u2514 $svc\n")
+                // Service may contain newlines (from path discovery) - indent each line
+                val lines = svc.split("\n")
+                for ((idx, line) in lines.withIndex()) {
+                    if (idx == 0) {
+                        sb.appendLine("   \u2514 $line")
+                    } else {
+                        sb.appendLine("      $line")
+                    }
+                }
             }
-            sb.append("\n")
+            sb.appendLine()
             hostNum++
         }
         tvResults.text = sb.toString().trimStart()

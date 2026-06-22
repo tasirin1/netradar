@@ -261,25 +261,33 @@
                             android:textColor="#F5F5F5"
                             android:textSize="14sp"
                             android:textStyle="bold" />
-                        <com.google.android.material.button.MaterialButton
+                        <Button
                             android:id="@+id/btnClear"
                             android:layout_width="wrap_content"
                             android:layout_height="28dp"
-                            android:backgroundTint="#333333"
+                            android:background="#333333"
                             android:text="Clear"
                             android:textAllCaps="false"
                             android:textColor="#AAAAAA"
-                            android:textSize="12sp" />
-                        <com.google.android.material.button.MaterialButton
+                            android:textSize="12sp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:paddingHorizontal="12dp"
+                            android:paddingVertical="2dp" />
+                        <Button
                             android:id="@+id/btnCopy"
                             android:layout_width="wrap_content"
                             android:layout_height="28dp"
                             android:layout_marginStart="4dp"
-                            android:backgroundTint="#1B5E20"
+                            android:background="#1B5E20"
                             android:text="Copy"
                             android:textAllCaps="false"
                             android:textColor="#80CBC4"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:paddingHorizontal="12dp"
+                            android:paddingVertical="2dp" />
                     </LinearLayout>
                     <TextView
                         android:id="@+id/tvSummary"
