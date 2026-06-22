@@ -4,8 +4,9 @@
         <item name="colorPrimary">#00695C</item>
         <item name="colorPrimaryVariant">#004D40</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="android:statusBarColor">#004D40</item>
-        <item name="android:navigationBarColor">#E0F2F1</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:forceDarkAllowed">true</item>
     </style>
 </resources>

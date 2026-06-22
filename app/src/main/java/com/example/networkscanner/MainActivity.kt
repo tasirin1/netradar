@@ -3,7 +3,6 @@ package com.example.networkscanner
 import android.content.ClipboardManager
 import android.content.ClipData
 import android.graphics.Color
-import android.text.Html
 import android.text.method.LinkMovementMethod
 import android.os.Bundle
 import android.os.Handler
