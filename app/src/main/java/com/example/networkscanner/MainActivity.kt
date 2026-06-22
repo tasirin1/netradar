@@ -61,12 +61,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.preWan).setOnClickListener { inputTarget.setText("157.66.50.147") }
         findViewById<TextView>(R.id.preHost).setOnClickListener { inputTarget.setText("barayacell.com") }
 
-        findViewById<View>(R.id.btnClear) as Button.setOnClickListener {
+        (findViewById<View>(R.id.btnClear) as Button).setOnClickListener {
             tvResults.text = ""
             tvSummary.text = ""
             status("Ready", "#455A64", false)
         }
-        findViewById<View>(R.id.btnCopy) as Button.setOnClickListener {
+        (findViewById<View>(R.id.btnCopy) as Button).setOnClickListener {
             val text = tvResults.text.toString()
             if (text.isNotEmpty()) {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
