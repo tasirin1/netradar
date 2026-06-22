@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val prefix = "${parts[0]}.${parts[1]}.${parts[2]}."
 
-                results.add("── Scanning $prefix0/24 ──")
+                results.add("── Scanning ${prefix}0/24 ──")
                 results.add("Local IP: $localAddr\n")
 
                 for (i in 1..254) {
