@@ -273,7 +273,8 @@ class MainActivity : AppCompatActivity() {
                     val pidEnd = block.indexOf("\"", pidIdx + 8)
                     if (pidEnd < 0) { searchFrom = portTag + 1; continue }
                     val portStr = block.substring(pidIdx + 8, pidEnd)
-                    val port = portStr.toIntOrNull() ?: run { searchFrom = portTag + 1; continue }
+                    if (portStr.toIntOrNull() == null) { searchFrom = portTag + 1; continue }
+                    val port = portStr.toIntOrNull()!!
 
                     // Get state
                     val stateIdx = block.indexOf("state=\"", portTag)
