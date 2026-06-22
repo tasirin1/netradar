@@ -793,18 +793,12 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    // ─── Hidden Camera Scanner ───
+
     private fun cameraScan() {
         if (isScanning) { toast("Already scanning!"); return }
         val target = getTarget()
-        AlertDialog.Builder(this)
-            .setTitle("Camera Scanner")
-            .setMessage("Scanning for hidden IP cameras on $target\n\nChecks common camera ports:\n554 (RTSP), 8899 (ONVIF), 34567 (Hikvision),\n37777 (Dahua), 80/443/8080/8443 (Web)\n\nAlso probes for camera-specific HTTP responses.")
-            .setPositiveButton("Scan") { _, _ -> runCameraScan(target) }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
+        runCameraScan(target)
+    }\n
     private val cameraPorts = intArrayOf(
         80, 443, 554, 8080, 8443, 8899, 34567, 37777,
         5000, 7000, 8000, 8554, 9000, 10000, 37215, 49152
@@ -1072,18 +1066,12 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Scan") { _, _ -> runRouterScan(target) }
             .setNegativeButton("Cancel", null)
             .show()
-    }
 
-    private val routerPorts = intArrayOf(
-        80, 443, 8080, 8443, 8291, 7547, 5000, 7000,
-        8081, 8082, 8888, 9000, 10000, 2000, 444, 81, 82, 88
-    )
-
-    private val routerPaths = arrayOf(
-        "/", "/admin", "/admin/", "/login", "/login/",
-        "/setup", "/setup/", "/config", "/config/",
-        "/management", "/management/", "/status", "/status/",
-        "/system", "/system/", "/router", "/router/",
+    private fun routerScan() {
+        if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
+        runRouterScan(target)
+    }\n        "/system", "/system/", "/router", "/router/",
         "/cgi-bin/", "/cgi-bin/login", "/cgi-bin/status",
         "/main", "/main/", "/home", "/home/",
         "/index.htm", "/index.html", "/login.htm", "/login.html"
@@ -1378,18 +1366,12 @@ class MainActivity : AppCompatActivity() {
         tvResults.text = "Scanning for shares...\n"
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
-        status("Shares scan...", "#33691E", true)
 
-        Thread {
-            val shares = ConcurrentHashMap<String, MutableList<String>>()
-            val startTime = System.currentTimeMillis()
-
-            try {
-                val targets = autoExpandTarget(target)
-                if (targets.isEmpty()) {
-                    uiPost("Invalid target", "#C62828", false)
-                    isScanning = false
-                    return@Thread
+    private fun sharesScan() {
+        if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
+        runSharesScan(target)
+    }\n                    return@Thread
                 }
                 uiPost("Checking ${targets.size} host(s) for shares...", "#33691E", true)
 
