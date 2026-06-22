@@ -385,13 +385,17 @@ class MainActivity : AppCompatActivity() {
             if (osGuess != null) sb.append("[$osGuess]")
             sb.append("<br/>")
             for (svc in svcs) {
-                val clickable = svc.replace(Regex("(https?://[^ \[\]\(\)]+)"), "<a href='$1'>$1</a>")
-                sb.append("   \u2514 $clickable<br/>")
+                sb.append("   \u2514 $svc<br/>")
             }
             sb.append("<br/>")
             hostNum++
         }
-        tvResults.text = Html.fromHtml(sb.toString(), Html.FROM_HTML_MODE_LEGACY)
+        @Suppress("DEPRECATION")
+        tvResults.text = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            Html.fromHtml(sb.toString(), Html.FROM_HTML_MODE_LEGACY)
+        } else {
+            Html.fromHtml(sb.toString())
+        }
         tvResults.movementMethod = LinkMovementMethod.getInstance()
         
         // Summary with host count + open ports count
