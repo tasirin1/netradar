@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnNmap).setOnClickListener { nmapScan() }
         findViewById<MaterialButton>(R.id.btnCamera).setOnClickListener { cameraScan() }
         findViewById<MaterialButton>(R.id.btnRouter).setOnClickListener { routerScan() }
+        findViewById<MaterialButton>(R.id.btnShares).setOnClickListener { sharesScan() }
         // Preset chips
         findViewById<TextView>(R.id.preLocal).setOnClickListener { inputTarget.setText("192.168.0.0/24") }
         findViewById<TextView>(R.id.preRouter).setOnClickListener { inputTarget.setText("192.168.0.1") }
@@ -1340,6 +1341,230 @@ class MainActivity : AppCompatActivity() {
         tvResults.text = sb.toString().trimStart()
         tvResults.movementMethod = LinkMovementMethod.getInstance()
         tvSummary.text = "${routers.size} router(s) found"
+    }
+
+
+    // ─── Network Shares Scanner ───
+    private fun sharesScan() {
+        if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
+        AlertDialog.Builder(this)
+            .setTitle("Shares Scanner")
+            .setMessage("Searching for file shares on $target\n\nChecks for:\n• HTTP directory listings\n• FTP servers (anonymous)\n• SMB/CIFS shares\n• NFS exports\n• WebDAV\n\nScans common share ports.")
+            .setPositiveButton("Scan") { _, _ -> runSharesScan(target) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private val sharePorts = intArrayOf(80, 8080, 21, 445, 139, 2049, 111, 135, 443, 8443, 8081, 5000, 7000, 8888, 9090, 9000)
+
+    private fun runSharesScan(target: String) {
+        isScanning = true
+        cardResults.visibility = View.VISIBLE
+        tvResults.text = "Scanning for shares...\n"
+        tvSummary.text = ""
+        findViewById<View>(R.id.btnSave).visibility = View.GONE
+        status("Shares scan...", "#33691E", true)
+
+        Thread {
+            val shares = ConcurrentHashMap<String, MutableList<String>>()
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val targets = expandTarget(target)
+                if (targets.isEmpty()) {
+                    uiPost("Invalid target", "#C62828", false)
+                    isScanning = false
+                    return@Thread
+                }
+                uiPost("Checking ${targets.size} host(s) for shares...", "#33691E", true)
+
+                val latch = CountDownLatch(targets.size)
+                val pool = Executors.newFixedThreadPool(30)
+
+                for (ip in targets) {
+                    if (!isScanning) { latch.countDown(); continue }
+                    pool.execute {
+                        try {
+                            val foundShares = mutableListOf<String>()
+
+                            for (port in sharePorts) {
+                                if (!isScanning) break
+                                val share = probeShare(ip, port)
+                                if (share != null) {
+                                    synchronized(foundShares) { foundShares.add(share) }
+                                }
+                            }
+
+                            if (foundShares.isNotEmpty()) {
+                                synchronized(shares) { shares[ip] = foundShares }
+                                ui.post { updateSharesResults(shares) }
+                            }
+                        } finally { latch.countDown() }
+                    }
+                }
+
+                pool.shutdown()
+                latch.await()
+                ui.post { updateSharesResults(shares) }
+
+            } catch (e: Exception) {
+                uiPost("Error: ${e.message}", "#C62828", false)
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            ui.post {
+                tvSummary.text = "${shares.size} host(s) with shares in ${elapsed / 1000}s"
+                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
+                status("${shares.size} host(s) with shares", "#33691E", true)
+                toast("${shares.size} host(s) with shares")
+            }
+            isScanning = false
+        }.start()
+    }
+
+    private fun probeShare(ip: String, port: Int): String? {
+        return try {
+            val s = Socket()
+            s.connect(InetSocketAddress(ip, port), 500)
+            if (!s.isConnected) { s.close(); return null }
+
+            var result: String? = null
+
+            when (port) {
+                21 -> {
+                    // FTP - check for anonymous access
+                    try {
+                        val reader = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
+                        val banner = reader.readLine() ?: ""
+                        if (banner.contains("FTP") || banner.contains("220")) {
+                            s.close()
+                            // Quick anonymous probe
+                            val s2 = Socket()
+                            s2.connect(InetSocketAddress(ip, port), 1000)
+                            s2.getOutputStream().write("USER anonymous\r\n".toByteArray())
+                            val r1 = BufferedReader(InputStreamReader(s2.getInputStream(), "ISO-8859-1"))
+                            val resp1 = r1.readLine() ?: ""
+                            s2.getOutputStream().write("PASS guest@\r\n".toByteArray())
+                            val resp2 = r1.readLine() ?: ""
+                            s2.close()
+                            val isAnonymous = resp2.contains("230") || resp1.contains("331")
+                            val ftpInfo = "Port 21 (FTP)${if (isAnonymous) " [ANONYMOUS]" else " [auth required]"}"
+                            if (isAnonymous) result = "\uD83D\uDCC1 $ftpInfo - ${banner.take(60)}"
+                            else result = "\uD83D\uDCC1 $ftpInfo"
+                        }
+                        reader.close()
+                    } catch (_: Exception) { }
+                }
+                445 -> {
+                    // SMB
+                    s.close()
+                    result = "\uD83D\uDCC1 Port 445 (SMB) - Windows file sharing"
+                }
+                139 -> {
+                    // NetBIOS
+                    s.close()
+                    result = "\uD83D\uDCC1 Port 139 (NetBIOS) - File sharing"
+                }
+                2049, 111 -> {
+                    // NFS
+                    if (port == 2049) {
+                        result = "\uD83D\uDCC1 Port 2049 (NFS) - Network file system"
+                        s.close()
+                    } else {
+                        s.close()
+                        result = "\uD83D\uDCC1 Port 111 (Portmapper) - RPC services"
+                    }
+                }
+                135 -> {
+                    s.close()
+                    result = "\uD83D\uDCC1 Port 135 (MSRPC) - Windows RPC"
+                }
+                else -> {
+                    // HTTP - check for directory listing
+                    try {
+                        val proto = if (port in intArrayOf(443, 8443)) "https" else "http"
+                        val conn = URL("$proto://$ip:$port/").openConnection() as HttpURLConnection
+                        conn.connectTimeout = 800
+                        conn.readTimeout = 800
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetScan/1.1")
+                        val code = try { conn.responseCode } catch (_: Exception) { 0 }
+                        val ct = conn.getHeaderField("Content-Type") ?: ""
+                        val server = conn.getHeaderField("Server") ?: ""
+
+                        var isDirListing = false
+                        var hasIndexTitle = false
+                        var title = ""
+
+                        if (code in 200..399) {
+                            try {
+                                val reader = BufferedReader(InputStreamReader(conn.inputStream, "UTF-8"), 1024)
+                                var line: String?
+                                var lineCount = 0
+                                while (reader.readLine().also { line = it } != null && lineCount < 30) {
+                                    val lc = (line ?: "").lowercase()
+                                    // Check for directory listing signatures
+                                    if (lc.contains("index of") || lc.contains("<title>")) {
+                                        val m = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(line ?: "")
+                                        if (m != null) {
+                                            title = m.groupValues[1].take(60).trim()
+                                            hasIndexTitle = true
+                                            if (title.lowercase().contains("index of")) isDirListing = true
+                                        }
+                                    }
+                                    if (lc.contains("parent directory") || lc.contains("../") ||
+                                        lc.contains("<img src=\"/icons/") || lc.contains("apache") && lc.contains("directory listing")) {
+                                        isDirListing = true
+                                    }
+                                    lineCount++
+                                }
+                                reader.close()
+                            } catch (_: Exception) { }
+                            conn.disconnect()
+
+                            if (isDirListing || hasIndexTitle) {
+                                val parts = mutableListOf<String>()
+                                parts.add("Port $port")
+                                if (title.isNotEmpty() && !title.lowercase().contains("index of")) {
+                                    parts.add("\"$title\"")
+                                } else if (isDirListing) {
+                                    parts.add("Directory listing")
+                                }
+                                // WebDAV detection
+                                if (server.contains("Microsoft-IIS") || server.contains("Apache") ||
+                                    title.lowercase().contains("webdav") || title.lowercase().contains("dav")) {
+                                    parts.add("[WebDAV]")
+                                }
+                                if (server.isNotEmpty()) parts.add("· $server")
+                                result = "\uD83D\uDCC1 ${parts.joinToString(" ")}"
+                            }
+                        } else {
+                            conn.disconnect()
+                        }
+                    } catch (_: Exception) { }
+                    s.close()
+                }
+            }
+
+            result
+        } catch (_: Exception) { null }
+    }
+
+    private fun updateSharesResults(shares: ConcurrentHashMap<String, MutableList<String>>) {
+        val sb = StringBuilder()
+        val sorted = shares.entries.sortedBy { it.key }
+        var num = 1
+        for ((ip, shareList) in sorted) {
+            sb.appendLine("\uD83D\uDCC1 $num. http://$ip/")
+            for (share in shareList) {
+                sb.appendLine("   \u2514 $share")
+            }
+            sb.appendLine()
+            num++
+        }
+        tvResults.text = sb.toString().trimStart()
+        tvResults.movementMethod = LinkMovementMethod.getInstance()
+        tvSummary.text = "${shares.size} host(s) with shares"
     }
 
     private fun uiPost(msg: String, hex: String, ok: Boolean) {
