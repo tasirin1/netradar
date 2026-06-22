@@ -476,6 +476,23 @@ class MainActivity : AppCompatActivity() {
         return listOf(target)
     }
 
+    // ─── Auto-expand single IP to /24 subnet ───
+    private fun autoExpandTarget(target: String): List<String> {
+        val ipRegex = Regex("""^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$""")
+        if (ipRegex.matches(target)) {
+            return (1..254).map { "${target.substringBeforeLast(".")}.$it" }
+        }
+        // Already a subnet or hostname
+        val expanded = expandTarget(target)
+        if (expanded.size < 2 && expanded.isNotEmpty()) {
+            val ip = expanded.first()
+            if (ipRegex.matches(ip)) {
+                return (1..254).map { "${ip.substringBeforeLast(".")}.$it" }
+            }
+        }
+        return expanded
+    }
+
     // ─── WiFi IP ───
     private fun getWifiIp(): String {
         try {
@@ -818,7 +835,7 @@ class MainActivity : AppCompatActivity() {
             val startTime = System.currentTimeMillis()
 
             try {
-                val targets = expandTarget(target)
+                val targets = autoExpandTarget(target)
                 if (targets.isEmpty()) {
                     uiPost("Invalid target", "#C62828", false)
                     isScanning = false
@@ -1055,7 +1072,7 @@ class MainActivity : AppCompatActivity() {
         val target = getTarget()
         AlertDialog.Builder(this)
             .setTitle("Router Scanner")
-            .setMessage("Searching for router admin interfaces on $target\n\nChecks common admin ports and paths\nto identify router model & brand.\n\nScans for: MikroTik, TP-Link, Tenda,\nD-Link, ASUS, Netgear, Linksys,\nOpenWrt, DD-WRT, and more.")
+            .setMessage("Scanning ALL devices for routers\nTarget: $target\n\nAuto-expanded to /24 subnet\nChecking common admin ports & paths and paths\nto identify router model & brand.\n\nScans for: MikroTik, TP-Link, Tenda,\nD-Link, ASUS, Netgear, Linksys,\nOpenWrt, DD-WRT, and more.")
             .setPositiveButton("Scan") { _, _ -> runRouterScan(target) }
             .setNegativeButton("Cancel", null)
             .show()
@@ -1099,7 +1116,7 @@ class MainActivity : AppCompatActivity() {
             val startTime = System.currentTimeMillis()
 
             try {
-                val targets = expandTarget(target)
+                val targets = autoExpandTarget(target)
                 if (targets.isEmpty()) {
                     uiPost("Invalid target", "#C62828", false)
                     isScanning = false
@@ -1351,7 +1368,7 @@ class MainActivity : AppCompatActivity() {
         val target = getTarget()
         AlertDialog.Builder(this)
             .setTitle("Shares Scanner")
-            .setMessage("Searching for file shares on $target\n\nChecks for:\n• HTTP directory listings\n• FTP servers (anonymous)\n• SMB/CIFS shares\n• NFS exports\n• WebDAV\n\nScans common share ports.")
+            .setMessage("Scanning ALL devices for shares\nTarget: $target\n\nAuto-expanded to /24 subnet\nChecks for:\n• HTTP directory listings\n• FTP servers (anonymous)\n• SMB/CIFS shares\n• NFS exports\n• WebDAV\n\nScans common share ports.")
             .setPositiveButton("Scan") { _, _ -> runSharesScan(target) }
             .setNegativeButton("Cancel", null)
             .show()
@@ -1372,7 +1389,7 @@ class MainActivity : AppCompatActivity() {
             val startTime = System.currentTimeMillis()
 
             try {
-                val targets = expandTarget(target)
+                val targets = autoExpandTarget(target)
                 if (targets.isEmpty()) {
                     uiPost("Invalid target", "#C62828", false)
                     isScanning = false
@@ -1573,8 +1590,8 @@ class MainActivity : AppCompatActivity() {
     private fun devicesScan() {
         if (isScanning) { toast("Already scanning!"); return }
         val target = getTarget()
-        val targets = expandTarget(target)
-        val hostCount = if (targets.size > 1) targets.size else 254
+        val targets = autoExpandTarget(target)
+        val hostCount = targets.size
         AlertDialog.Builder(this)
             .setTitle("Device Discovery")
             .setMessage("Scanning all connected devices on $target\n\n~$hostCount IP(s) to check\n\nIdentifies device type by probing\ncommon ports & services.")
@@ -1607,7 +1624,7 @@ class MainActivity : AppCompatActivity() {
             val startTime = System.currentTimeMillis()
 
             try {
-                val targets = expandTarget(target)
+                val targets = autoExpandTarget(target)
                 if (targets.isEmpty()) {
                     uiPost("Invalid target", "#C62828", false)
                     isScanning = false
