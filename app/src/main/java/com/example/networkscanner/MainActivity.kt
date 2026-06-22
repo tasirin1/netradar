@@ -155,6 +155,25 @@ class MainActivity : AppCompatActivity() {
                             val ipServices = mutableListOf<String>()
                             var hasOs = false
 
+                            // Try to resolve hostname
+                            var hostname = ""
+                            try {
+                                val addr = InetAddress.getByName(ip)
+                                val hn = addr.hostName ?: ""
+                                if (hn != ip) hostname = hn
+                            } catch (_: Exception) { }
+
+                            // Quick ping to measure RTT
+                            var rtt = ""
+                            try {
+                                val start = System.nanoTime()
+                                val reachable = InetAddress.getByName(ip).isReachable(500)
+                                if (reachable) {
+                                    val ms = (System.nanoTime() - start) / 1_000_000
+                                    if (ms < 500) rtt = "${ms}ms"
+                                }
+                            } catch (_: Exception) { }
+
                             for (port in ports) {
                                 if (!isScanning) break
                                 try {
@@ -168,6 +187,14 @@ class MainActivity : AppCompatActivity() {
                             }
 
                             if (ipServices.isNotEmpty()) {
+                                // Prepend hostname info
+                                if (hostname.isNotEmpty()) {
+                                    synchronized(ipServices) { ipServices.add(0, "\u2192 $hostname") }
+                                }
+                                if (rtt.isNotEmpty()) {
+                                    synchronized(ipServices) { ipServices.add(if (hostname.isEmpty()) 0 else 1, "\u26A1 $rtt") }
+                                }
+
                                 allResults[ip] = ipServices
                                 activeHosts.incrementAndGet()
 
@@ -424,7 +451,12 @@ class MainActivity : AppCompatActivity() {
             all.contains("SMB") || all.contains("445") -> "Windows/Linux SMB"
             all.contains("RDP") || all.contains("3389") -> "Windows (RDP)"
             all.contains("MySQL") && all.contains("3306") -> "Database server"
+            all.contains("HTTP") && all.contains("401") -> "Router (Auth required)"
             else -> ""
+
+    }
+
+
         }
     }
 
