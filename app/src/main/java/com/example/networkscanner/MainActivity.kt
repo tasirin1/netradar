@@ -1,5 +1,7 @@
 package com.example.networkscanner
 
+import android.content.ClipboardManager
+import android.content.ClipData
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
@@ -58,8 +60,19 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.preHost).setOnClickListener { inputTarget.setText("barayacell.com") }
 
         findViewById<MaterialButton>(R.id.btnClear).setOnClickListener {
-            cardResults.visibility = View.GONE
-            status("Ready", "#78909C", false)
+            tvResults.text = ""
+            tvSummary.text = ""
+            status("Ready", "#455A64", false)
+        }
+        findViewById<MaterialButton>(R.id.btnCopy).setOnClickListener {
+            val text = tvResults.text.toString()
+            if (text.isNotEmpty()) {
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("NetScan Results", text))
+                toast("Results copied!")
+            } else {
+                toast("Nothing to copy")
+            }
         }
     }
 
