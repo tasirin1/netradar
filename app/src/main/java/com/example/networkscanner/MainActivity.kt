@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnRouter).setOnClickListener { routerScan() }
         findViewById<MaterialButton>(R.id.btnShares).setOnClickListener { sharesScan() }
         findViewById<MaterialButton>(R.id.btnDevices).setOnClickListener { devicesScan() }
+        findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
         // Preset chips
         findViewById<TextView>(R.id.preLocal).setOnClickListener { inputTarget.setText("192.168.0.0/24") }
         findViewById<TextView>(R.id.preRouter).setOnClickListener { inputTarget.setText("192.168.0.1") }
@@ -1861,6 +1862,317 @@ class MainActivity : AppCompatActivity() {
         tvResults.text = sb.toString().trimStart()
         tvResults.movementMethod = LinkMovementMethod.getInstance()
         tvSummary.text = "${devices.size} device(s) found"
+    }
+
+
+    // ─── Full Discovery: Camera + Router + Shares ───
+    private fun discoverScan() {
+        if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
+        AlertDialog.Builder(this)
+            .setTitle("Full Discovery")
+            .setMessage("Comprehensive scan of ALL devices on $target\n\nFor each device checks:\n\uD83D\uDCF7 Camera ports (RTSP/ONVIF/Hikvision)\n\uD83C\uDF10 Router admin (HTTP/Winbox/CWMP)\n\uD83D\uDCC1 File shares (FTP/SMB/NFS/HTTP listing)\n\nAuto-expands single IP to /24 subnet.")
+            .setPositiveButton("Start") { _, _ -> runDiscoverScan(target) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private val discoverPorts = intArrayOf(
+        80, 443, 8080, 8443, 21, 22, 23, 445, 139, 554,
+        8899, 34567, 37777, 37215, 8291, 7547, 5000, 2049,
+        111, 135, 3389, 5900, 8554, 8081, 8082, 8888, 9000
+    )
+
+    private fun runDiscoverScan(target: String) {
+        isScanning = true
+        cardResults.visibility = View.VISIBLE
+        tvResults.text = "Full discovery...\n"
+        tvSummary.text = ""
+        findViewById<View>(R.id.btnSave).visibility = View.GONE
+        status("Discovering...", "#BF360C", true)
+
+        Thread {
+            val cameras = ConcurrentHashMap<String, MutableList<String>>()
+            val routers = ConcurrentHashMap<String, MutableList<String>>()
+            val shares = ConcurrentHashMap<String, MutableList<String>>()
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val targets = autoExpandTarget(target)
+                if (targets.isEmpty()) {
+                    uiPost("Invalid target", "#C62828", false)
+                    isScanning = false
+                    return@Thread
+                }
+
+                val localIp = getWifiIp()
+                val isLocal = target.contains(localIp.substringBeforeLast("."))
+                var liveHosts = targets.toSet()
+
+                if (isLocal && targets.size > 1) {
+                    uiPost("Discovering live hosts...", "#BF360C", true)
+                    val subnet = targets.first().substringBeforeLast(".") + "."
+                    val live = arpScan(subnet)
+                    if (live.isNotEmpty()) liveHosts = live
+                }
+
+                val hosts = liveHosts.take(254).toList()
+                uiPost("Probing ${hosts.size} host(s)...", "#BF360C", true)
+
+                val latch = CountDownLatch(hosts.size)
+                val pool = Executors.newFixedThreadPool(30)
+
+                for (ip in hosts) {
+                    if (!isScanning) { latch.countDown(); continue }
+                    pool.execute {
+                        try {
+                            if (!isScanning) return@execute
+                            var deviceCameras = mutableListOf<String>()
+                            var deviceRouters = mutableListOf<String>()
+                            var deviceShares = mutableListOf<String>()
+
+                            for (port in discoverPorts) {
+                                if (!isScanning) break
+                                try {
+                                    val s = Socket()
+                                    s.connect(InetSocketAddress(ip, port), 300)
+                                    if (!s.isConnected) { s.close(); continue }
+
+                                    val isWeb = port in intArrayOf(80, 443, 8080, 8443, 8081, 8082, 8888, 9000)
+                                    val isCameraPort = port in intArrayOf(554, 8899, 34567, 37777, 37215, 8554)
+                                    val isRouterPort = port in intArrayOf(8291, 7547, 5000)
+                                    val isSharePort = port in intArrayOf(21, 445, 139, 2049, 111, 135)
+
+                                    // Camera detection
+                                    if (isCameraPort) {
+                                        val cam = probeCameraPort(ip, port)
+                                        if (cam != null) deviceCameras.add(cam)
+                                    }
+
+                                    // Router detection
+                                    if (isRouterPort) {
+                                        val rtr = probeRouterPort(ip, port)
+                                        if (rtr != null) deviceRouters.add(rtr)
+                                    }
+
+                                    // Share detection
+                                    if (isSharePort) {
+                                        val shr = probeSharePort(ip, port)
+                                        if (shr != null) deviceShares.add(shr)
+                                    }
+
+                                    // HTTP probe - check for camera, router, share signatures
+                                    if (isWeb) {
+                                        val webResult = probeWebService(ip, port)
+                                        if (webResult != null) {
+                                            when (webResult.type) {
+                                                "camera" -> deviceCameras.add(webResult.info)
+                                                "router" -> deviceRouters.add(webResult.info)
+                                                "share" -> deviceShares.add(webResult.info)
+                                            }
+                                        }
+                                    }
+
+                                    s.close()
+                                } catch (_: Exception) { }
+                            }
+
+                            if (deviceCameras.isNotEmpty() || deviceRouters.isNotEmpty() || deviceShares.isNotEmpty()) {
+                                synchronized(cameras) { if (deviceCameras.isNotEmpty()) cameras[ip] = deviceCameras }
+                                synchronized(routers) { if (deviceRouters.isNotEmpty()) routers[ip] = deviceRouters }
+                                synchronized(shares) { if (deviceShares.isNotEmpty()) shares[ip] = deviceShares }
+                                ui.post { updateDiscoverResults(cameras, routers, shares) }
+                            }
+                        } finally { latch.countDown() }
+                    }
+                }
+
+                pool.shutdown()
+                latch.await()
+                ui.post { updateDiscoverResults(cameras, routers, shares) }
+
+            } catch (e: Exception) {
+                uiPost("Error: ${e.message}", "#C62828", false)
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            ui.post {
+                val summary = "\uD83D\uDCF7 ${cameras.size} camera(s)  \uD83C\uDF10 ${routers.size} router(s)  \uD83D\uDCC1 ${shares.size} share(s)  |  ${elapsed / 1000}s"
+                tvSummary.text = summary
+                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
+                status("${cameras.size + routers.size + shares.size} service(s) in ${elapsed / 1000}s", "#BF360C", true)
+                toast("Discover complete")
+            }
+            isScanning = false
+        }.start()
+    }
+
+    private data class WebResult(val type: String, val info: String)
+
+    private fun probeWebService(ip: String, port: Int): WebResult? {
+        return try {
+            val proto = if (port in intArrayOf(443, 8443)) "https" else "http"
+            val conn = URL("$proto://$ip:$port/").openConnection() as HttpURLConnection
+            conn.connectTimeout = 500
+            conn.readTimeout = 500
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+            val code = try { conn.responseCode } catch (_: Exception) { 0 }
+            if (code == 0 || code == 404) { conn.disconnect(); return null }
+
+            val server = conn.getHeaderField("Server") ?: ""
+            val www = conn.getHeaderField("WWW-Authenticate") ?: ""
+            val ct = conn.getHeaderField("Content-Type") ?: ""
+
+            var title = ""
+            var bodyKeywords = ""
+            try {
+                val reader = BufferedReader(InputStreamReader(if (code in 200..399) conn.inputStream else conn.errorStream, "UTF-8"), 512)
+                var line: String?
+                var lc = 0
+                while (reader.readLine().also { line = it } != null && lc < 40) {
+                    val m = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(line ?: "")
+                    if (m != null) { title = m.groupValues[1].take(60).trim() }
+                    bodyKeywords += (line ?: "").lowercase() + " "
+                    lc++
+                }
+                reader.close()
+            } catch (_: Exception) { }
+            conn.disconnect()
+
+            val all = "$server $title $bodyKeywords $www".lowercase()
+
+            // Camera signatures
+            if (title.lowercase().contains("camera") || all.contains("hikvision") ||
+                all.contains("onvif") || all.contains("rtsp") || all.contains("dahua") ||
+                all.contains("webcam") || all.contains("network camera") ||
+                all.contains("surveillance") || all.contains("nvr") || all.contains("dvr") ||
+                title.lowercase().contains("camera") || server.contains("Camera")) {
+                val mfg = guessCameraMfg(title, server, www)
+                val info = "\uD83D\uDCF7 Port $port ${mfg.ifEmpty { "Camera" }}${if (title.isNotEmpty() && !title.lowercase().contains(title.lowercase())) " \"$title\"" else ""}${if (www.isNotEmpty()) " [Auth]" else ""}"
+                return WebResult("camera", info)
+            }
+
+            // Router signatures
+            if (port == 8291 || port == 7547 || port in intArrayOf(80, 443, 8080, 8443) &&
+                (title.lowercase().contains("login") || title.lowercase().contains("admin") ||
+                 title.lowercase().contains("router") || title.lowercase().contains("setup") ||
+                 title.lowercase().contains("configuration") || title.lowercase().contains("management") ||
+                 server.contains("MikroTik") || server.contains("RouterOS") || server.contains("TP-Link") ||
+                 server.contains("Tenda") || server.contains("GoAhead") || server.contains("mini_httpd") ||
+                 server.contains("thttpd") || server.contains("Boa") ||
+                 all.contains("password") || all.contains("username") || all.contains("login"))) {
+                val brand = identifyRouterBrand(server, title, www)
+                val info = "\uD83C\uDF10 Port $port ${brand.ifEmpty { "Router" }}${if (www.isNotEmpty()) " [Auth]" else ""}${if (title.isNotEmpty() && !brand.contains(title)) " \"$title\"" else ""}"
+                return WebResult("router", info)
+            }
+
+            // File share signatures
+            if (bodyKeywords.contains("index of") || bodyKeywords.contains("parent directory") ||
+                bodyKeywords.contains("directory listing") || bodyKeywords.contains("../") ||
+                all.contains("webdav") || server.contains("WebDAV")) {
+                val dirType = if (bodyKeywords.contains("index of")) "Directory listing" else "WebDAV"
+                val info = "\uD83D\uDCC1 Port $port $dirType${if (server.isNotEmpty()) " [$server]" else ""}"
+                return WebResult("share", info)
+            }
+
+            null
+        } catch (_: Exception) { null }
+    }
+
+    private fun probeCameraPort(ip: String, port: Int): String? {
+        return when (port) {
+            554, 8554 -> {
+                try {
+                    val s = Socket()
+                    s.connect(InetSocketAddress(ip, port), 500)
+                    s.getOutputStream().write("OPTIONS rtsp://$ip:$port RTSP/1.0\r\nCSeq: 1\r\n\r\n".toByteArray())
+                    val reader = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
+                    val resp = reader.readLine() ?: ""
+                    s.close()
+                    if (resp.contains("RTSP")) "\uD83D\uDCF7 Port $port (RTSP)"
+                    else null
+                } catch (_: Exception) { null }
+            }
+            8899, 5000 -> {
+                try {
+                    val s = Socket()
+                    s.connect(InetSocketAddress(ip, port), 500)
+                    val xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                        "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">" +
+                        "<s:Body><GetCapabilities xmlns=\"http://www.onvif.org/ver10/device/wsdl\"/>" +
+                        "</s:Body></s:Envelope>"
+                    s.getOutputStream().write(xml.toByteArray())
+                    val reader = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
+                    val resp = StringBuilder()
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) resp.append(line)
+                    s.close()
+                    if (resp.toString().contains("ONVIF") || resp.toString().contains("Capabilities"))
+                        "\uD83D\uDCF7 Port $port (ONVIF)"
+                    else null
+                } catch (_: Exception) { null }
+            }
+            34567 -> "\uD83D\uDCF7 Port 34567 (Hikvision SDK)"
+            37777 -> "\uD83D\uDCF7 Port 37777 (Dahua SDK)"
+            37215 -> "\uD83D\uDCF7 Port 37215 (Hikvision backdoor)"
+            else -> null
+        }
+    }
+
+    private fun probeRouterPort(ip: String, port: Int): String? {
+        return when (port) {
+            8291 -> "\uD83C\uDF10 Port 8291 (Winbox) - MikroTik"
+            7547 -> "\uD83C\uDF10 Port 7547 (CWMP/TR-069)"
+            5000 -> "\uD83C\uDF10 Port 5000 (UPnP)"
+            else -> null
+        }
+    }
+
+    private fun probeSharePort(ip: String, port: Int): String? {
+        return when (port) {
+            21 -> {
+                try {
+                    val s = Socket()
+                    s.connect(InetSocketAddress(ip, 21), 500)
+                    val reader = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
+                    val banner = reader.readLine() ?: ""
+                    s.close()
+                    if (banner.contains("FTP") || banner.contains("220"))
+                        "\uD83D\uDCC1 Port 21 (FTP) ${banner.take(40)}"
+                    else null
+                } catch (_: Exception) { null }
+            }
+            445 -> "\uD83D\uDCC1 Port 445 (SMB) - File sharing"
+            139 -> "\uD83D\uDCC1 Port 139 (NetBIOS) - File sharing"
+            2049 -> "\uD83D\uDCC1 Port 2049 (NFS) - File system"
+            111 -> "\uD83D\uDCC1 Port 111 (Portmapper)"
+            135 -> "\uD83D\uDCC1 Port 135 (MSRPC)"
+            else -> null
+        }
+    }
+
+    private fun updateDiscoverResults(
+        cameras: ConcurrentHashMap<String, MutableList<String>>,
+        routers: ConcurrentHashMap<String, MutableList<String>>,
+        shares: ConcurrentHashMap<String, MutableList<String>>
+    ) {
+        val allIps = (cameras.keys + routers.keys + shares.keys).toSortedSet()
+        val sb = StringBuilder()
+
+        for (ip in allIps) {
+            val ipLabel = "${allIps.indexOf(ip) + 1}. http://$ip/"
+            sb.appendLine(ipLabel)
+
+            cameras[ip]?.forEach { sb.appendLine("   \u2514 $it") }
+            routers[ip]?.forEach { sb.appendLine("   \u2514 $it") }
+            shares[ip]?.forEach { sb.appendLine("   \u2514 $it") }
+
+            sb.appendLine()
+        }
+
+        tvResults.text = sb.toString().trimStart()
+        tvResults.movementMethod = LinkMovementMethod.getInstance()
+        tvSummary.text = "\uD83D\uDCF7 ${cameras.size} \uD83C\uDF10 ${routers.size} \uD83D\uDCC1 ${shares.size}  |  ${allIps.size} host(s)"
     }
 
     private fun uiPost(msg: String, hex: String, ok: Boolean) {
