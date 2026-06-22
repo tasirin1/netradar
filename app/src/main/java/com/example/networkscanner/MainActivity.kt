@@ -392,7 +392,7 @@ class MainActivity : AppCompatActivity() {
             val info = mutableListOf<String>()
             info.add("$path")
             info.add("HTTP $code${if (msg.isNotEmpty()) " $msg" else ""}")
-            if (title.isNotEmpty()) info.add(""$title"")
+            if (title.isNotEmpty()) info.add("\"$title\"")
             if (www.isNotEmpty()) info.add("Auth")
             if (loc.isNotEmpty() && loc.length < 60) info.add("-> $loc")
             if (path != "/") {
