@@ -1,7 +1,5 @@
 package com.example.networkscanner
 
-import android.content.ClipboardManager
-import android.content.ClipData
 import android.text.method.LinkMovementMethod
 import android.graphics.Color
 import android.os.Bundle
@@ -61,21 +59,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.preWan).setOnClickListener { inputTarget.setText("157.66.50.147") }
         findViewById<TextView>(R.id.preHost).setOnClickListener { inputTarget.setText("barayacell.com") }
 
-        (findViewById<View>(R.id.btnClear) as Button).setOnClickListener {
-            tvResults.text = ""
-            tvSummary.text = ""
-            status("Ready", "#455A64", false)
-        }
-        (findViewById<View>(R.id.btnCopy) as Button).setOnClickListener {
-            val text = tvResults.text.toString()
-            if (text.isNotEmpty()) {
-                val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("NetScan Results", text))
-                toast("Results copied!")
-            } else {
-                toast("Nothing to copy")
-            }
-        }
+        (findViewById<View>(R.id.btnSave) as Button).setOnClickListener { saveResults() }
     }
 
     // ─── Get target from input ───
@@ -559,6 +543,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun toast(msg: String) {
         Toast.makeText(this, "  $msg  ", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun saveResults() {
+        val text = tvResults.text.toString()
+        if (text.isEmpty()) { toast("Nothing to save"); return }
+        try {
+            val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val file = java.io.File(dir, "NetScan_${java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())}.txt")
+            file.writeText(text)
+            toast("Saved to Downloads")
+        } catch (e: Exception) {
+            try {
+                val file = java.io.File(filesDir, "NetScan_last.txt")
+                file.writeText(text)
+                toast("Saved: ${file.absolutePath}")
+            } catch (e2: Exception) {
+                toast("Save failed: ${e2.message}")
+            }
+        }
     }
 
     override fun onDestroy() {
