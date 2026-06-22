@@ -3,6 +3,8 @@ package com.example.networkscanner
 import android.content.ClipboardManager
 import android.content.ClipData
 import android.graphics.Color
+import android.text.Html
+import android.text.method.LinkMovementMethod
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -378,17 +380,19 @@ class MainActivity : AppCompatActivity() {
         var hostNum = 1
         for ((host, svcs) in sorted) {
             // Host header
-            sb.append("═ $hostNum. $host ")
+            sb.append("═ $hostNum. <a href='http://$host/'>$host</a> ")
             val osGuess = os[host]
             if (osGuess != null) sb.append("[$osGuess]")
-            sb.append("\n")
+            sb.append("<br/>")
             for (svc in svcs) {
-                sb.append("   \u2514 $svc\n")
+                val clickable = svc.replace(Regex("(https?://[^ \[\]\(\)]+)"), "<a href='$1'>$1</a>")
+                sb.append("   \u2514 $clickable<br/>")
             }
-            sb.append("\n")
+            sb.append("<br/>")
             hostNum++
         }
-        tvResults.text = sb.toString().trimStart()
+        tvResults.text = Html.fromHtml(sb.toString(), Html.FROM_HTML_MODE_LEGACY)
+        tvResults.movementMethod = LinkMovementMethod.getInstance()
         
         // Summary with host count + open ports count
         val totalPorts = results.values.sumOf { it.size }
