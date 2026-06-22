@@ -95,12 +95,226 @@ class MainActivity : AppCompatActivity() {
     private fun nmapScan() {
         if (isScanning) { toast("Already scanning!"); return }
         val target = getTarget()
-        AlertDialog.Builder(this)
-            .setTitle("Nmap-Style Scan")
-            .setMessage("Aggressive scan: version detection,\nOS fingerprint, default ports +\nbanner grabbing on all services.\nTakes ~2 minutes.")
-            .setPositiveButton("Start") { _, _ -> runScan(target, getAllPorts(), "Nmap-Style") }
-            .setNegativeButton("Cancel", null)
-            .show()
+        val nmapPath = findNmapBinary()
+        if (nmapPath != null) {
+            AlertDialog.Builder(this)
+                .setTitle("Nmap Scan")
+                .setMessage("Real Nmap found!\nRunning: $nmapPath\n\nMode: -A (OS, version, scripts, traceroute)\nPorts: top 1000\n\nMay take 1-3 minutes.")
+                .setPositiveButton("Start") { _, _ -> runRealNmap(target, nmapPath) }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle("Nmap Not Found")
+                .setMessage("Nmap binary not installed.\n\nTo use real Nmap, install Termux and run:\npkg install nmap\n\nUsing built-in scanner instead.")
+                .setPositiveButton("Use Built-in") { _, _ -> runScan(target, getAllPorts(), "Nmap-Style") }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    // ─── Find Nmap binary ───
+    private fun findNmapBinary(): String? {
+        val paths = listOf(
+            "/data/data/com.termux/files/usr/bin/nmap",
+            "/system/bin/nmap",
+            "/system/xbin/nmap",
+            "/data/local/bin/nmap",
+            "/data/local/nmap",
+            "/sbin/nmap",
+            "/su/bin/nmap"
+        )
+        for (path in paths) {
+            try {
+                val f = java.io.File(path)
+                if (f.exists() && f.canExecute()) return path
+            } catch (_: Exception) { }
+        }
+        try {
+            val envPath = System.getenv("PATH") ?: return null
+            for (dir in envPath.split(":")) {
+                try {
+                    val f = java.io.File(dir, "nmap")
+                    if (f.exists() && f.canExecute()) return f.absolutePath
+                } catch (_: Exception) { }
+            }
+        } catch (_: Exception) { }
+        return null
+    }
+
+    // ─── Run real Nmap and parse XML output ───
+    private fun runRealNmap(target: String, nmapPath: String) {
+        isScanning = true
+        cardResults.visibility = View.VISIBLE
+        tvResults.text = "Starting real Nmap...\n"
+        tvSummary.text = ""
+        findViewById<View>(R.id.btnSave).visibility = View.GONE
+        status("Nmap running...", "#E65100", true)
+
+        Thread {
+            val allResults = ConcurrentHashMap<String, MutableList<String>>()
+            val osDetected = ConcurrentHashMap<String, String>()
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val cmd = arrayOf(
+                    nmapPath,
+                    "-A",
+                    "-T4",
+                    "--top-ports", "1000",
+                    "-oX", "-",
+                    "--unprivileged",
+                    target
+                )
+                status("Executing: nmap -A $target", "#E65100", true)
+
+                val process = Runtime.getRuntime().exec(cmd)
+                val reader = BufferedReader(InputStreamReader(process.inputStream, "UTF-8"))
+                val errorReader = BufferedReader(InputStreamReader(process.errorStream, "UTF-8"))
+
+                val xmlBuilder = StringBuilder()
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    xmlBuilder.append(line).append('\n')
+                }
+                reader.close()
+
+                val errBuilder = StringBuilder()
+                while (errorReader.readLine().also { line = it } != null) {
+                    errBuilder.append(line).append('\n')
+                }
+                errorReader.close()
+
+                val exitCode = process.waitFor()
+                val xml = xmlBuilder.toString()
+
+                if (exitCode != 0 && xml.isEmpty()) {
+                    uiPost("Nmap error: ${errBuilder.toString().take(200)}", "#C62828", false)
+                    isScanning = false
+                    return@Thread
+                }
+
+                parseNmapXml(xml, allResults, osDetected)
+
+            } catch (e: Exception) {
+                uiPost("Nmap error: ${e.message?.take(100) ?: "Unknown"}", "#C62828", false)
+                isScanning = false
+                return@Thread
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            if (allResults.isNotEmpty()) {
+                ui.post {
+                    updateResults(allResults, osDetected)
+                    findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
+                    status("${allResults.size} host(s) found in ${elapsed / 1000}s", "#2E7D32", true)
+                    toast("Nmap complete: ${allResults.size} hosts")
+                }
+            } else {
+                uiPost("No hosts found", "#C62828", false)
+            }
+            isScanning = false
+        }.start()
+    }
+
+    // ─── Parse Nmap XML output ───
+    private fun parseNmapXml(xml: String, results: ConcurrentHashMap<String, MutableList<String>>, osDetected: ConcurrentHashMap<String, String>) {
+        try {
+            val hostBlocks = xml.split("</host>")
+            for (block in hostBlocks) {
+                if (!block.contains("<address")) continue
+
+                var ip = ""
+                var hostname = ""
+                val services = mutableListOf<String>()
+
+                // Extract IP - simple addr pattern
+                val ipStart = block.indexOf("addr=\"")
+                if (ipStart >= 0) {
+                    val ipEnd = block.indexOf("\"", ipStart + 6)
+                    if (ipEnd >= 0) {
+                        val candidate = block.substring(ipStart + 6, ipEnd)
+                        if (candidate.count { it == '.' } == 3) ip = candidate
+                    }
+                }
+
+                // Extract hostname
+                val hnIdx = block.indexOf("name=\"")
+                val hnEnd = if (hnIdx >= 0) block.indexOf("\"", hnIdx + 6) else -1
+                if (hnIdx >= 0 && hnEnd >= 0) {
+                    val hn = block.substring(hnIdx + 6, hnEnd)
+                    if (hn.contains(".") && !hn.contains(":")) hostname = hn
+                }
+
+                // Extract OS
+                val osIdx = block.indexOf("osmatch")
+                if (osIdx >= 0) {
+                    val osNameIdx = block.indexOf("name=\"", osIdx)
+                    if (osNameIdx >= 0) {
+                        val osEnd = block.indexOf("\"", osNameIdx + 6)
+                        if (osEnd >= 0) {
+                            val os = block.substring(osNameIdx + 6, osEnd).take(30)
+                            if (os.isNotEmpty()) osDetected[ip] = os
+                        }
+                    }
+                }
+
+                if (ip.isEmpty()) continue
+
+                // Parse ports
+                var searchFrom = 0
+                while (true) {
+                    val portTag = block.indexOf("<port ", searchFrom)
+                    if (portTag < 0) break
+
+                    // Get portid
+                    val pidIdx = block.indexOf("portid=\"", portTag)
+                    if (pidIdx < 0) { searchFrom = portTag + 1; continue }
+                    val pidEnd = block.indexOf("\"", pidIdx + 8)
+                    if (pidEnd < 0) { searchFrom = portTag + 1; continue }
+                    val portStr = block.substring(pidIdx + 8, pidEnd)
+                    val port = portStr.toIntOrNull() ?: run { searchFrom = portTag + 1; continue }
+
+                    // Get state
+                    val stateIdx = block.indexOf("state=\"", portTag)
+                    val stateEnd = if (stateIdx >= 0) block.indexOf("\"", stateIdx + 7) else -1
+                    val state = if (stateIdx >= 0 && stateEnd >= 0) block.substring(stateIdx + 7, stateEnd) else ""
+
+                    searchFrom = portTag + 1
+                    if (state != "open") continue
+
+                    // Get service name
+                    val svcIdx = block.indexOf("name=\"", portTag)
+                    val svcEnd = if (svcIdx >= 0) block.indexOf("\"", svcIdx + 6) else -1
+                    val svcName = if (svcIdx >= 0 && svcEnd >= 0) block.substring(svcIdx + 6, svcEnd) else "unknown"
+
+                    // Get product/version
+                    val prodIdx = block.indexOf("product=\"", portTag)
+                    val prodEnd = if (prodIdx >= 0) block.indexOf("\"", prodIdx + 9) else -1
+                    val product = if (prodIdx >= 0 && prodEnd >= 0) block.substring(prodIdx + 9, prodEnd).take(30) else ""
+
+                    val verIdx = block.indexOf("version=\"", portTag)
+                    val verEnd = if (verIdx >= 0) block.indexOf("\"", verIdx + 9) else -1
+                    val version = if (verIdx >= 0 && verEnd >= 0) block.substring(verIdx + 9, verEnd).take(20) else ""
+
+                    val detail = buildString {
+                        append("Port $port ($svcName)")
+                        if (product.isNotEmpty()) append(" - $product")
+                        if (version.isNotEmpty()) append(" $version")
+                    }
+                    services.add(detail)
+                }
+
+                if (services.isNotEmpty()) {
+                    if (hostname.isNotEmpty()) {
+                        services.add(0, "\\u2192 $hostname")
+                    }
+                    results[ip] = services
+                }
+            }
+        } catch (e: Exception) {
+            uiPost("Parse error: ${e.message?.take(50)}", "#C62828", false)
+        }
     }
 
     // ─── Core scan engine ───
