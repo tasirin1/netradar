@@ -52,11 +52,6 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
-        findViewById<MaterialButton>(R.id.btnNmap).setOnClickListener { nmapScan() }
-        findViewById<MaterialButton>(R.id.btnCamera).setOnClickListener { cameraScan() }
-        findViewById<MaterialButton>(R.id.btnRouter).setOnClickListener { routerScan() }
-        findViewById<MaterialButton>(R.id.btnShares).setOnClickListener { sharesScan() }
-        findViewById<MaterialButton>(R.id.btnDevices).setOnClickListener { devicesScan() }
         findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
         // Preset chips
         findViewById<TextView>(R.id.preLocal).setOnClickListener { inputTarget.setText("192.168.0.0/24") }

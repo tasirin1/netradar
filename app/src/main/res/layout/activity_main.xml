@@ -156,126 +156,50 @@
                     android:textSize="10sp" />
             </LinearLayout>
 
-            <!-- ═══ SCAN BUTTONS ═══ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal"
-                android:weightSum="8">
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnQuick"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="3dp"
-                    android:backgroundTint="#00695C"
-                    android:text="Quick"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnFull"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:layout_marginEnd="3dp"
-                    android:backgroundTint="#00897B"
-                    android:text="Full"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnNmap"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:backgroundTint="#004D40"
-                    android:text="Nmap"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCamera"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:backgroundTint="#4A148C"
-                    android:text="Camera"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnRouter"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:backgroundTint="#E65100"
-                    android:text="Router"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnShares"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:backgroundTint="#33691E"
-                    android:text="Shares"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnDevices"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:backgroundTint="#01579B"
-                    android:text="Devices"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnDiscover"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:backgroundTint="#BF360C"
-                    android:text="Discover"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
-            <!-- ═══ STATUS ═══ -->
+                        <!-- ═══ SCAN BUTTONS ═══ -->
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 app:cardElevation="0dp"
-                app:cardCornerRadius="8dp"
-                app:strokeColor="#333333"
-                app:strokeWidth="1dp"
-                app:cardBackgroundColor="#1E1E1E">
+                app:cardCornerRadius="10dp"
+                app:cardBackgroundColor="@android:color/transparent">
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
+                    android:padding="0dp"
                     android:orientation="horizontal"
-                    android:padding="8dp">
-                    <View
-                        android:id="@+id/dotStatus"
-                        android:layout_width="10dp"
-                        android:layout_height="10dp"
-                        android:background="#BDBDBD"
-                        android:layout_marginEnd="8dp" />
-                    <TextView
-                        android:id="@+id/tvStatus"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Ready"
-                        android:textColor="#90A4AE"
-                        android:textSize="12sp" />
+                    android:weightSum="3">
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnQuick"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="3dp"
+                        android:backgroundTint="#00695C"
+                        android:text="Quick"
+                        android:textAllCaps="false"
+                        android:textSize="13sp" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnFull"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginHorizontal="3dp"
+                        android:backgroundTint="#00897B"
+                        android:text="Full"
+                        android:textAllCaps="false"
+                        android:textSize="13sp" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDiscover"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="3dp"
+                        android:backgroundTint="#BF360C"
+                        android:text="Discover"
+                        android:textAllCaps="false"
+                        android:textSize="13sp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
