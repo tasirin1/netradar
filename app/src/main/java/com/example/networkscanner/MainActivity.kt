@@ -375,15 +375,24 @@ class MainActivity : AppCompatActivity() {
     private fun updateResults(results: ConcurrentHashMap<String, MutableList<String>>, os: ConcurrentHashMap<String, String>) {
         val sb = StringBuilder()
         val sorted = results.entries.sortedBy { it.key }
+        var hostNum = 1
         for ((host, svcs) in sorted) {
-            sb.append("\n$host")
+            // Host header
+            sb.append("═ $hostNum. $host ")
             val osGuess = os[host]
-            if (osGuess != null) sb.append("  ─ $osGuess")
+            if (osGuess != null) sb.append("[$osGuess]")
             sb.append("\n")
-            for (svc in svcs) sb.append("  $svc\n")
+            for (svc in svcs) {
+                sb.append("   \u2514 $svc\n")
+            }
+            sb.append("\n")
+            hostNum++
         }
         tvResults.text = sb.toString().trimStart()
-        tvSummary.text = "${results.size} host(s)"
+        
+        // Summary with host count + open ports count
+        val totalPorts = results.values.sumOf { it.size }
+        tvSummary.text = "${results.size} host(s) \u00B7 $totalPorts open port(s)"
     }
 
     // ─── Ports ───
