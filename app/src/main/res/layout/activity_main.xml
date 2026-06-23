@@ -105,37 +105,48 @@
                     android:layout_height="wrap_content"
                     android:padding="0dp"
                     android:orientation="horizontal"
-                    android:weightSum="3">
+                    android:weightSum="4">
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnQuick"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
                         android:layout_weight="1"
-                        android:layout_marginEnd="3dp"
+                        android:layout_marginEnd="2dp"
                         android:backgroundTint="#00695C"
                         android:text="Quick"
                         android:textAllCaps="false"
-                        android:textSize="13sp" />
+                        android:textSize="12sp" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnFull"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
                         android:layout_weight="1"
-                        android:layout_marginHorizontal="3dp"
+                        android:layout_marginHorizontal="2dp"
                         android:backgroundTint="#00897B"
                         android:text="Full"
                         android:textAllCaps="false"
-                        android:textSize="13sp" />
+                        android:textSize="12sp" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnDiscover"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
                         android:layout_weight="1"
-                        android:layout_marginStart="3dp"
+                        android:layout_marginHorizontal="2dp"
                         android:backgroundTint="#BF360C"
                         android:text="Discover"
                         android:textAllCaps="false"
-                        android:textSize="13sp" />
+                        android:textSize="12sp" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnStop"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="2dp"
+                        android:backgroundTint="#B71C1C"
+                        android:text="Stop"
+                        android:textAllCaps="false"
+                        android:textSize="12sp"
+                        android:enabled="false" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

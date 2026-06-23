@@ -55,7 +55,24 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
         findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
+        findViewById<MaterialButton>(R.id.btnStop).setOnClickListener { stopScan() }
 
+    }
+
+    // ─── Stop scan ───
+    private fun stopScan() {
+        if (!isScanning) {
+            toast("No scan running")
+            return
+        }
+        isScanning = false
+        hideProgress()
+        ui.post {
+            val t = tvResults.text?.toString() ?: ""
+            tvResults.text = t + "\n\u2716 Stopped by user"
+            status("Stopped", "#C62828", false)
+            findViewById<MaterialButton>(R.id.btnStop).isEnabled = false
+        }
     }
 
     // ─── Dot animation for scanning indicator ───
@@ -63,6 +80,7 @@ class MainActivity : AppCompatActivity() {
     private val dotHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     private fun showProgress() {
+        ui.post { findViewById<MaterialButton>(R.id.btnStop).isEnabled = true }
         stopDots()
         ui.post {
             val t = tvResults.text?.toString() ?: ""
@@ -100,6 +118,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideProgress() {
+        ui.post { findViewById<MaterialButton>(R.id.btnStop).isEnabled = false }
         stopDots()
         val st = statusText.text?.toString() ?: ""
         statusText.text = st.replace(Regex("""[\. ]+$"""), "")
