@@ -35,9 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSummary: TextView
     private lateinit var cardResults: View
     private lateinit var progressBar: android.widget.ProgressBar
-    private lateinit var tvProgress: TextView
-    private lateinit var inputMaxHosts: android.widget.EditText
-    private lateinit var inputTimeout: android.widget.EditText
+
     @Volatile
     private var isScanning = false
     private val ui = Handler(Looper.getMainLooper())
@@ -55,9 +53,6 @@ class MainActivity : AppCompatActivity() {
         tvSummary = findViewById(R.id.tvSummary)
         cardResults = findViewById(R.id.cardResults)
         progressBar = findViewById(R.id.progressBar)
-        tvProgress = findViewById(R.id.tvProgress)
-        inputMaxHosts = findViewById(R.id.inputMaxHosts)
-        inputTimeout = findViewById(R.id.inputTimeout)
 
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
@@ -65,47 +60,17 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    // ─── Settings helpers ───
-    private fun getMaxHosts(): Int {
-        return try {
-            val t = inputMaxHosts.text?.toString()?.trim() ?: ""
-            t.toIntOrNull()?.coerceIn(1, 65535) ?: 254
-        } catch (_: Exception) { 254 }
-    }
-
-    private fun getTimeout(): Int {
-        return try {
-            val t = inputTimeout.text?.toString()?.trim() ?: ""
-            t.toIntOrNull()?.coerceIn(50, 5000) ?: 300
-        } catch (_: Exception) { 300 }
-    }
-
     // ─── Progress helpers ───
     private fun showProgress() {
         try {
             progressBar.visibility = View.VISIBLE
-            progressBar.progress = 0
-            tvProgress.visibility = View.VISIBLE
-            tvProgress.text = ""
         } catch (_: Exception) { }
     }
 
     private fun hideProgress() {
         try {
             progressBar.visibility = View.GONE
-            tvProgress.visibility = View.GONE
         } catch (_: Exception) { }
-    }
-
-    private fun updateProgress(done: Int, total: Int) {
-        if (total > 0) {
-            try {
-                val pct = (done * 100) / total
-                progressBar.progress = pct.coerceIn(0, 100)
-                progressBar.max = 100
-                tvProgress.text = "$done / $total hosts"
-            } catch (_: Exception) { }
-        }
     }
 
     // ─── Get target from input ───
@@ -194,7 +159,6 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = ""
         status("Nmap running...", "#E65100", true)
         showProgress()
-        tvProgress.text = "Scanning..."
 
         Thread {
             val allResults = ConcurrentHashMap<String, MutableList<String>>()
@@ -377,8 +341,6 @@ class MainActivity : AppCompatActivity() {
             val allResults = ConcurrentHashMap<String, MutableList<String>>()
             val activeHosts = AtomicInteger(0)
             val osDetected = ConcurrentHashMap<String, String>()
-            val scanCount = AtomicInteger(0)
-
             try {
                 if (target.isEmpty()) { uiPost("Empty target", "#C62828", false); isScanning = false; return@Thread }
                 // Parse target into list of IPs
@@ -406,7 +368,7 @@ class MainActivity : AppCompatActivity() {
                 val scanTargets = liveIps.toList()
                 uiPost("Scanning ${scanTargets.size} host(s)...", "#E65100", true)
 
-                val portTimeout = getTimeout()
+                val portTimeout = 300
                 val latch = CountDownLatch(scanTargets.size)
                 val scannerPool = Executors.newFixedThreadPool(Math.min(30, scanTargets.size))
 
@@ -471,8 +433,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = scanCount.incrementAndGet()
-                                ui.post { updateProgress(done, scanTargets.size) }
+
                             }
                     }
                 }
@@ -845,7 +806,6 @@ class MainActivity : AppCompatActivity() {
         else -> "?"
     }
 
-
     // ─── Hidden Camera Scanner ───
     private fun cameraScan() {
         if (isScanning) { toast("Already scanning!"); return }
@@ -894,8 +854,6 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(targets.size)
                 val pool = Executors.newFixedThreadPool(30)
-                val progCount = AtomicInteger(0)
-
                 for (ip in targets) {
                     if (!isScanning) { latch.countDown(); continue }
                     pool.execute {
@@ -920,8 +878,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = progCount.incrementAndGet()
-                                ui.post { updateProgress(done, targets.size) }
+
                             }
                     }
                 }
@@ -949,7 +906,7 @@ class MainActivity : AppCompatActivity() {
     private fun probeCamera(ip: String, port: Int): String? {
         return try {
             val s = Socket()
-            s.connect(InetSocketAddress(ip, port), getTimeout().coerceAtMost(1000))
+            s.connect(InetSocketAddress(ip, port), 300.coerceAtMost(1000))
             if (!s.isConnected) { s.close(); return null }
 
             var result: String? = null
@@ -1119,7 +1076,6 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = "${cameras.size} camera(s) found"
     }
 
-
     // ─── Router Scanner ───
     private fun routerScan() {
         if (isScanning) { toast("Already scanning!"); return }
@@ -1180,8 +1136,6 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(targets.size)
                 val pool = Executors.newFixedThreadPool(30)
-                val progCount = AtomicInteger(0)
-
                 for (ip in targets) {
                     if (!isScanning) { latch.countDown(); continue }
                     pool.execute {
@@ -1206,8 +1160,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = progCount.incrementAndGet()
-                                ui.post { updateProgress(done, targets.size) }
+
                             }
                     }
                 }
@@ -1234,7 +1187,7 @@ class MainActivity : AppCompatActivity() {
     private fun probeRouter(ip: String, port: Int): String? {
         return try {
             val s = Socket()
-            s.connect(InetSocketAddress(ip, port), getTimeout().coerceAtMost(1000))
+            s.connect(InetSocketAddress(ip, port), 300.coerceAtMost(1000))
             if (!s.isConnected) { s.close(); return null }
 
             var result: String? = null
@@ -1420,7 +1373,6 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = "${routers.size} router(s) found"
     }
 
-
     // ─── Network Shares Scanner ───
     private fun sharesScan() {
         if (isScanning) { toast("Already scanning!"); return }
@@ -1458,8 +1410,6 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(targets.size)
                 val pool = Executors.newFixedThreadPool(30)
-                val progCount = AtomicInteger(0)
-
                 for (ip in targets) {
                     if (!isScanning) { latch.countDown(); continue }
                     pool.execute {
@@ -1480,8 +1430,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = progCount.incrementAndGet()
-                                ui.post { updateProgress(done, targets.size) }
+
                             }
                     }
                 }
@@ -1508,7 +1457,7 @@ class MainActivity : AppCompatActivity() {
     private fun probeShare(ip: String, port: Int): String? {
         return try {
             val s = Socket()
-            s.connect(InetSocketAddress(ip, port), getTimeout().coerceAtMost(1000))
+            s.connect(InetSocketAddress(ip, port), 300.coerceAtMost(1000))
             if (!s.isConnected) { s.close(); return null }
 
             var result: String? = null
@@ -1649,7 +1598,6 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = "${shares.size} host(s) with shares"
     }
 
-
     // ─── Device Discovery (all connected devices) ───
     private fun devicesScan() {
         if (isScanning) { toast("Already scanning!"); return }
@@ -1712,8 +1660,6 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(hosts.size)
                 val pool = Executors.newFixedThreadPool(30)
-                val progCount = AtomicInteger(0)
-
                 for (ip in hosts) {
                     if (!isScanning) { latch.countDown(); continue }
                     pool.execute {
@@ -1725,8 +1671,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = progCount.incrementAndGet()
-                                ui.post { updateProgress(done, hosts.size) }
+
                             }
                     }
                 }
@@ -1932,7 +1877,6 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = "${devices.size} device(s) found"
     }
 
-
     // ─── Full Discovery: Camera + Router + Shares ───
     private fun discoverScan() {
         if (isScanning) { toast("Already scanning!"); return }
@@ -1984,13 +1928,11 @@ class MainActivity : AppCompatActivity() {
                     if (live.isNotEmpty()) liveHosts = live
                 }
 
-                val hosts = liveHosts.take(getMaxHosts()).toList()
+                val hosts = liveHosts.take(254).toList()
                 uiPost("Probing ${hosts.size} host(s)...", "#BF360C", true)
 
                 val latch = CountDownLatch(hosts.size)
                 val pool = Executors.newFixedThreadPool(30)
-                val progCount = AtomicInteger(0)
-
                 for (ip in hosts) {
                     if (!isScanning) { latch.countDown(); continue }
                     pool.execute {
@@ -2004,7 +1946,7 @@ class MainActivity : AppCompatActivity() {
                                 if (!isScanning) break
                                 try {
                                     val s = Socket()
-                                    s.connect(InetSocketAddress(ip, port), getTimeout())
+                                    s.connect(InetSocketAddress(ip, port), 300)
                                     if (!s.isConnected) { s.close(); continue }
 
                                     val isWeb = port in intArrayOf(80, 443, 8080, 8443, 8081, 8082, 8888, 9000)
@@ -2054,8 +1996,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = progCount.incrementAndGet()
-                                ui.post { updateProgress(done, hosts.size) }
+
                             }
                     }
                 }
@@ -2086,8 +2027,8 @@ class MainActivity : AppCompatActivity() {
         return try {
             val proto = if (port in intArrayOf(443, 8443)) "https" else "http"
             val conn = URL("$proto://$ip:$port/").openConnection() as HttpURLConnection
-            conn.connectTimeout = getTimeout().coerceAtMost(2000)
-            conn.readTimeout = getTimeout().coerceAtMost(2000)
+            conn.connectTimeout = 300.coerceAtMost(2000)
+            conn.readTimeout = 300.coerceAtMost(2000)
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")
             val code = try { conn.responseCode } catch (_: Exception) { 0 }
             if (code == 0 || code == 404) { conn.disconnect(); return null }
