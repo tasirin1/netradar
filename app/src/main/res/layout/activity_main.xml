@@ -150,31 +150,28 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
+                    android:orientation="vertical"
                     android:padding="8dp">
-                    <View
-                        android:id="@+id/dotStatus"
-                        android:layout_width="10dp"
-                        android:layout_height="10dp"
-                        android:background="#455A64"
-                        android:layout_marginEnd="8dp" />
-                    <TextView
-                        android:id="@+id/tvStatus"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Ready"
-                        android:textColor="#90A4AE"
-                        android:textSize="12sp" />
-                        <ProgressBar
-                            android:id="@+id/progressBar"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="match_parent"
-                            android:layout_height="12dp"
-                            android:indeterminate="true"
-                            android:indeterminateTint="#4DB6AC"
-                            android:visibility="gone" />
-
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:id="@+id/dotStatus"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="#455A64"
+                            android:layout_marginEnd="8dp" />
+                        <TextView
+                            android:id="@+id/tvStatus"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Ready"
+                            android:textColor="#90A4AE"
+                            android:textSize="13sp" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -250,4 +247,13 @@
 
         </LinearLayout>
     </ScrollView>
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="16dp"
+        android:layout_marginTop="4dp"
+        android:indeterminate="true"
+        android:indeterminateTint="#4DB6AC"
+        android:visibility="gone" />
 </LinearLayout>
