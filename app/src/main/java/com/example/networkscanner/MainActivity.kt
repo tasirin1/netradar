@@ -34,7 +34,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvResults: TextView
     private lateinit var tvSummary: TextView
     private lateinit var cardResults: View
-    private lateinit var progressBar: android.widget.ProgressBar
 
     @Volatile
     private var isScanning = false
@@ -52,7 +51,6 @@ class MainActivity : AppCompatActivity() {
         tvResults = findViewById(R.id.tvResults)
         tvSummary = findViewById(R.id.tvSummary)
         cardResults = findViewById(R.id.cardResults)
-        progressBar = findViewById(R.id.progressBar)
 
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
@@ -60,17 +58,51 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    // ─── Progress helpers ───
+    // ─── Dot animation for scanning indicator ───
+    private var dotRunnable: Runnable? = null
+    private val dotHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     private fun showProgress() {
-        try {
-            progressBar.visibility = View.VISIBLE
-        } catch (_: Exception) { }
+        stopDots()
+        ui.post {
+            val t = tvResults.text?.toString() ?: ""
+            if (!t.contains("Scanning")) {
+                tvResults.text = t + "\nScanning.  "
+            }
+        }
+        dotRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    val cur = tvResults.text?.toString() ?: ""
+                    val clean = cur.replace(Regex("""[\. ]*$"""), "")
+                    val dots = when ((System.currentTimeMillis() / 350) % 4) {
+                        0L -> ".  "
+                        1L -> ".. "
+                        2L -> "..."
+                        else -> "   "
+                    }
+                    val st = statusText.text?.toString() ?: ""
+                    val stClean = st.replace(Regex("""[\. \n]*$"""), "")
+                    statusText.text = stClean + " " + dots.trim()
+                    if (cur.matches(Regex(""".*[\. ]{1,3}$"""))) {
+                        tvResults.text = clean + dots
+                    }
+                    dotHandler.postDelayed(this, 350)
+                } catch (_: Exception) { }
+            }
+        }
+        dotHandler.post(dotRunnable)
+    }
+
+    private fun stopDots() {
+        dotRunnable?.let { dotHandler.removeCallbacks(it) }
+        dotRunnable = null
     }
 
     private fun hideProgress() {
-        try {
-            progressBar.visibility = View.GONE
-        } catch (_: Exception) { }
+        stopDots()
+        val st = statusText.text?.toString() ?: ""
+        statusText.text = st.replace(Regex("""[\. ]+$"""), "")
     }
 
     // ─── Get target from input ───

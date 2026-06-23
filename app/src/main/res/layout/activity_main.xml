@@ -247,13 +247,4 @@
 
         </LinearLayout>
     </ScrollView>
-    <ProgressBar
-        android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="16dp"
-        android:layout_marginTop="4dp"
-        android:indeterminate="true"
-        android:indeterminateTint="#4DB6AC"
-        android:visibility="gone" />
 </LinearLayout>
