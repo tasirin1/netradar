@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvResults: TextView
     private lateinit var tvSummary: TextView
     private lateinit var cardResults: View
+    @Volatile
     private var isScanning = false
     private val ui = Handler(Looper.getMainLooper())
 
@@ -433,8 +434,8 @@ class MainActivity : AppCompatActivity() {
                 tvSummary.text = summary
                 status("${activeHosts.get()} host(s) found in ${elapsed / 1000}s", "#2E7D32", true)
                 toast("Complete: ${activeHosts.get()} hosts")
-                isScanning = false
             }
+            isScanning = false
         }.start()
     }
 
