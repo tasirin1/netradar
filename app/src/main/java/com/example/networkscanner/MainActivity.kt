@@ -67,34 +67,44 @@ class MainActivity : AppCompatActivity() {
 
     // ─── Settings helpers ───
     private fun getMaxHosts(): Int {
-        val t = inputMaxHosts.text?.toString()?.trim() ?: ""
-        return t.toIntOrNull()?.coerceIn(1, 65535) ?: 254
+        return try {
+            val t = inputMaxHosts.text?.toString()?.trim() ?: ""
+            t.toIntOrNull()?.coerceIn(1, 65535) ?: 254
+        } catch (_: Exception) { 254 }
     }
 
     private fun getTimeout(): Int {
-        val t = inputTimeout.text?.toString()?.trim() ?: ""
-        return t.toIntOrNull()?.coerceIn(50, 5000) ?: 300
+        return try {
+            val t = inputTimeout.text?.toString()?.trim() ?: ""
+            t.toIntOrNull()?.coerceIn(50, 5000) ?: 300
+        } catch (_: Exception) { 300 }
     }
 
     // ─── Progress helpers ───
     private fun showProgress() {
-        progressBar.visibility = View.VISIBLE
-        progressBar.progress = 0
-        tvProgress.visibility = View.VISIBLE
-        tvProgress.text = ""
+        try {
+            progressBar.visibility = View.VISIBLE
+            progressBar.progress = 0
+            tvProgress.visibility = View.VISIBLE
+            tvProgress.text = ""
+        } catch (_: Exception) { }
     }
 
     private fun hideProgress() {
-        progressBar.visibility = View.GONE
-        tvProgress.visibility = View.GONE
+        try {
+            progressBar.visibility = View.GONE
+            tvProgress.visibility = View.GONE
+        } catch (_: Exception) { }
     }
 
     private fun updateProgress(done: Int, total: Int) {
         if (total > 0) {
-            val pct = (done * 100) / total
-            progressBar.progress = pct
-            progressBar.max = 100
-            tvProgress.text = "$done / $total hosts"
+            try {
+                val pct = (done * 100) / total
+                progressBar.progress = pct.coerceIn(0, 100)
+                progressBar.max = 100
+                tvProgress.text = "$done / $total hosts"
+            } catch (_: Exception) { }
         }
     }
 
@@ -247,7 +257,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 uiPost("No hosts found", "#C62828", false)
             }
-            hideProgress()
+            ui.post { hideProgress() }
             isScanning = false
         }.start()
     }
@@ -482,7 +492,7 @@ class MainActivity : AppCompatActivity() {
                 status("${activeHosts.get()} host(s) found in ${elapsed / 1000}s", "#2E7D32", true)
                 toast("Complete: ${activeHosts.get()} hosts")
             }
-            hideProgress()
+            ui.post { hideProgress() }
             isScanning = false
         }.start()
     }
@@ -930,8 +940,8 @@ class MainActivity : AppCompatActivity() {
                 tvSummary.text = "$summary\n\u26A0\uFE0F Review privacy settings if unexpected cameras found"
                 status("${cameras.size} camera(s) in ${elapsed / 1000}s", "#6A1B9A", true)
                 toast("${cameras.size} camera(s) found")
+                hideProgress()
             }
-            hideProgress()
             isScanning = false
         }.start()
     }
@@ -1215,8 +1225,8 @@ class MainActivity : AppCompatActivity() {
                 tvSummary.text = "${routers.size} router(s) found in ${elapsed / 1000}s"
                 status("${routers.size} router(s) in ${elapsed / 1000}s", "#E65100", true)
                 toast("${routers.size} router(s) found")
+                hideProgress()
             }
-            hideProgress()
             isScanning = false
         }.start()
     }
@@ -1489,8 +1499,8 @@ class MainActivity : AppCompatActivity() {
                 tvSummary.text = "${shares.size} host(s) with shares in ${elapsed / 1000}s"
                 status("${shares.size} host(s) with shares", "#33691E", true)
                 toast("${shares.size} host(s) with shares")
+                hideProgress()
             }
-            hideProgress()
             isScanning = false
         }.start()
     }
@@ -1739,8 +1749,8 @@ class MainActivity : AppCompatActivity() {
                 tvSummary.text = summary
                 status("${devices.size} device(s) in ${elapsed / 1000}s", "#01579B", true)
                 toast("${devices.size} device(s) found")
+                hideProgress()
             }
-            hideProgress()
             isScanning = false
         }.start()
     }
@@ -2064,8 +2074,8 @@ class MainActivity : AppCompatActivity() {
                 tvSummary.text = summary
                 status("${cameras.size + routers.size + shares.size} service(s) in ${elapsed / 1000}s", "#BF360C", true)
                 toast("Discover complete")
+                hideProgress()
             }
-            hideProgress()
             isScanning = false
         }.start()
     }
