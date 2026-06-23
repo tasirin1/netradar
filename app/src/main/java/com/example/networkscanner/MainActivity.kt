@@ -34,6 +34,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvResults: TextView
     private lateinit var tvSummary: TextView
     private lateinit var cardResults: View
+    private lateinit var progressBar: android.widget.ProgressBar
+    private lateinit var tvProgress: TextView
     @Volatile
     private var isScanning = false
     private val ui = Handler(Looper.getMainLooper())
@@ -50,12 +52,36 @@ class MainActivity : AppCompatActivity() {
         tvResults = findViewById(R.id.tvResults)
         tvSummary = findViewById(R.id.tvSummary)
         cardResults = findViewById(R.id.cardResults)
+        progressBar = findViewById(R.id.progressBar)
+        tvProgress = findViewById(R.id.tvProgress)
 
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
         findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
 
         (findViewById<View>(R.id.btnSave) as Button).setOnClickListener { saveResults() }
+    }
+
+    // ─── Progress helpers ───
+    private fun showProgress() {
+        progressBar.visibility = View.VISIBLE
+        progressBar.progress = 0
+        tvProgress.visibility = View.VISIBLE
+        tvProgress.text = ""
+    }
+
+    private fun hideProgress() {
+        progressBar.visibility = View.GONE
+        tvProgress.visibility = View.GONE
+    }
+
+    private fun updateProgress(done: Int, total: Int) {
+        if (total > 0) {
+            val pct = (done * 100) / total
+            progressBar.progress = pct
+            progressBar.max = 100
+            tvProgress.text = "$done / $total hosts"
+        }
     }
 
     // ─── Get target from input ───
@@ -144,6 +170,8 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Nmap running...", "#E65100", true)
+        showProgress()
+        tvProgress.text = "Scanning..."
 
         Thread {
             val allResults = ConcurrentHashMap<String, MutableList<String>>()
@@ -207,6 +235,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 uiPost("No hosts found", "#C62828", false)
             }
+            hideProgress()
             isScanning = false
         }.start()
     }
@@ -320,12 +349,14 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Preparing $mode...", "#E65100", true)
+        showProgress()
 
         Thread {
             val startTime = System.currentTimeMillis()
             val allResults = ConcurrentHashMap<String, MutableList<String>>()
             val activeHosts = AtomicInteger(0)
             val osDetected = ConcurrentHashMap<String, String>()
+            val scanCount = AtomicInteger(0)
 
             try {
                 if (target.isEmpty()) { uiPost("Empty target", "#C62828", false); isScanning = false; return@Thread }
@@ -416,7 +447,11 @@ class MainActivity : AppCompatActivity() {
 
                                 ui.post { updateResults(allResults, osDetected) }
                             }
-                        } finally { latch.countDown() }
+                        } finally {
+                                latch.countDown()
+                                val done = scanCount.incrementAndGet()
+                                ui.post { updateProgress(done, scanTargets.size) }
+                            }
                     }
                 }
 
@@ -435,6 +470,7 @@ class MainActivity : AppCompatActivity() {
                 status("${activeHosts.get()} host(s) found in ${elapsed / 1000}s", "#2E7D32", true)
                 toast("Complete: ${activeHosts.get()} hosts")
             }
+            hideProgress()
             isScanning = false
         }.start()
     }
@@ -820,6 +856,7 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Camera scan...", "#6A1B9A", true)
+        showProgress()
 
         Thread {
             val cameras = ConcurrentHashMap<String, MutableList<String>>()
@@ -859,7 +896,11 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 ui.post { updateCameraResults(cameras) }
                             }
-                        } finally { latch.countDown() }
+                        } finally {
+                                latch.countDown()
+                                val done = scanCount.incrementAndGet()
+                                ui.post { updateProgress(done, scanTargets.size) }
+                            }
                     }
                 }
 
@@ -879,6 +920,7 @@ class MainActivity : AppCompatActivity() {
                 status("${cameras.size} camera(s) in ${elapsed / 1000}s", "#6A1B9A", true)
                 toast("${cameras.size} camera(s) found")
             }
+            hideProgress()
             isScanning = false
         }.start()
     }
@@ -1101,6 +1143,7 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Router scan...", "#E65100", true)
+        showProgress()
 
         Thread {
             val routers = ConcurrentHashMap<String, MutableList<String>>()
@@ -1140,7 +1183,11 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 ui.post { updateRouterResults(routers) }
                             }
-                        } finally { latch.countDown() }
+                        } finally {
+                                latch.countDown()
+                                val done = scanCount.incrementAndGet()
+                                ui.post { updateProgress(done, scanTargets.size) }
+                            }
                     }
                 }
 
@@ -1159,6 +1206,7 @@ class MainActivity : AppCompatActivity() {
                 status("${routers.size} router(s) in ${elapsed / 1000}s", "#E65100", true)
                 toast("${routers.size} router(s) found")
             }
+            hideProgress()
             isScanning = false
         }.start()
     }
@@ -1374,6 +1422,7 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Shares scan...", "#33691E", true)
+        showProgress()
 
         Thread {
             val shares = ConcurrentHashMap<String, MutableList<String>>()
@@ -1409,7 +1458,11 @@ class MainActivity : AppCompatActivity() {
                                 synchronized(shares) { shares[ip] = foundShares }
                                 ui.post { updateSharesResults(shares) }
                             }
-                        } finally { latch.countDown() }
+                        } finally {
+                                latch.countDown()
+                                val done = scanCount.incrementAndGet()
+                                ui.post { updateProgress(done, scanTargets.size) }
+                            }
                     }
                 }
 
@@ -1428,6 +1481,7 @@ class MainActivity : AppCompatActivity() {
                 status("${shares.size} host(s) with shares", "#33691E", true)
                 toast("${shares.size} host(s) with shares")
             }
+            hideProgress()
             isScanning = false
         }.start()
     }
@@ -1609,6 +1663,7 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Device discovery...", "#01579B", true)
+        showProgress()
 
         Thread {
             val devices = ConcurrentHashMap<String, DeviceInfo>()
@@ -1649,7 +1704,11 @@ class MainActivity : AppCompatActivity() {
                                 devices[ip] = info
                                 ui.post { updateDevicesResults(devices) }
                             }
-                        } finally { latch.countDown() }
+                        } finally {
+                                latch.countDown()
+                                val done = scanCount.incrementAndGet()
+                                ui.post { updateProgress(done, scanTargets.size) }
+                            }
                     }
                 }
 
@@ -1673,6 +1732,7 @@ class MainActivity : AppCompatActivity() {
                 status("${devices.size} device(s) in ${elapsed / 1000}s", "#01579B", true)
                 toast("${devices.size} device(s) found")
             }
+            hideProgress()
             isScanning = false
         }.start()
     }
@@ -1880,6 +1940,7 @@ class MainActivity : AppCompatActivity() {
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Discovering...", "#BF360C", true)
+        showProgress()
 
         Thread {
             val cameras = ConcurrentHashMap<String, MutableList<String>>()
@@ -1973,7 +2034,11 @@ class MainActivity : AppCompatActivity() {
                                 synchronized(shares) { if (deviceShares.isNotEmpty()) shares[ip] = deviceShares }
                                 ui.post { updateDiscoverResults(cameras, routers, shares) }
                             }
-                        } finally { latch.countDown() }
+                        } finally {
+                                latch.countDown()
+                                val done = scanCount.incrementAndGet()
+                                ui.post { updateProgress(done, scanTargets.size) }
+                            }
                     }
                 }
 
@@ -1993,6 +2058,7 @@ class MainActivity : AppCompatActivity() {
                 status("${cameras.size + routers.size + shares.size} service(s) in ${elapsed / 1000}s", "#BF360C", true)
                 toast("Discover complete")
             }
+            hideProgress()
             isScanning = false
         }.start()
     }
