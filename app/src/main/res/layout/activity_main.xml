@@ -166,23 +166,15 @@
                         android:text="Ready"
                         android:textColor="#90A4AE"
                         android:textSize="12sp" />
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
                         <ProgressBar
                             android:id="@+id/progressBar"
                             style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="0dp"
-                            android:layout_height="6dp"
-                            android:layout_weight="1"
-                            android:progressTint="#4DB6AC"
-                            android:progressBackgroundTint="#333333"
+                            android:layout_width="match_parent"
+                            android:layout_height="12dp"
+                            android:indeterminate="true"
+                            android:indeterminateTint="#4DB6AC"
                             android:visibility="gone" />
 
-                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
