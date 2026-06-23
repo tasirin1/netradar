@@ -1979,6 +1979,7 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(hosts.size)
                 val pool = Executors.newFixedThreadPool(30)
+                val progCount = AtomicInteger(0)
 
                 for (ip in hosts) {
                     if (!isScanning) { latch.countDown(); continue }
@@ -2004,8 +2005,7 @@ class MainActivity : AppCompatActivity() {
                                     // Camera detection
                                     if (isCameraPort) {
                                         val cam = probeCameraPort(ip, port)
-                                        if (cam != null) deviceCamer
-                val progCount = AtomicInteger(0)as.add(cam)
+                                        if (cam != null) deviceCameras.add(cam)
                                     }
 
                                     // Router detection
