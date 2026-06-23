@@ -54,10 +54,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
         findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
         // Preset chips
-        findViewById<TextView>(R.id.preLocal).setOnClickListener { inputTarget.setText("192.168.0.0/24") }
-        findViewById<TextView>(R.id.preRouter).setOnClickListener { inputTarget.setText("192.168.0.1") }
-        findViewById<TextView>(R.id.preWan).setOnClickListener { inputTarget.setText("157.66.50.147") }
-        findViewById<TextView>(R.id.preHost).setOnClickListener { inputTarget.setText("barayacell.com") }
 
         (findViewById<View>(R.id.btnSave) as Button).setOnClickListener { saveResults() }
     }
@@ -1625,18 +1621,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // On local subnet, use ARP scan first
-                val localIp = getWifiIp()
-                val isLocal = targets.size > 1 && target.contains(localIp.substringBeforeLast("."))
-                var liveHosts = targets.toSet()
-
-                if (isLocal) {
-                    uiPost("Discovering live hosts...", "#01579B", true)
-                    val subnet = targets.first().substringBeforeLast(".") + "."
-                    val live = arpScan(subnet)
-                    if (live.isNotEmpty()) liveHosts = live
-                }
-
-                val hosts = liveHosts.toList()
+                val hosts = targets.toList()
                 uiPost("Identifying ${hosts.size} device(s)...", "#01579B", true)
 
                 val latch = CountDownLatch(hosts.size)
@@ -1897,18 +1882,7 @@ class MainActivity : AppCompatActivity() {
                     return@Thread
                 }
 
-                val localIp = getWifiIp()
-                val isLocal = target.contains(localIp.substringBeforeLast("."))
-                var liveHosts = targets.toSet()
-
-                if (isLocal && targets.size > 1) {
-                    uiPost("Discovering live hosts...", "#BF360C", true)
-                    val subnet = targets.first().substringBeforeLast(".") + "."
-                    val live = arpScan(subnet)
-                    if (live.isNotEmpty()) liveHosts = live
-                }
-
-                val hosts = liveHosts.take(254).toList()
+                val hosts = targets.take(254).toList()
                 uiPost("Probing ${hosts.size} host(s)...", "#BF360C", true)
 
                 val latch = CountDownLatch(hosts.size)

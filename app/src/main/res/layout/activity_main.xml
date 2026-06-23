@@ -93,70 +93,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ═══ PRESETS (PRE-FILL BUTTONS) ═══ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:orientation="horizontal"
-                android:weightSum="8">
-                <TextView
-                    android:id="@+id/preLocal"
-                    android:layout_width="0dp"
-                    android:layout_height="34dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="3dp"
-                    android:gravity="center"
-                    android:background="@drawable/btn_preset_dark"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:text="192.168.0.0/24"
-                    android:textColor="#4DB6AC"
-                    android:textSize="10sp" />
-                <TextView
-                    android:id="@+id/preRouter"
-                    android:layout_width="0dp"
-                    android:layout_height="34dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:layout_marginEnd="3dp"
-                    android:gravity="center"
-                    android:background="@drawable/btn_preset_dark"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:text="192.168.0.1"
-                    android:textColor="#4DB6AC"
-                    android:textSize="10sp" />
-                <TextView
-                    android:id="@+id/preWan"
-                    android:layout_width="0dp"
-                    android:layout_height="34dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:layout_marginEnd="3dp"
-                    android:gravity="center"
-                    android:background="@drawable/btn_preset_dark"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:text="157.66.50.147"
-                    android:textColor="#4DB6AC"
-                    android:textSize="10sp" />
-                <TextView
-                    android:id="@+id/preHost"
-                    android:layout_width="0dp"
-                    android:layout_height="34dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:gravity="center"
-                    android:background="@drawable/btn_preset_dark"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:text="barayacell.com"
-                    android:textColor="#4DB6AC"
-                    android:textSize="10sp" />
-            </LinearLayout>
-
-                        <!-- ═══ SCAN BUTTONS ═══ -->
+            <!-- ═══ SCAN BUTTONS ═══ -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
