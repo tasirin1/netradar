@@ -38,7 +38,12 @@ class MainActivity : AppCompatActivity() {
     private var isScanning = false
     private val ui = Handler(Looper.getMainLooper())
 
-    private val quickPorts = intArrayOf(80, 443, 8080, 8443, 22, 23, 8291, 2000, 21, 53, 3389, 3306, 8081, 8000, 3000, 5000, 8888, 9000, 81, 444, 5555, 5900, 6379, 27017, 7547, 6666)
+    private val quickPorts = intArrayOf(
+        80, 443, 8080, 8443, 22, 23, 21, 53, 3389, 3306,
+        8081, 8000, 3000, 5000, 8888, 9000, 81, 444, 5555, 5900,
+        6379, 27017, 7547, 6666, 8291, 2000, 135, 139, 445, 1433,
+        1521, 2049, 2375, 2376, 3128, 3307, 3388, 4444, 4848, 5432,
+        6378, 7001, 8001, 8082, 8083, 8084, 8085, 8444, 9090, 9200)
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -361,7 +366,8 @@ class MainActivity : AppCompatActivity() {
         "/proxy", "/proxy.htm",
         "/favicon.ico", "/robots.txt", "/sitemap.xml",
         "/.env", "/config.json", "/config.xml", "/config.txt",
-        "/webconfig", "/web.xml", "/WEB-INF/web.xml"
+        "/webconfig", "/web.xml", "/WEB-INF/web.xml",
+        "/goform/SysToolReboot"
     )
 
     // ─── HTTP probe ───
@@ -880,7 +886,8 @@ class MainActivity : AppCompatActivity() {
         "/system", "/system/", "/router", "/router/",
         "/cgi-bin/", "/cgi-bin/login", "/cgi-bin/status",
         "/main", "/main/", "/home", "/home/",
-        "/index.htm", "/index.html", "/login.htm", "/login.html"
+        "/index.htm", "/index.html", "/login.htm", "/login.html",
+        "/goform/SysToolReboot"
     )
 
     private data class RouterInfo(
