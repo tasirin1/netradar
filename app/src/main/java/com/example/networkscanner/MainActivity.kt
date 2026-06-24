@@ -128,7 +128,7 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Initializing $mode...\n"
         tvSummary.text = ""
-        status("$mode starting...", "#1565C0", true)
+        status("$mode starting...", "#00695C", true)
         showProgress()
 
         Thread {
@@ -210,7 +210,7 @@ class MainActivity : AppCompatActivity() {
                             if (ipServices.isNotEmpty()) {
                                 allResults[ip] = ipServices
                                 activeHosts.incrementAndGet()
-                                ui.post { status("${activeHosts.get()} host(s) found...", "#1565C0", true) }
+                                ui.post { status("${activeHosts.get()} host(s) found...", "#00695C", true) }
 
                                 // OS fingerprint (only in Nmap mode)
                                 if (mode == "Nmap-Style") {
@@ -239,7 +239,7 @@ class MainActivity : AppCompatActivity() {
             val summary = "\n── Done in ${elapsed / 1000}s ──  ${activeHosts.get()} host(s) found"
             ui.post {
                 tvSummary.text = summary
-                status("${activeHosts.get()} host(s) in ${elapsed / 1000}s", "#1565C0", true)
+                status("${activeHosts.get()} host(s) in ${elapsed / 1000}s", "#00695C", true)
                 toast("Complete: ${activeHosts.get()} hosts")
             }
             ui.post { hideProgress() }
@@ -619,7 +619,7 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Scanning for hidden cameras...\n"
         tvSummary.text = ""
-        status("Camera scan...", "#00838F", true)
+        status("Camera scan...", "#00695C", true)
         showProgress()
 
         Thread {
@@ -678,7 +678,7 @@ class MainActivity : AppCompatActivity() {
             val summary = "\n── Done in ${elapsed / 1000}s ──  ${cameras.size} camera(s) found"
             ui.post {
                 tvSummary.text = "$summary\n\u26A0\uFE0F Review privacy settings if unexpected cameras found"
-                status("${cameras.size} camera(s) in ${elapsed / 1000}s", "#00838F", true)
+                status("${cameras.size} camera(s) in ${elapsed / 1000}s", "#00695C", true)
                 toast("${cameras.size} camera(s) found")
                 hideProgress()
             }
@@ -894,7 +894,7 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Scanning for routers...\n"
         tvSummary.text = ""
-        status("Router scan...", "#2E7D32", true)
+        status("Router scan...", "#00897B", true)
         showProgress()
 
         Thread {
@@ -952,7 +952,7 @@ class MainActivity : AppCompatActivity() {
             val elapsed = System.currentTimeMillis() - startTime
             ui.post {
                 tvSummary.text = "${routers.size} router(s) found in ${elapsed / 1000}s"
-                status("${routers.size} router(s) in ${elapsed / 1000}s", "#2E7D32", true)
+                status("${routers.size} router(s) in ${elapsed / 1000}s", "#00897B", true)
                 toast("${routers.size} router(s) found")
                 hideProgress()
             }
@@ -1160,7 +1160,7 @@ class MainActivity : AppCompatActivity() {
                 cardResults.visibility = View.VISIBLE
                 tvResults.text = "URL Path Scan on $target...\n"
                 tvSummary.text = ""
-                status("URL Path scan...", "#4A148C", true)
+                status("URL Path scan...", "#2E7D32", true)
                 showProgress()
             }
             val found = StringBuffer()
@@ -1201,7 +1201,7 @@ class MainActivity : AppCompatActivity() {
             ui.post {
                 tvResults.text = "URL Path Scan on $target\n${found.toString()}$result\n\u23F1 ${elapsed / 1000}s"
                 tvSummary.text = "$totalFound paths found"
-                status("$totalFound paths in ${elapsed / 1000}s", "#4A148C", true)
+                status("$totalFound paths in ${elapsed / 1000}s", "#2E7D32", true)
                 hideProgress()
             }
             isScanning = false
