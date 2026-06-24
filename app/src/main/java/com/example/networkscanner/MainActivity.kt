@@ -393,7 +393,6 @@ class MainActivity : AppCompatActivity() {
 
             val parts = mutableListOf<String>()
             parts.add("\u2705 $base/")
-            if (rootResult.isNotEmpty()) parts.add(rootResult)
             if (foundPaths.isNotEmpty()) {
                 foundPaths.forEach { parts.add("\u2705 $base$it") }
             }
