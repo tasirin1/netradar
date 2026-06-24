@@ -392,11 +392,10 @@ class MainActivity : AppCompatActivity() {
             }
 
             val parts = mutableListOf<String>()
-            parts.add("Port $port (${guessService(port)})")
+            parts.add("\u2705 $base/")
             if (rootResult.isNotEmpty()) parts.add(rootResult)
             if (foundPaths.isNotEmpty()) {
-                parts.add("| Paths:")
-                foundPaths.forEach { parts.add("  \u2514 $it") }
+                foundPaths.forEach { parts.add("\u2705 $base$it") }
             }
             return parts.joinToString("\n")
         } catch (_: Exception) {
@@ -1056,14 +1055,15 @@ class MainActivity : AppCompatActivity() {
 
             if (bestInfo != null) {
                 val info = bestInfo
-                val parts = mutableListOf<String>()
-                parts.add("\uD83C\uDF10 Port ${info.port}")
-                if (info.brand.isNotEmpty()) parts.add(info.brand)
-                if (info.model.isNotEmpty()) parts.add("\"${info.model}\"")
-                if (info.firmware.isNotEmpty()) parts.add("[${info.firmware}]")
-                if (info.authType.isNotEmpty()) parts.add("\uD83D\uDD12 ${info.authType}")
-                if (info.path != "/") parts.add("@ ${info.path}")
-                return parts.joinToString(" ")
+                val protocol = if (info.port in intArrayOf(443, 8443, 444)) "https" else "http"
+                val url = "$protocol://${info.ip}:${info.port}${info.path}"
+                val extra = mutableListOf<String>()
+                if (info.brand.isNotEmpty()) extra.add(info.brand)
+                if (info.model.isNotEmpty()) extra.add("\"${info.model}\"")
+                if (info.firmware.isNotEmpty()) extra.add("[${info.firmware}]")
+                if (info.authType.isNotEmpty()) extra.add("\uD83D\uDD12 ${info.authType}")
+                val extraStr = if (extra.isNotEmpty()) " ${extra.joinToString(" ")}" else ""
+                return "\u2705 $url$extraStr"
             }
 
             null

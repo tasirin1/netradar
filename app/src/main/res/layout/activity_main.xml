@@ -133,7 +133,7 @@
                         android:layout_weight="1"
                         android:layout_marginStart="2dp"
                         android:backgroundTint="#E65100"
-                        android:text="Web Scanner"
+                        android:text="Router Scanner"
                         android:textAllCaps="false"
                         android:textSize="11sp" />
                 </LinearLayout>
