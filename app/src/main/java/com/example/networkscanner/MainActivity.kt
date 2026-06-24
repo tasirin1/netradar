@@ -52,8 +52,9 @@ class MainActivity : AppCompatActivity() {
         tvSummary = findViewById(R.id.tvSummary)
         cardResults = findViewById(R.id.cardResults)
 
-        findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
-        findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
+        findViewById<MaterialButton>(R.id.btnPort).setOnClickListener { portScan() }
+        findViewById<MaterialButton>(R.id.btnCCTV).setOnClickListener { cameraScan() }
+        findViewById<MaterialButton>(R.id.btnWeb).setOnClickListener { routerScan() }
         findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
         findViewById<MaterialButton>(R.id.btnStop).setOnClickListener { stopScan() }
 
@@ -114,26 +115,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ─── Quick scan ───
-    private fun quickScan() {
+    private fun portScan() {
         if (isScanning) { toast("Already scanning!"); return }
         val target = getTarget()
         if (target.isEmpty()) { toast("Enter target!"); return }
-        runScan(target, quickPorts, "Quick Scan")
+        runScan(target, quickPorts, "Port Scan")
     }
 
     // ─── Full scan (all ports on a single target) ───
-    private fun fullScan() {
-        if (isScanning) { toast("Already scanning!"); return }
-        val target = getTarget()
-        if (target.isEmpty()) { toast("Enter target!"); return }
-        AlertDialog.Builder(this)
-            .setTitle("Full Scan")
-            .setMessage("Scans 200+ ports on ALL hosts in subnet (auto-expands single IP to /24).\nMay take 2-3 minutes.")
-            .setPositiveButton("Start") { _, _ -> runScan(target, getAllPorts(), "Full Scan") }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
     // ─── Nmap-style scan (OS detection + version + aggressive) ───
     private fun nmapScan() {
         if (isScanning) { toast("Already scanning!"); return }

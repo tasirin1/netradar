@@ -92,7 +92,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ═══ SCAN BUTTONS ═══ -->
+            <!-- ═══ SCAN BUTTONS ROW 1 ═══ -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -105,37 +105,63 @@
                     android:layout_height="wrap_content"
                     android:padding="0dp"
                     android:orientation="horizontal"
-                    android:weightSum="4">
+                    android:weightSum="3">
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnQuick"
+                        android:id="@+id/btnPort"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
                         android:layout_weight="1"
                         android:layout_marginEnd="2dp"
                         android:backgroundTint="#00695C"
-                        android:text="Quick"
+                        android:text="Port Scan"
                         android:textAllCaps="false"
-                        android:textSize="12sp" />
+                        android:textSize="11sp" />
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnFull"
+                        android:id="@+id/btnCCTV"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
                         android:layout_weight="1"
                         android:layout_marginHorizontal="2dp"
-                        android:backgroundTint="#00897B"
-                        android:text="Full"
+                        android:backgroundTint="#6A1B9A"
+                        android:text="CCTV"
                         android:textAllCaps="false"
-                        android:textSize="12sp" />
+                        android:textSize="11sp" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnWeb"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="2dp"
+                        android:backgroundTint="#E65100"
+                        android:text="Web Scanner"
+                        android:textAllCaps="false"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+            <!-- ═══ SCAN BUTTONS ROW 2 ═══ -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                app:cardElevation="0dp"
+                app:cardCornerRadius="10dp"
+                app:cardBackgroundColor="@android:color/transparent">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="0dp"
+                    android:orientation="horizontal"
+                    android:weightSum="3">
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnDiscover"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
                         android:layout_weight="1"
-                        android:layout_marginHorizontal="2dp"
+                        android:layout_marginEnd="2dp"
                         android:backgroundTint="#BF360C"
                         android:text="Discover"
                         android:textAllCaps="false"
-                        android:textSize="12sp" />
+                        android:textSize="11sp" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnStop"
                         android:layout_width="0dp"
@@ -145,8 +171,12 @@
                         android:backgroundTint="#B71C1C"
                         android:text="Stop"
                         android:textAllCaps="false"
-                        android:textSize="12sp"
+                        android:textSize="11sp"
                         android:enabled="false" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
