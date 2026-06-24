@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "NetScan"
+rootProject.name = "NetRadar"
 include(":app")

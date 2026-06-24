@@ -402,7 +402,7 @@ class MainActivity : AppCompatActivity() {
             conn.connectTimeout = if (mode == "Nmap-Style") 1500 else 800
             conn.readTimeout = 1000
             conn.instanceFollowRedirects = false
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetScan/1.1")
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetRadar/1.0")
             conn.setRequestProperty("Accept", "text/html,*/*")
 
             val code = try { conn.responseCode } catch (_: Exception) { 0 }
@@ -701,7 +701,7 @@ class MainActivity : AppCompatActivity() {
                     val conn = URL("$protocol://$ip:$port/").openConnection() as HttpURLConnection
                     conn.connectTimeout = 800
                     conn.readTimeout = 800
-                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetScan/1.1")
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetRadar/1.0")
                     val code = try { conn.responseCode } catch (_: Exception) { 0 }
                     val server = conn.getHeaderField("Server") ?: ""
                     val www = conn.getHeaderField("WWW-Authenticate") ?: ""
@@ -1001,7 +1001,7 @@ class MainActivity : AppCompatActivity() {
                     conn.connectTimeout = 500
                     conn.readTimeout = 500
                     conn.instanceFollowRedirects = false
-                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetScan/1.1")
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetRadar/1.0")
 
                     val code = try { conn.responseCode } catch (_: Exception) { 0 }
                     if (code == 0 || code == 404 || code == 410) { conn.disconnect(); continue }
