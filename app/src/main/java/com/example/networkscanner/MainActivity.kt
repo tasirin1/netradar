@@ -1193,7 +1193,7 @@ class MainActivity : AppCompatActivity() {
                         if (code in intArrayOf(200, 201, 204, 301, 302, 401, 403)) {
                             totalFound++
                             val info = if (code == 401) " (Auth req)" else if (code in 301..303) " -> ${conn.getHeaderField("Location")?.take(40) ?: ""}" else ""
-                            found.append("\n\u2705 Port $port$path [HTTP $code]$info")
+                            found.append("\n\u2705 $url [HTTP $code]$info")
                             val msg = found.toString()
                             ui.post { tvResults.text = "URL Path Scan on $target...\n$msg" }
                         }
