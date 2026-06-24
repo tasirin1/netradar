@@ -874,6 +874,27 @@ class MainActivity : AppCompatActivity() {
         runRouterScan(target)
     }
 
+    private val routerPorts = intArrayOf(
+        80, 443, 8080, 8443, 8291, 7547, 5000, 7000,
+        8081, 8082, 8888, 9000, 10000, 2000, 444, 81, 82, 88
+    )
+
+    private val routerPaths = arrayOf(
+        "/", "/admin", "/admin/", "/login", "/login/",
+        "/setup", "/setup/", "/config", "/config/",
+        "/management", "/management/", "/status", "/status/",
+        "/system", "/system/", "/router", "/router/",
+        "/cgi-bin/", "/cgi-bin/login", "/cgi-bin/status",
+        "/main", "/main/", "/home", "/home/",
+        "/index.htm", "/index.html", "/login.htm", "/login.html"
+    )
+
+    private data class RouterInfo(
+        val ip: String, val port: Int, val brand: String,
+        val model: String, val firmware: String,
+        val authType: String, val path: String
+    )
+
     private fun runRouterScan(target: String) {
         isScanning = true
         cardResults.visibility = View.VISIBLE
@@ -1142,6 +1163,27 @@ class MainActivity : AppCompatActivity() {
         if (targets.isEmpty()) { toast("Invalid target"); return }
         runDiscoverScan(target)
     }
+
+    private val discoverPorts = intArrayOf(
+        80, 81, 82, 88, 443, 444, 3000, 4000, 5000, 5001, 7000, 7070, 7443,
+        8000, 8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089,
+        8090, 8180, 8222, 8243, 8280, 8443, 8444, 8530, 8531, 8649, 8800,
+        8834, 8880, 8888, 8889, 8983, 9000, 9001, 9043, 9060, 9080, 9090,
+        9091, 9100, 9200, 9290, 9300, 9418, 9443, 9600, 9800, 9999,
+        10000, 10001, 10080, 12345, 13337, 16010, 16379, 17000, 17001,
+        20000, 22000, 25565, 27017, 31337, 32400, 32764, 49154, 49155,
+        49156, 50000, 50100, 50200, 61616, 64738, 65535,
+        21, 22, 23, 25, 53, 69, 79, 110, 111, 123, 135, 137, 138, 139,
+        143, 161, 162, 179, 389, 443, 445, 464, 465, 500, 502, 512, 513,
+        514, 520, 521, 524, 540, 542, 543, 544, 546, 547, 548, 554, 556,
+        560, 563, 585, 587, 601, 623, 626, 630, 631, 636, 639, 646, 648,
+        651, 653, 654, 655, 657, 660, 666, 688, 691, 694, 698, 700, 701,
+        702, 706, 707, 712, 713, 715, 720, 722, 726, 727, 729, 730, 731,
+        739, 740, 741, 742, 743, 744, 745, 746, 747, 748, 749, 750, 751,
+        752, 753, 754, 755, 756, 757, 758, 759, 760, 761, 762, 763, 764,
+        765, 767, 768, 769, 770, 771, 772, 773, 774, 775, 776, 777, 778,
+        779, 780, 781, 782, 783, 784, 785, 786, 787, 808, 843, 873, 886
+    )
 
     private fun runDiscoverScan(target: String) {
         isScanning = true
