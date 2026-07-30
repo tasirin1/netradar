@@ -356,5 +356,3 @@ object NetworkUtils {
         } catch (_: Exception) { null }
     }
 
-    // Override the original getLocalIp to use forced interface
-    private val _originalGetLocalIp = { getLocalIp() }

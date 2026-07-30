@@ -56,7 +56,7 @@ fun MainScreen(
                 },
                 actions = {
                     IconButton(onClick = { onToggleAbout?.invoke() }) {
-                        Icon(Icons.Default.Info, null, contentDescription = "About")
+                        Icon(Icons.Default.Info, "About")
                     }
                     IconButton(onClick = onToggleTheme) {
                         Icon(
@@ -224,6 +224,7 @@ fun MainScreen(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun NetworkInfoSection(
     networkInfo: NetworkInfo,
     interfaces: List<String>,
