@@ -3,6 +3,7 @@ package com.tasirin.network.radar.ui.components
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,38 +44,52 @@ fun ScanButtonRow(
         ScanType.ROUTER to "Router",
         ScanType.URL_PATH to "URL Path",
         ScanType.DISCOVER to "Discover",
-        ScanType.PING to "Ping Sweep"
+        ScanType.PING to "Ping Sweep",
+        ScanType.MONITOR to "Monitor"
     )
 
     Column(modifier = modifier.fillMaxWidth()) {
-        buttons.chunked(3).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                row.forEach { (type, label) ->
-                    Button(
-                        onClick = { onScan(type) },
-                        enabled = !isScanning,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = label,
-                            fontSize = 11.sp,
-                            maxLines = 1
-                        )
-                    }
-                }
-                // Fill empty slots to keep grid alignment
-                repeat(3 - row.size) {
-                    Spacer(Modifier.weight(1f))
+        // First row: 4 buttons
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            buttons.take(4).forEach { (type, label) ->
+                Button(
+                    onClick = { onScan(type) },
+                    enabled = !isScanning,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                ) {
+                    Text(text = label, fontSize = 10.sp, maxLines = 1)
                 }
             }
+        }
+        // Second row: 3 buttons
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            buttons.drop(4).forEach { (type, label) ->
+                Button(
+                    onClick = { onScan(type) },
+                    enabled = !isScanning,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                ) {
+                    Text(text = label, fontSize = 10.sp, maxLines = 1)
+                }
+            }
+            // Fill remaining slot
+            Spacer(Modifier.weight(1f))
         }
     }
 }
@@ -83,15 +98,31 @@ fun ScanButtonRow(
 fun ActionButtons(
     isScanning: Boolean,
     onStop: () -> Unit,
+    hasResults: Boolean = false,
+    onCopyAll: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Button(
-        onClick = onStop,
-        enabled = isScanning,
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+    Row(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(vertical = 8.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text("Stop", fontSize = 12.sp)
+        Button(
+            onClick = onStop,
+            enabled = isScanning,
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            Text("Stop", fontSize = 12.sp)
+        }
+        if (hasResults && onCopyAll != null) {
+            OutlinedButton(
+                onClick = onCopyAll,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(vertical = 8.dp)
+            ) {
+                Text("Copy All", fontSize = 12.sp)
+            }
+        }
     }
 }

@@ -1,5 +1,7 @@
 package com.tasirin.network.radar.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -15,6 +17,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tasirin.network.radar.model.HostInfo
+import com.tasirin.network.radar.model.PortDescriptions
 import com.tasirin.network.radar.model.PortInfo
 import com.tasirin.network.radar.model.UrlDiscovery
 import com.tasirin.network.radar.ui.theme.*
@@ -22,20 +25,28 @@ import com.tasirin.network.radar.ui.theme.*
 @Composable
 fun HostResultsList(
     hosts: List<HostInfo>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCopyIp: ((String) -> Unit)? = null,
+    onWol: ((String, String) -> Unit)? = null
 ) {
     if (hosts.isEmpty()) return
     Column(modifier = modifier) {
         hosts.forEach { host ->
-            HostCard(host = host)
+            HostCard(host = host, onCopyIp = onCopyIp, onWol = onWol)
             Spacer(Modifier.height(6.dp))
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HostCard(host: HostInfo) {
+fun HostCard(
+    host: HostInfo,
+    onCopyIp: ((String) -> Unit)? = null,
+    onWol: ((String, String) -> Unit)? = null
+) {
     val uriHandler = LocalUriHandler.current
+    var showPortInfo by remember { mutableStateOf<PortInfo?>(null) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -43,7 +54,7 @@ fun HostCard(host: HostInfo) {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
-            // ─── IP line with MAC and hostname ───
+            // ─── IP line ───
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Default.Computer,
@@ -52,7 +63,6 @@ fun HostCard(host: HostInfo) {
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
-                // IP is clickable: opens http://ip/
                 Text(
                     text = host.ip,
                     fontWeight = FontWeight.Bold,
@@ -80,6 +90,25 @@ fun HostCard(host: HostInfo) {
                         fontSize = 11.sp,
                         color = TextSecondary
                     )
+                }
+                Spacer(Modifier.weight(1f))
+                // Copy IP button
+                if (onCopyIp != null) {
+                    IconButton(
+                        onClick = { onCopyIp(host.ip) },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Default.ContentCopy, null, Modifier.size(14.dp), tint = TextSecondary)
+                    }
+                }
+                // WoL button if MAC available
+                if (host.macAddress != null && onWol != null) {
+                    IconButton(
+                        onClick = { onWol(host.ip, host.macAddress) },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Default.PowerSettingsNew, null, Modifier.size(14.dp), tint = AccentGreen)
+                    }
                 }
             }
 
@@ -110,23 +139,34 @@ fun HostCard(host: HostInfo) {
                 }
             }
 
-            // ─── Ports: always visible, each as clickable ip:port ───
+            // ─── Ports ───
             if (host.openPorts.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 Divider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 Spacer(Modifier.height(4.dp))
                 host.openPorts.forEach { port ->
-                    PortRow(ip = host.ip, port = port)
+                    PortRow(
+                        ip = host.ip, port = port,
+                        onLongPress = { showPortInfo = port }
+                    )
                 }
             }
         }
     }
+
+    // Port info dialog
+    showPortInfo?.let { port ->
+        PortInfoDialog(port = port) { showPortInfo = null }
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PortRow(ip: String, port: PortInfo) {
+fun PortRow(
+    ip: String, port: PortInfo,
+    onLongPress: (() -> Unit)? = null
+) {
     val uriHandler = LocalUriHandler.current
-    // Each port row is a clickable link to http://ip:port/
     val scheme = if (port.port == 443 || port.port == 8443) "https" else "http"
     val url = "$scheme://$ip:${port.port}/"
 
@@ -134,13 +174,15 @@ fun PortRow(ip: String, port: PortInfo) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { try { uriHandler.openUri(url) } catch (_: Exception) {} }
+            .combinedClickable(
+                onClick = { try { uriHandler.openUri(url) } catch (_: Exception) {} },
+                onLongClick = onLongPress
+            )
             .padding(vertical = 2.dp, horizontal = 4.dp)
     ) {
         val icon = getPortIcon(port)
         Icon(icon, null, Modifier.size(14.dp), tint = AccentGreen)
         Spacer(Modifier.width(6.dp))
-        // IP:port combined as clickable text
         Text(
             text = "$ip:${port.port}",
             fontFamily = FontFamily.Monospace,
@@ -167,6 +209,32 @@ fun PortRow(ip: String, port: PortInfo) {
             )
         }
     }
+}
+
+@Composable
+fun PortInfoDialog(port: PortInfo, onDismiss: () -> Unit) {
+    val description = PortDescriptions.get(port.port)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Port ${port.port}", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("Service: ${port.service ?: "Unknown"}", fontSize = 14.sp)
+                if (description != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Info: $description", fontSize = 13.sp, color = TextSecondary)
+                }
+                if (port.banner != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Banner: ${port.banner}", fontSize = 11.sp, color = TextSecondary,
+                        fontFamily = FontFamily.Monospace)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 private fun getPortIcon(port: PortInfo) = when {

@@ -1,14 +1,18 @@
 package com.tasirin.network.radar.viewmodel
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.NetworkUtils
+import com.tasirin.network.radar.util.PingUtil
 import com.tasirin.network.radar.util.WakeOnLan
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 
 data class ScanUiState(
     val target: String = "",
@@ -24,7 +28,15 @@ data class ScanUiState(
     val error: String? = null,
     val scanResult: ScanResult? = null,
     val hostSummary: String = "",
-    val isDarkTheme: Boolean? = null
+    val isDarkTheme: Boolean? = null,
+    // Network info
+    val networkInfo: NetworkInfo = NetworkInfo(),
+    // Sort
+    val sortMode: SortMode = SortMode.IP,
+    // Ping monitor
+    val monitor: PingMonitorState = PingMonitorState(),
+    // Copy feedback
+    val copyFeedback: String? = null
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -36,25 +48,40 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val _hosts = mutableListOf<HostInfo>()
     private val _urls = mutableListOf<UrlDiscovery>()
     private var _startTime = 0L
+    private var monitorJob: Job? = null
+
+    init {
+        refreshNetworkInfo()
+    }
+
+    fun refreshNetworkInfo() {
+        val localIp = NetworkUtils.getLocalIp() ?: ""
+        val gateway = NetworkUtils.getLocalGateway() ?: ""
+        val prefix = NetworkUtils.getLocalNetworkPrefix()
+        val subnet = if (prefix != null) "$prefix.0/24" else ""
+        _state.update { it.copy(networkInfo = NetworkInfo(localIp, gateway, subnet)) }
+    }
 
     fun setTarget(target: String) { _state.update { it.copy(target = target) } }
 
     fun startScan(type: ScanType) {
         var target = _state.value.target.trim()
         if (target.isEmpty()) {
-            // Auto-detect local subnet if no target entered (like v1.0)
             val subnet = NetworkUtils.getLocalSubnet()
-            if (subnet != null) {
-                val localIp = NetworkUtils.getLocalIp()
-                target = localIp ?: ""
-                if (target.isNotEmpty()) {
-                    _state.update { it.copy(target = target) }
-                }
+            val localIp = NetworkUtils.getLocalIp()
+            if (subnet != null && localIp != null) {
+                target = localIp
+                _state.update { it.copy(target = target) }
             }
             if (target.isEmpty()) {
                 _state.update { it.copy(error = "Enter target IP or URL") }
                 return
             }
+        }
+
+        if (type == ScanType.MONITOR) {
+            startMonitor(target)
+            return
         }
 
         _hosts.clear()
@@ -72,67 +99,178 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            scannerManager.scan(type, target).collect { event ->
-                when (event) {
-                    is ScanEvent.Progress -> {
-                        val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
-                        _state.update { it.copy(progress = "Scanning ${event.ip}...", progressPercent = pct) }
-                    }
-                    is ScanEvent.HostFound -> {
-                        _hosts.add(event.host)
-                        _state.update { it.copy(hosts = _hosts.toList()) }
-                    }
-                    is ScanEvent.UrlFound -> {
-                        _urls.add(event.url)
-                        _state.update { it.copy(discoveredUrls = _urls.toList()) }
-                    }
-                    is ScanEvent.Error -> {
-                        _state.update { it.copy(error = event.message) }
-                    }
-                    is ScanEvent.Complete -> {
-                        val duration = System.currentTimeMillis() - _startTime
-                        val result = event.result.copy(
-                            hosts = _hosts.toList(),
-                            discoveredUrls = _urls.toList(),
-                            summary = ScanSummary(
-                                totalHosts = _hosts.size,
-                                aliveHosts = _hosts.count { it.isAlive },
-                                openPorts = _hosts.sumOf { it.openPorts.size },
-                                urlsFound = _urls.size, durationMs = duration
-                            )
-                        )
-                        val summaryText = buildSummary(result)
-                        val summaryColor = if (_hosts.isNotEmpty() || _urls.isNotEmpty()) 0xFF2E7D32 else 0xFFC62828
-                        val ok = _hosts.isNotEmpty() || _urls.isNotEmpty()
-                        _state.update {
-                            it.copy(
-                                isScanning = false, scanType = null, progress = "", progressPercent = 1f,
-                                summary = summaryText, summaryColor = summaryColor, isSummaryOk = ok,
-                                hostSummary = buildHostSummary(result), scanResult = result
-                            )
+            try {
+                scannerManager.scan(type, target).collect { event ->
+                    when (event) {
+                        is ScanEvent.Progress -> {
+                            val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
+                            _state.update { it.copy(progress = "Scanning ${event.ip}...", progressPercent = pct) }
                         }
+                        is ScanEvent.HostFound -> {
+                            _hosts.add(event.host)
+                            applySort()
+                        }
+                        is ScanEvent.UrlFound -> {
+                            _urls.add(event.url)
+                            _state.update { it.copy(discoveredUrls = _urls.toList()) }
+                        }
+                        is ScanEvent.Error -> {
+                            _state.update { it.copy(error = event.message) }
+                        }
+                        is ScanEvent.Complete -> {
+                            val duration = System.currentTimeMillis() - _startTime
+                            val result = event.result.copy(
+                                hosts = _hosts.toList(),
+                                discoveredUrls = _urls.toList(),
+                                summary = ScanSummary(
+                                    totalHosts = _hosts.size,
+                                    aliveHosts = _hosts.count { it.isAlive },
+                                    openPorts = _hosts.sumOf { it.openPorts.size },
+                                    urlsFound = _urls.size, durationMs = duration
+                                )
+                            )
+                            val summaryText = buildSummary(result)
+                            val ok = _hosts.isNotEmpty() || _urls.isNotEmpty()
+                            _state.update {
+                                it.copy(
+                                    isScanning = false, scanType = null, progress = "", progressPercent = 1f,
+                                    summary = summaryText, summaryColor = if (ok) 0xFF2E7D32 else 0xFFC62828,
+                                    isSummaryOk = ok, hostSummary = buildHostSummary(result), scanResult = result
+                                )
+                            }
+                        }
+                        else -> {}
                     }
                 }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isScanning = false, summary = "Cancelled", summaryColor = 0xFFC62828) }
             }
         }
     }
 
     fun stopScan() {
         scannerManager.stop()
-        _state.update { it.copy(isScanning = false, summary = "Stopped", summaryColor = 0xFFC62828, isSummaryOk = false) }
+        monitorJob?.cancel()
+        monitorJob = null
+        _state.update {
+            it.copy(isScanning = false, summary = "Stopped", summaryColor = 0xFFC62828,
+                isSummaryOk = false, monitor = PingMonitorState())
+        }
     }
 
-    fun clearError() { _state.update { it.copy(error = null) } }
+    // ─── Continuous Ping Monitor ───
+    private fun startMonitor(target: String) {
+        val ip = NetworkUtils.resolveDomain(target) ?: target
+        _state.update {
+            it.copy(isScanning = true, scanType = ScanType.MONITOR, error = null,
+                summary = "Monitoring $ip...", summaryColor = 0xFF00695C, isSummaryOk = true,
+                monitor = PingMonitorState(ip = ip, isRunning = true, history = emptyList()))
+        }
 
+        monitorJob?.cancel()
+        monitorJob = viewModelScope.launch {
+            while (isActive) {
+                val latency = PingUtil.ping(ip)
+                val result = PingResult(
+                    timestamp = System.currentTimeMillis(),
+                    latencyMs = latency,
+                    isAlive = latency != null
+                )
+                _state.update {
+                    val history = (it.monitor.history + result).takeLast(50)
+                    it.copy(
+                        monitor = it.monitor.copy(lastLatency = latency, history = history),
+                        summary = if (latency != null) "ping ${ip} — ${latency}ms"
+                                  else "ping ${ip} — ✗",
+                        summaryColor = if (latency != null) 0xFF2E7D32 else 0xFFC62828,
+                        isSummaryOk = latency != null
+                    )
+                }
+                delay(1500)
+            }
+        }
+    }
+
+    // ─── Sort ───
+    fun setSortMode(mode: SortMode) {
+        _state.update { it.copy(sortMode = mode) }
+        applySort()
+    }
+
+    private fun applySort() {
+        val mode = _state.value.sortMode
+        val sorted = when (mode) {
+            SortMode.IP -> _hosts.sortedBy { it.ip }
+            SortMode.PORTS -> _hosts.sortedByDescending { it.openPorts.size }
+            SortMode.LATENCY -> _hosts.sortedBy { it.latencyMs ?: Long.MAX_VALUE }
+            SortMode.HOSTNAME -> _hosts.sortedBy { it.hostname ?: it.ip }
+        }
+        _state.update { it.copy(hosts = sorted) }
+    }
+
+    // ─── Copy to Clipboard ───
+    fun copyToClipboard(label: String, text: String) {
+        try {
+            val ctx = getApplication<Application>()
+            val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+            _state.update { it.copy(copyFeedback = "Copied: $text") }
+        } catch (_: Exception) {
+            _state.update { it.copy(error = "Failed to copy") }
+        }
+    }
+
+    fun clearCopyFeedback() {
+        _state.update { it.copy(copyFeedback = null) }
+    }
+
+    fun copyHostSummary(): String {
+        val hosts = _state.value.hosts
+        return hosts.joinToString("\n") { host ->
+            val ip = host.ip
+            val mac = host.macAddress?.let { " [$it]" } ?: ""
+            val ports = host.openPorts.joinToString(", ") { "${it.port}" }
+            "$ip$mac" + if (ports.isNotEmpty()) " : $ports" else ""
+        }
+    }
+
+    fun copyAllText(scanResult: ScanResult?): String {
+        val result = scanResult ?: return ""
+        val sb = StringBuilder()
+        sb.appendLine("NetRadar Scan - ${result.type.label}")
+        sb.appendLine("Target: ${result.target}")
+        sb.appendLine("---")
+        for (host in result.hosts) {
+            sb.append(host.ip)
+            host.hostname?.let { if (it != host.ip) sb.append(" ($it)") }
+            host.macAddress?.let { sb.append(" $it") }
+            host.macVendor?.let { sb.append(" ($it)") }
+            sb.appendLine()
+            for (p in host.openPorts) {
+                sb.appendLine("  ${host.ip}:${p.port}  ${p.service ?: ""}")
+            }
+        }
+        for (url in result.discoveredUrls) {
+            sb.appendLine("  ${url.url}  [${url.statusCode}] ${url.title ?: ""}")
+        }
+        sb.appendLine("---")
+        sb.appendLine(buildSummary(result))
+        return sb.toString()
+    }
+
+    // ─── Wake on LAN ───
     fun wakeOnLan(ip: String, mac: String) {
         viewModelScope.launch {
             val success = WakeOnLan.wake(ip, mac)
             _state.update {
-                it.copy(summary = if (success) "WoL packet sent to $mac" else "WoL failed",
+                it.copy(summary = if (success) "WoL sent to $mac" else "WoL failed",
                     summaryColor = if (success) 0xFF2E7D32 else 0xFFC62828, isSummaryOk = success)
             }
         }
     }
+
+    // ─── Helpers ───
+    fun clearError() { _state.update { it.copy(error = null) } }
 
     fun getLocalNetworkHint(): String = NetworkUtils.getLocalNetworkPrefix()?.let { "$it.0/24" } ?: ""
 
@@ -169,5 +307,5 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         return parts.joinToString("  ")
     }
 
-    override fun onCleared() { super.onCleared(); scannerManager.stop() }
+    override fun onCleared() { super.onCleared(); scannerManager.stop(); monitorJob?.cancel() }
 }
