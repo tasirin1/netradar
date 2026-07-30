@@ -1,6 +1,5 @@
 package com.example.networkscanner.util
 
-import com.example.networkscanner.BuildConfig
 
 import android.content.ContentValues
 import android.content.Context
@@ -132,4 +131,12 @@ object DebugLogger {
             ctx.startActivity(Intent.createChooser(intent, "Share Debug Log"))
         } catch (_: Exception) {}
     }
+
+    private fun getVersion(ctx: Context): String {
+        return try {
+            val info = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+            "${info.versionName} (${info.versionCode})"
+        } catch (_: Exception) { "unknown" }
+    }
 }
+
