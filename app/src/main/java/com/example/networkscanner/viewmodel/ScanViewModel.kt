@@ -7,7 +7,6 @@ import com.example.networkscanner.model.*
 import com.example.networkscanner.scanner.ScannerManager
 import com.example.networkscanner.util.NetworkUtils
 import com.example.networkscanner.util.WakeOnLan
-import com.example.networkscanner.db.ScanHistoryStore
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -25,7 +24,6 @@ data class ScanUiState(
     val error: String? = null,
     val scanResult: ScanResult? = null,
     val hostSummary: String = "",
-    val history: List<com.example.networkscanner.db.HistoryEntry> = emptyList(),
     val isDarkTheme: Boolean? = null
 )
 
@@ -39,7 +37,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val _urls = mutableListOf<UrlDiscovery>()
     private var _startTime = 0L
 
-    init { loadHistory() }
 
     fun setTarget(target: String) { _state.update { it.copy(target = target) } }
 
@@ -97,14 +94,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         val summaryText = buildSummary(result)
                         val summaryColor = if (_hosts.isNotEmpty() || _urls.isNotEmpty()) 0xFF2E7D32 else 0xFFC62828
                         val ok = _hosts.isNotEmpty() || _urls.isNotEmpty()
-                        val app = getApplication<Application>()
-                        ScanHistoryStore.addEntry(app, result, summaryText)
                         _state.update {
                             it.copy(
                                 isScanning = false, scanType = null, progress = "", progressPercent = 1f,
                                 summary = summaryText, summaryColor = summaryColor, isSummaryOk = ok,
-                                hostSummary = buildHostSummary(result), scanResult = result,
-                                history = ScanHistoryStore.load(app)
+                                hostSummary = buildHostSummary(result), scanResult = result
                             )
                         }
                     }
@@ -119,27 +113,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearError() { _state.update { it.copy(error = null) } }
-
-    fun loadHistory() {
-        val app = getApplication<Application>()
-        _state.update { it.copy(history = ScanHistoryStore.load(app)) }
-    }
-
-    fun loadHistoryEntry(id: Long) {
-        val app = getApplication<Application>()
-        val result = ScanHistoryStore.getEntry(app, id) ?: return
-        _state.update {
-            it.copy(hosts = result.hosts, discoveredUrls = result.discoveredUrls,
-                hostSummary = buildHostSummary(result), scanResult = result,
-                summary = "Loaded from history", summaryColor = 0xFF00695C, isSummaryOk = true)
-        }
-    }
-
-    fun clearHistory() {
-        val app = getApplication<Application>()
-        ScanHistoryStore.clear(app)
-        _state.update { it.copy(history = emptyList()) }
-    }
 
     fun wakeOnLan(ip: String, mac: String) {
         viewModelScope.launch {

@@ -34,8 +34,6 @@ class MainActivity : AppCompatActivity() {
                         onTargetChange = { viewModel.setTarget(it) },
                         onScan = { viewModel.startScan(it) },
                         onStop = { viewModel.stopScan() },
-                        onLoadHistory = { viewModel.loadHistoryEntry(it) },
-                        onClearHistory = { viewModel.clearHistory() },
                         onToggleTheme = { viewModel.toggleDarkTheme() },
                     )
                 }

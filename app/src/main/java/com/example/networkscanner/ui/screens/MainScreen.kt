@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.networkscanner.db.HistoryEntry
 import com.example.networkscanner.model.*
 import com.example.networkscanner.ui.components.*
 import com.example.networkscanner.ui.theme.TextSecondary
@@ -25,8 +24,6 @@ fun MainScreen(
     onTargetChange: (String) -> Unit,
     onScan: (ScanType) -> Unit,
     onStop: () -> Unit,
-    onLoadHistory: (Long) -> Unit,
-    onClearHistory: () -> Unit,
     onToggleTheme: () -> Unit
 ) {
     Scaffold(
@@ -157,25 +154,20 @@ fun MainScreen(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-            Divider(color = MaterialTheme.colorScheme.outline)
-
-            // History
-            Spacer(Modifier.height(6.dp))
-            HistoryPanel(
-                entries = state.history,
-                onLoadEntry = onLoadHistory,
-                onClearHistory = onClearHistory
-            )
-
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "NetRadar v2.0  |  Julius Rudi Tasirin",
+            // Push version text to the very bottom
+            Spacer(Modifier.weight(1f))
+            
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                color = TextSecondary,
-                fontSize = 10.sp
-            )
-            Spacer(Modifier.height(16.dp))
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "NetRadar v2.0  |  Julius Rudi Tasirin",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp
+                )
+            }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
