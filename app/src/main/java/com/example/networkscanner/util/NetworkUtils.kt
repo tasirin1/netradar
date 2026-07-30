@@ -106,14 +106,7 @@ object NetworkUtils {
     }
 
     /**
-     * Auto-expand target to list of IPs. Supports:
-     * - Single IP → /24 subnet (192.168.1.1 → 192.168.1.1-254)
-     * - CIDR → expanded range
-     * - Domain → resolved to IP → /24 subnet
-     * - Partial prefix "192." → scan ALL 192.168.x.x (256 subnets)
-     * - Partial prefix "192.168." → scan ALL 192.168.x.x (256 subnets)
-     * - Partial prefix "10." → scan 10.x.x.x (too large, uses local prefix)
-     * - URL → extract host → scan /24
+     * Auto-expand target to list of IPs.
      */
     fun autoExpandTarget(input: String): List<String> {
         val trimmed = input.trim()
@@ -121,41 +114,39 @@ object NetworkUtils {
 
         var cleaned = trimmed.replaceFirst("^https?://".toRegex(), "")
 
-        // Check CIDR first
+        // Check CIDR
         val isCidr = cleaned.contains("/") && cleaned.matches(Regex("""\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d+"""))
         if (isCidr) return resolveTarget(cleaned)
 
         // ─── Partial prefix: "192." or "192.168." → scan ALL matching subnets ───
-        // "192." → scan 192.168.x.x (common private 192 range, 256 subnets)
-        // "192.168." → scan all 192.168.x.x (256 subnets × 254 hosts)
-        if (cleaned.endsWith(".") && cleaned.matches(Regex("""\d{1,3}(\.\d{1,3})?\.$""")) {
-            val parts = cleaned.trimEnd('.').split(".")
-            if (parts.size == 1 && parts[0] == "192") {
-                // "192." → scan all 192.168.x.x subnets
-                val result = mutableListOf<String>()
-                for (third in 0..255) {
-                    for (last in 1..254) {
-                        result.add("192.168.$third.$last")
+        if (cleaned.endsWith(".")) {
+            val hasOneOctet = cleaned.matches(Regex("""\d{1,3}\."""))
+            val hasTwoOctets = cleaned.matches(Regex("""\d{1,3}\.\d{1,3}\."""))
+            if (hasOneOctet || hasTwoOctets) {
+                val parts = cleaned.trimEnd('.').split(".")
+                if (parts.size == 1 && parts[0] == "192") {
+                    // "192." → scan all 192.168.x.x subnets
+                    val result = mutableListOf<String>()
+                    for (third in 0..255) {
+                        for (last in 1..254) result.add("192.168.$third.$last")
                     }
-                }
-                return result
-            } else if (parts.size == 2 && parts[0] == "192" && parts[1] == "168") {
-                // "192.168." → scan all 192.168.x.x subnets
-                val result = mutableListOf<String>()
-                for (third in 0..255) {
-                    for (last in 1..254) {
-                        result.add("192.168.$third.$last")
+                    return result
+                } else if (parts.size == 2 && parts[0] == "192" && parts[1] == "168") {
+                    // "192.168." → scan all 192.168.x.x subnets
+                    val result = mutableListOf<String>()
+                    for (third in 0..255) {
+                        for (last in 1..254) result.add("192.168.$third.$last")
                     }
+                    return result
+                } else if (parts.size == 1 && parts[0] == "10") {
+                    // "10." → use local prefix
+                    val localPrefix = getLocalNetworkPrefix()
+                    if (localPrefix != null) return (1..254).map { "$localPrefix.$it" }
+                } else {
+                    // Other prefixes → use local subnet
+                    val localPrefix = getLocalNetworkPrefix()
+                    if (localPrefix != null) return (1..254).map { "$localPrefix.$it" }
                 }
-                return result
-            } else if (parts.size == 1 && parts[0] == "10") {
-                // "10." → too large (16M IPs), use local prefix instead
-                val localPrefix = getLocalNetworkPrefix()
-                if (localPrefix != null) return (1..254).map { "$localPrefix.$it" }
-            } else {
-                // Other prefixes → use local subnet
-                val localPrefix = getLocalNetworkPrefix()
-                if (localPrefix != null) return (1..254).map { "$localPrefix.$it" }
             }
         }
 
@@ -185,28 +176,6 @@ object NetworkUtils {
         }
     }
 
-    /**
-     * Fast ARP/ICMP scan with 100 threads. Used for large subnet scans.
-     */
-    fun fastArpScan(subnet: String): Set<String> {
-        val live = Collections.synchronizedSet(mutableSetOf<String>())
-        val pool = Executors.newFixedThreadPool(100)
-        for (i in 1..254) {
-            val ip = "$subnet$i"
-            pool.execute {
-                try {
-                    if (InetAddress.getByName(ip).isReachable(100)) live.add(ip)
-                } catch (_: Exception) { }
-            }
-        }
-        pool.shutdown()
-        try { pool.awaitTermination(3, TimeUnit.SECONDS) } catch (_: Exception) { }
-        return live
-    }
-
-    /**
-     * Same as arpScan but with 100 threads and 100ms timeout for speed.
-     */
     fun arpScan(subnet: String): Set<String> {
         val live = Collections.synchronizedSet(mutableSetOf<String>())
         val pool = Executors.newFixedThreadPool(100)
@@ -242,9 +211,10 @@ object NetworkUtils {
                 try { InetAddress.getByName(ip).isReachable(300) } catch (_: Exception) { false }
             }
         }
+    }
+
     /**
      * Fast wide scan for large IP ranges like 192.168.x.x (65024 IPs).
-     * Uses 100 threads to ping all IPs in parallel with 100ms timeout.
      */
     fun filterLiveHostsWide(prefix: String, thirdRange: IntRange = 0..255): List<String> {
         val live = Collections.synchronizedSet(mutableSetOf<String>())
@@ -262,9 +232,6 @@ object NetworkUtils {
         pool.shutdown()
         try { pool.awaitTermination(60, TimeUnit.SECONDS) } catch (_: Exception) { }
         return live.toList().sorted()
-    }
-
-
     }
 
     fun getLocalGateway(): String? {
