@@ -113,7 +113,7 @@ fun HostCard(host: HostInfo) {
             // ─── Ports: always visible, each as clickable ip:port ───
             if (host.openPorts.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                Divider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 Spacer(Modifier.height(4.dp))
                 host.openPorts.forEach { port ->
                     PortRow(ip = host.ip, port = port)

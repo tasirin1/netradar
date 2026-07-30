@@ -16,34 +16,37 @@ class ScannerManager {
     @Volatile
     private var currentJob: Job? = null
 
-    fun scan(type: ScanType, target: String): Flow<ScanEvent> = callbackFlow {
+    fun scan(type: ScanType, target: String): Flow<ScanEvent> = channelFlow {
         currentJob?.cancel()
         currentJob = null
 
-        val job = launch(Dispatchers.IO) {
+        val scanJob = launch(Dispatchers.IO) {
+            val scannerFlow = when (type) {
+                ScanType.PORT_SCAN -> portScanner.scan(target)
+                ScanType.CAMERA -> cameraScanner.scan(target)
+                ScanType.ROUTER -> routerScanner.scan(target)
+                ScanType.URL_PATH -> urlPathScanner.scan(target)
+                ScanType.DISCOVER -> discoverScanner.scan(target)
+                ScanType.PING -> pingSweep.scan(target)
+            }
             try {
-                val scannerFlow = when (type) {
-                    ScanType.PORT_SCAN -> portScanner.scan(target)
-                    ScanType.CAMERA -> cameraScanner.scan(target)
-                    ScanType.ROUTER -> routerScanner.scan(target)
-                    ScanType.URL_PATH -> urlPathScanner.scan(target)
-                    ScanType.DISCOVER -> discoverScanner.scan(target)
-                    ScanType.PING -> pingSweep.scan(target)
-                }
                 scannerFlow.collect { event ->
-                    trySend(event)
+                    send(event)
                 }
             } catch (e: CancellationException) {
-                trySend(ScanEvent.Error("Cancelled"))
                 throw e
             } catch (e: Exception) {
-                trySend(ScanEvent.Error(e.message ?: "Scan error"))
+                send(ScanEvent.Error(e.message ?: "Scan error"))
             }
         }
-        currentJob = job
+        currentJob = scanJob
 
-        awaitClose {
-            job.cancel()
+        try {
+            scanJob.join()
+        } catch (e: CancellationException) {
+            scanJob.cancel()
+            throw e
+        } finally {
             currentJob = null
         }
     }
