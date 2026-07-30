@@ -25,9 +25,6 @@ fun MainScreen(
     onTargetChange: (String) -> Unit,
     onScan: (ScanType) -> Unit,
     onStop: () -> Unit,
-    onExportJson: () -> Unit,
-    onExportCsv: () -> Unit,
-    onExportTxt: () -> Unit,
     onLoadHistory: (Long) -> Unit,
     onClearHistory: () -> Unit,
     onToggleTheme: () -> Unit
