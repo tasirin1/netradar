@@ -76,11 +76,7 @@ object NetworkUtils {
                     val addr = addrs.nextElement()
                     val ip = addr.hostAddress ?: continue
                     if (!addr.isLoopbackAddress && ip.contains(".")) {
-                        result.add(NetworkInterfaceInfo(
-                            name = ni.name,
-                            ip = ip,
-                            isActive = addr.isSiteLocalAddress
-                        ))
+                        result.add(NetworkInterfaceInfo(name = ni.name, ip = ip, isActive = addr.isSiteLocalAddress))
                     }
                 }
             }
@@ -93,7 +89,6 @@ object NetworkUtils {
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
                 val ni = interfaces.nextElement()
-                // If interface selected, only check that one
                 if (selectedInterfaceName.isNotEmpty() && ni.name != selectedInterfaceName) continue
                 val addrs = ni.inetAddresses
                 while (addrs.hasMoreElements()) {
@@ -113,14 +108,29 @@ object NetworkUtils {
         return null
     }
 
+    /**
+     * Auto-expand target to list of IPs. Supports:
+     * - Single IP → /24 subnet (e.g., 192.168.1.1 → 192.168.1.1-254)
+     * - CIDR → expanded range
+     * - Domain → resolved to IP → /24 subnet
+     * - Partial prefix like "192." or "192.168." → auto-detect local subnet
+     * - URL → extract host → scan /24
+     */
     fun autoExpandTarget(input: String): List<String> {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return emptyList()
 
         var cleaned = trimmed.replaceFirst("^https?://".toRegex(), "")
 
+        // Check CIDR
         val isCidr = cleaned.contains("/") && cleaned.matches(Regex("""\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d+"""))
         if (isCidr) return resolveTarget(cleaned)
+
+        // Partial IP prefix like "192." or "192.168." — use local subnet
+        if (cleaned.endsWith(".") && cleaned.matches(Regex("""\d{1,3}(\.\d{1,3})?\.$"""))) {
+            val localPrefix = getLocalNetworkPrefix()
+            if (localPrefix != null) return (1..254).map { "$localPrefix.$it" }
+        }
 
         if (cleaned.contains("/")) cleaned = cleaned.substringBefore("/")
         cleaned = cleaned.substringBefore(":")
@@ -134,6 +144,7 @@ object NetworkUtils {
             return (1..254).map { "$prefix.$it" }
         }
 
+        // Domain name
         try {
             val addr = InetAddress.getByName(cleaned)
             val ip = addr.hostAddress ?: cleaned
