@@ -1,6 +1,6 @@
-package com.example.networkscanner.scanner
+package com.tasirin.network.radar.scanner
 
-import com.example.networkscanner.model.*
+import com.tasirin.network.radar.model.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -16,40 +16,34 @@ class ScannerManager {
     @Volatile
     private var currentJob: Job? = null
 
-    fun scan(type: ScanType, target: String): Flow<ScanEvent> = channelFlow {
+    fun scan(type: ScanType, target: String): Flow<ScanEvent> = callbackFlow {
         currentJob?.cancel()
         currentJob = null
 
-        // Use channelFlow's own scope with IO dispatcher
-        val scanJob = launch(Dispatchers.IO) {
-            val scannerFlow = when (type) {
-                ScanType.PORT_SCAN -> portScanner.scan(target)
-                ScanType.CAMERA -> cameraScanner.scan(target)
-                ScanType.ROUTER -> routerScanner.scan(target)
-                ScanType.URL_PATH -> urlPathScanner.scan(target)
-                ScanType.DISCOVER -> discoverScanner.scan(target)
-                ScanType.PING -> pingSweep.scan(target)
-            }
+        val job = launch(Dispatchers.IO) {
             try {
+                val scannerFlow = when (type) {
+                    ScanType.PORT_SCAN -> portScanner.scan(target)
+                    ScanType.CAMERA -> cameraScanner.scan(target)
+                    ScanType.ROUTER -> routerScanner.scan(target)
+                    ScanType.URL_PATH -> urlPathScanner.scan(target)
+                    ScanType.DISCOVER -> discoverScanner.scan(target)
+                    ScanType.PING -> pingSweep.scan(target)
+                }
                 scannerFlow.collect { event ->
-                    // Send to channelFlow's channel
-                    send(event)
+                    trySend(event)
                 }
             } catch (e: CancellationException) {
-                // Scan was cancelled, rethrow
+                trySend(ScanEvent.Error("Cancelled"))
                 throw e
             } catch (e: Exception) {
-                send(ScanEvent.Error(e.message ?: "Scan error"))
+                trySend(ScanEvent.Error(e.message ?: "Scan error"))
             }
         }
-        currentJob = scanJob
+        currentJob = job
 
-        try {
-            scanJob.join()
-        } catch (e: CancellationException) {
-            scanJob.cancel()
-            throw e
-        } finally {
+        awaitClose {
+            job.cancel()
             currentJob = null
         }
     }

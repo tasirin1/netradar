@@ -1,4 +1,4 @@
-package com.example.networkscanner.ui.theme
+package com.tasirin.network.radar.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

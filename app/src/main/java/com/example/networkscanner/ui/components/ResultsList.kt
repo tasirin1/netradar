@@ -1,25 +1,24 @@
-package com.example.networkscanner.ui.components
+package com.tasirin.network.radar.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.ClickableText
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.networkscanner.model.HostInfo
-import com.example.networkscanner.model.PortInfo
-import com.example.networkscanner.model.UrlDiscovery
-import com.example.networkscanner.ui.theme.*
+import com.tasirin.network.radar.model.HostInfo
+import com.tasirin.network.radar.model.PortInfo
+import com.tasirin.network.radar.model.UrlDiscovery
+import com.tasirin.network.radar.ui.theme.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HostResultsList(
     hosts: List<HostInfo>,
@@ -36,14 +35,15 @@ fun HostResultsList(
 
 @Composable
 fun HostCard(host: HostInfo) {
-    var expanded by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
+            // ─── IP line with MAC and hostname ───
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Default.Computer,
@@ -52,44 +52,40 @@ fun HostCard(host: HostInfo) {
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
-                val uriHandler = LocalUriHandler.current
+                // IP is clickable: opens http://ip/
                 Text(
                     text = host.ip,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { 
+                    modifier = Modifier.clickable {
                         try { uriHandler.openUri("http://${host.ip}/") } catch (_: Exception) {}
                     }
                 )
                 if (host.latencyMs != null) {
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = "${host.latencyMs}ms",
                         fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
                         color = if (host.latencyMs < 10) StatusGreen
                         else if (host.latencyMs < 50) StatusOrange
                         else StatusRed
                     )
                 }
-                Spacer(Modifier.weight(1f))
                 if (host.openPorts.isNotEmpty()) {
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = "${host.openPorts.size} port(s)",
                         fontSize = 11.sp,
                         color = TextSecondary
                     )
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = TextSecondary
-                    )
                 }
             }
 
+            // ─── MAC & Hostname ───
             if (host.macAddress != null) {
+                Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Hub, null, Modifier.size(12.dp), tint = TextSecondary)
                     Spacer(Modifier.width(4.dp))
@@ -100,18 +96,24 @@ fun HostCard(host: HostInfo) {
                     )
                 }
             }
-
             if (!host.hostname.isNullOrBlank() && host.hostname != host.ip) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Language, null, Modifier.size(12.dp), tint = TextSecondary)
                     Spacer(Modifier.width(4.dp))
-                    Text(host.hostname, fontSize = 11.sp, color = TextSecondary)
+                    Text(
+                        text = host.hostname,
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 
-            if (expanded && host.openPorts.isNotEmpty()) {
+            // ─── Ports: always visible, each as clickable ip:port ───
+            if (host.openPorts.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                Divider(color = MaterialTheme.colorScheme.outline)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 Spacer(Modifier.height(4.dp))
                 host.openPorts.forEach { port ->
                     PortRow(ip = host.ip, port = port)
@@ -123,20 +125,24 @@ fun HostCard(host: HostInfo) {
 
 @Composable
 fun PortRow(ip: String, port: PortInfo) {
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-    val url = if (port.port == 443 || port.port == 8443) "https://$ip:${port.port}/" else "http://$ip:${port.port}/"
-    
+    val uriHandler = LocalUriHandler.current
+    // Each port row is a clickable link to http://ip:port/
+    val scheme = if (port.port == 443 || port.port == 8443) "https" else "http"
+    val url = "$scheme://$ip:${port.port}/"
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 1.dp).clickable { 
-            try { uriHandler.openUri(url) } catch (_: Exception) {}
-        }
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { try { uriHandler.openUri(url) } catch (_: Exception) {} }
+            .padding(vertical = 2.dp, horizontal = 4.dp)
     ) {
         val icon = getPortIcon(port)
         Icon(icon, null, Modifier.size(14.dp), tint = AccentGreen)
         Spacer(Modifier.width(6.dp))
+        // IP:port combined as clickable text
         Text(
-            text = "${port.port}",
+            text = "$ip:${port.port}",
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
@@ -146,14 +152,18 @@ fun PortRow(ip: String, port: PortInfo) {
         Text(
             text = port.service ?: "Unknown",
             fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         if (port.banner != null) {
             Spacer(Modifier.width(4.dp))
             Text(
                 text = port.banner.take(40),
                 fontSize = 10.sp,
-                color = TextSecondary
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -174,6 +184,7 @@ private fun getPortIcon(port: PortInfo) = when {
     port.service?.contains("NFS", true) == true -> Icons.Default.Folder
     port.service?.contains("SSH", true) == true ||
     port.service?.contains("Telnet", true) == true -> Icons.Default.Terminal
+    port.port == 443 || port.port == 8443 || port.port == 80 || port.port == 8080 -> Icons.Default.Public
     else -> Icons.Default.RadioButtonChecked
 }
 
@@ -193,6 +204,7 @@ fun UrlResultsList(
 
 @Composable
 fun UrlCard(url: UrlDiscovery) {
+    val uriHandler = LocalUriHandler.current
     val statusColor = when (url.statusCode) {
         200 -> StatusGreen
         301, 302 -> StatusBlue
@@ -202,9 +214,9 @@ fun UrlCard(url: UrlDiscovery) {
     }
     val icon = when (url.statusCode) {
         200 -> Icons.Default.CheckCircle
-        301, 302 -> Icons.Default.Http // Note: Redirect might need extended icons
+        301, 302 -> Icons.Default.Public
         401, 403 -> Icons.Default.Lock
-        else -> Icons.Default.Http
+        else -> Icons.Default.Public
     }
 
     Card(
@@ -227,13 +239,12 @@ fun UrlCard(url: UrlDiscovery) {
             )
             Spacer(Modifier.width(6.dp))
             Column {
-                val uriHandler = LocalUriHandler.current
                 Text(
                     text = url.url,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { 
+                    modifier = Modifier.clickable {
                         try { uriHandler.openUri(url.url) } catch (_: Exception) {}
                     }
                 )
@@ -241,7 +252,9 @@ fun UrlCard(url: UrlDiscovery) {
                     Text(
                         text = url.title,
                         fontSize = 10.sp,
-                        color = TextSecondary
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

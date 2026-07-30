@@ -1,88 +1,102 @@
-package com.example.networkscanner.scanner
+package com.tasirin.network.radar.scanner
 
-import com.example.networkscanner.model.*
+import com.tasirin.network.radar.model.*
+import com.tasirin.network.radar.util.NetworkUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import com.example.networkscanner.util.NetworkUtils
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.util.concurrent.Semaphore
 
 class PortScanner {
 
-    private val commonPorts = intArrayOf(
-        80, 443, 8080, 8443, 22, 23, 21, 53, 3389, 3306,
-        8081, 8000, 3000, 5000, 8888, 9000, 81, 444, 5555, 5900,
-        6379, 27017, 7547, 6666, 8291, 2000, 135, 139, 445, 1433,
-        1521, 2049, 2375, 2376, 3128, 3307, 3388, 4444, 4848, 5432,
-        6378, 7001, 8001, 8082, 8083, 8084, 8085, 8444, 9090, 9200
-    )
+    companion object {
+        val commonPorts = intArrayOf(
+            80, 443, 8080, 8443, 22, 23, 21, 53, 3389, 3306,
+            8081, 8000, 3000, 5000, 8888, 9000, 81, 444, 5555, 5900,
+            6379, 27017, 7547, 6666, 8291, 2000, 135, 139, 445, 1433,
+            1521, 2049, 2375, 2376, 3128, 3307, 3388, 4444, 4848, 5432,
+            6378, 7001, 8001, 8082, 8083, 8084, 8085, 8444, 9090, 9200
+        )
+    }
 
     fun scan(target: String, ports: IntArray = commonPorts): Flow<ScanEvent> = flow {
-        val ips = resolveTargets(target)
-        val totalTargets = ips.size * ports.size
-        val semaphore = Semaphore(255) // like v1.0's 255 thread pool
-        val results = mutableMapOf<String, MutableList<PortInfo>>()
-        var completed = 0
+        val ips = NetworkUtils.autoExpandTarget(target)
+        if (ips.isEmpty()) {
+            emit(ScanEvent.Error("No IPs to scan"))
+            return@flow
+        }
 
-        emit(ScanEvent.Progress("Starting...", 0, totalTargets))
-
-        withContext(Dispatchers.IO) {
-            coroutineScope {
-                ips.flatMap { ip ->
-                    ports.map { port ->
-                        async {
-                            semaphore.acquire()
-                            try {
-                                val result = probePort(ip, port)
-                                synchronized(results) {
-                                    if (result != null) {
-                                        results.getOrPut(ip) { mutableListOf() }.add(result)
-                                    }
-                                    completed++
-                                }
-                            } finally {
-                                semaphore.release()
-                            }
-                        }
-                    }
-                }
+        // Like v1.0: detect local subnet and do ARP pre-scan to find live hosts
+        val localIp = NetworkUtils.getLocalIp()
+        val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
+        
+        var scanIps = ips.toList()
+        if (isLocal && ips.size > 1) {
+            emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
+            val subnet = ips.first().substringBeforeLast(".") + "."
+            val live = NetworkUtils.arpScan(subnet)
+            if (live.isNotEmpty()) {
+                scanIps = ips.filter { it in live }
+                emit(ScanEvent.Progress("Found ${scanIps.size} live host(s)", 0, scanIps.size))
             }
         }
 
-        emit(ScanEvent.Progress("Collecting results...", completed, totalTargets))
-        for ((ip, openPorts) in results) {
-            emit(ScanEvent.HostFound(HostInfo(ip = ip, isAlive = true, openPorts = openPorts)))
+        // Like v1.0: sequential hosts with sequential ports (no more crash)
+        for ((idx, ip) in scanIps.withIndex()) {
+            emit(ScanEvent.Progress(ip, idx, scanIps.size))
+
+            val hostname = try {
+                val hn = InetAddress.getByName(ip).hostName
+                if (hn != ip) hn else null
+            } catch (_: Exception) { null }
+
+            val arpTable = NetworkUtils.readArpTable()
+            val mac = arpTable[ip]
+            val vendor = NetworkUtils.lookupMacVendor(mac)
+
+            val openPorts = scanHostPorts(ip, ports)
+
+            if (openPorts.isNotEmpty()) {
+                emit(ScanEvent.HostFound(HostInfo(
+                    ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
+                    isAlive = true, openPorts = openPorts
+                )))
+            }
         }
+
         emit(ScanEvent.Complete(ScanResult(type = ScanType.PORT_SCAN, target = target)))
     }
 
-    private fun probePort(ip: String, port: Int): PortInfo? {
-        return try {
-            val sock = Socket()
-            sock.connect(InetSocketAddress(ip, port), 200)
-            sock.soTimeout = 150
-            var service: String? = null
-            var banner: String? = null
+    private suspend fun scanHostPorts(ip: String, ports: IntArray): List<PortInfo> = withContext(Dispatchers.IO) {
+        val result = mutableListOf<PortInfo>()
+        for (port in ports) {
             try {
-                val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
-                reader.use {
-                    var line: String?
-                    val sb = StringBuilder()
-                    for (i in 0 until 5) {
-                        line = reader.readLine() ?: break
-                        sb.append(line).append(" ")
+                val sock = Socket()
+                sock.connect(InetSocketAddress(ip, port), 200)
+                sock.soTimeout = 150
+                var service: String? = null
+                var banner: String? = null
+                try {
+                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
+                    reader.use {
+                        var line: String?
+                        val sb = StringBuilder()
+                        for (i in 0 until 5) {
+                            line = reader.readLine() ?: break
+                            sb.append(line).append(" ")
+                        }
+                        banner = sb.toString().trim().take(100)
                     }
-                    banner = sb.toString().trim().take(100)
-                }
-            } catch (_: Exception) {}
-            sock.close()
-            service = detectService(port, banner)
-            PortInfo(port = port, service = service, banner = banner)
-        } catch (_: Exception) { null }
+                } catch (_: Exception) {}
+                sock.close()
+                service = detectService(port, banner)
+                result.add(PortInfo(port = port, service = service, banner = banner))
+            } catch (_: Exception) { }
+        }
+        result
     }
 
     private fun detectService(port: Int, banner: String?): String? {
@@ -121,6 +135,4 @@ class PortScanner {
             else -> null
         }
     }
-
-    private fun resolveTargets(input: String): List<String> = NetworkUtils.autoExpandTarget(input)
 }

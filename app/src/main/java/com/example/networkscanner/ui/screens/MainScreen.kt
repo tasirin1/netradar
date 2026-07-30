@@ -1,4 +1,4 @@
-package com.example.networkscanner.ui.screens
+package com.tasirin.network.radar.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,12 +10,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.networkscanner.model.*
-import com.example.networkscanner.ui.components.*
-import com.example.networkscanner.ui.theme.TextSecondary
-import com.example.networkscanner.viewmodel.ScanUiState
+import com.tasirin.network.radar.model.*
+import com.tasirin.network.radar.ui.components.*
+import com.tasirin.network.radar.ui.theme.TextSecondary
+import com.tasirin.network.radar.viewmodel.ScanUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,7 +82,7 @@ fun MainScreen(
 
             Spacer(Modifier.height(4.dp))
 
-            // Action Buttons (Stop + Export)
+            // Stop button only
             ActionButtons(
                 isScanning = state.isScanning,
                 onStop = onStop
@@ -104,13 +105,14 @@ fun MainScreen(
                 Text(
                     text = state.hostSummary,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
             Spacer(Modifier.height(6.dp))
 
-            // Results
+            // Results - Hosts
             if (state.hosts.isNotEmpty()) {
                 Text(
                     text = "Hosts (${state.hosts.size})",
@@ -122,6 +124,7 @@ fun MainScreen(
                 HostResultsList(hosts = state.hosts)
             }
 
+            // Results - URLs
             if (state.discoveredUrls.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -134,6 +137,7 @@ fun MainScreen(
                 UrlResultsList(urls = state.discoveredUrls)
             }
 
+            // No results message
             if (state.hosts.isEmpty() && state.discoveredUrls.isEmpty() && !state.isScanning && state.scanResult != null) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(32.dp),
@@ -156,17 +160,16 @@ fun MainScreen(
 
             // Push version text to the very bottom
             Spacer(Modifier.weight(1f))
-            
-            Row(
+            Spacer(Modifier.height(8.dp))
+
+            // Version and creator at the bottom
+            Text(
+                text = "NetRadar v2.0  |  Julius Rudi Tasirin",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "NetRadar v2.0  |  Julius Rudi Tasirin",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp
-                )
-            }
+                textAlign = TextAlign.Center
+            )
             Spacer(Modifier.height(8.dp))
         }
     }

@@ -1,6 +1,6 @@
-package com.example.networkscanner.scanner
+package com.tasirin.network.radar.scanner
 
-import com.example.networkscanner.model.*
+import com.tasirin.network.radar.model.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.net.HttpURLConnection

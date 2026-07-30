@@ -1,4 +1,4 @@
-package com.example.networkscanner.ui.components
+package com.tasirin.network.radar.ui.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -12,8 +12,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.networkscanner.ui.theme.StatusGreen
-import com.example.networkscanner.ui.theme.StatusRed
+import com.tasirin.network.radar.ui.theme.StatusGreen
+import com.tasirin.network.radar.ui.theme.StatusRed
 
 @Composable
 fun StatusBar(

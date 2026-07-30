@@ -1,14 +1,13 @@
-package com.example.networkscanner.ui.components
+package com.tasirin.network.radar.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.networkscanner.model.ScanType
+import com.tasirin.network.radar.model.ScanType
 
 @Composable
 fun TargetInput(

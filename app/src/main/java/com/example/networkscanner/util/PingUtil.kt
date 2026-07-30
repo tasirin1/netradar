@@ -1,4 +1,4 @@
-package com.example.networkscanner.util
+package com.tasirin.network.radar.util
 
 import java.io.BufferedReader
 import java.io.InputStreamReader

@@ -4,14 +4,14 @@ plugins {
 }
 
 android {
-    namespace = "com.example.networkscanner"
+    namespace = "com.tasirin.network.radar"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.networkscanner"
+        applicationId = "com.tasirin.network.radar"
         minSdk = 21
         targetSdk = 35
-        versionCode = 2
+        versionCode = 3
         versionName = "2.0"
     }
 
@@ -71,7 +71,6 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

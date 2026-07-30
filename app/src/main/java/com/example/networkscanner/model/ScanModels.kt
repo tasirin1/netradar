@@ -1,4 +1,4 @@
-package com.example.networkscanner.model
+package com.tasirin.network.radar.model
 
 data class ScanTarget(
     val raw: String,

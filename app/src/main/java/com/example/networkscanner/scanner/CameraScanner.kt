@@ -1,6 +1,7 @@
-package com.example.networkscanner.scanner
+package com.tasirin.network.radar.scanner
 
-import com.example.networkscanner.model.*
+import com.tasirin.network.radar.model.*
+import com.tasirin.network.radar.util.NetworkUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.BufferedReader
@@ -18,30 +19,61 @@ class CameraScanner {
     )
 
     fun scan(target: String): Flow<ScanEvent> = flow {
-        val ips = resolveIps(target)
-        val total = ips.size
+        val ips = NetworkUtils.autoExpandTarget(target)
+        if (ips.isEmpty()) {
+            emit(ScanEvent.Error("No IPs to scan"))
+            return@flow
+        }
 
-        for ((idx, ip) in ips.withIndex()) {
+        // ARP pre-scan like v1.0
+        var scanIps = ips.toList()
+        val localIp = NetworkUtils.getLocalIp()
+        val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
+
+        if (isLocal && ips.size > 1) {
+            emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
+            val subnet = ips.first().substringBeforeLast(".") + "."
+            val live = NetworkUtils.arpScan(subnet)
+            if (live.isNotEmpty()) {
+                scanIps = ips.filter { it in live }
+            }
+        }
+
+        val total = scanIps.size
+        val arpTable = NetworkUtils.readArpTable()
+
+        for ((idx, ip) in scanIps.withIndex()) {
             emit(ScanEvent.Progress(ip, idx, total))
-            val foundServices = scanCameraParallel(ip)
+
+            val mac = arpTable[ip]
+            val vendor = NetworkUtils.lookupMacVendor(mac)
+
+            val hostname = try {
+                val hn = java.net.InetAddress.getByName(ip).hostName
+                if (hn != ip) hn else null
+            } catch (_: Exception) { null }
+
+            val foundServices = scanCameraPorts(ip)
             if (foundServices.isNotEmpty()) {
                 emit(ScanEvent.HostFound(HostInfo(
-                    ip = ip, isAlive = true, openPorts = foundServices
+                    ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
+                    isAlive = true, openPorts = foundServices
                 )))
             }
         }
 
-        emit(ScanEvent.Complete(ScanResult(
-            type = ScanType.CAMERA, target = target
-        )))
+        emit(ScanEvent.Complete(ScanResult(type = ScanType.CAMERA, target = target)))
     }
 
-    private suspend fun scanCameraParallel(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
-        coroutineScope {
-            cameraPorts.map { port ->
-                async { probeCamera(ip, port) }
-            }.mapNotNull { it.await() }
+    private suspend fun scanCameraPorts(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
+        val result = mutableListOf<PortInfo>()
+        for (port in cameraPorts) {
+            try {
+                val found = probeCamera(ip, port)
+                if (found != null) result.add(found)
+            } catch (_: Exception) { }
         }
+        result
     }
 
     private suspend fun probeCamera(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {
@@ -52,7 +84,6 @@ class CameraScanner {
 
             when (port) {
                 554, 8554 -> {
-                    // RTSP probe
                     val req = "OPTIONS rtsp://$ip RTSP/1.0\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
@@ -61,10 +92,8 @@ class CameraScanner {
                     while (reader.readLine().also { line = it } != null) resp.append(line).append("\n")
                     val r = resp.toString()
                     sock.close()
-                    when {
-                        r.contains("RTSP", ignoreCase = true) -> PortInfo(port, "RTSP Camera")
-                        else -> null
-                    }
+                    if (r.contains("RTSP", ignoreCase = true)) PortInfo(port, "RTSP Camera")
+                    else null
                 }
                 34567 -> PortInfo(port, "Hikvision SDK")
                 37777 -> PortInfo(port, "Dahua SDK")
@@ -92,7 +121,6 @@ class CameraScanner {
                 }
                 8899, 7070 -> PortInfo(port, "Camera Stream")
                 9000 -> {
-                    // Try ONVIF probe
                     try {
                         val xml = """<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"
@@ -119,6 +147,4 @@ class CameraScanner {
             }
         } catch (_: Exception) { null }
     }
-
-    private fun resolveIps(input: String): List<String> = com.example.networkscanner.util.NetworkUtils.autoExpandTarget(input)
 }

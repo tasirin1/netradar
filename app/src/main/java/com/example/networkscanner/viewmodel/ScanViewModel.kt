@@ -1,12 +1,12 @@
-package com.example.networkscanner.viewmodel
+package com.tasirin.network.radar.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.networkscanner.model.*
-import com.example.networkscanner.scanner.ScannerManager
-import com.example.networkscanner.util.NetworkUtils
-import com.example.networkscanner.util.WakeOnLan
+import com.tasirin.network.radar.model.*
+import com.tasirin.network.radar.scanner.ScannerManager
+import com.tasirin.network.radar.util.NetworkUtils
+import com.tasirin.network.radar.util.WakeOnLan
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -37,14 +37,24 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val _urls = mutableListOf<UrlDiscovery>()
     private var _startTime = 0L
 
-
     fun setTarget(target: String) { _state.update { it.copy(target = target) } }
 
     fun startScan(type: ScanType) {
-        val target = _state.value.target.trim()
+        var target = _state.value.target.trim()
         if (target.isEmpty()) {
-            _state.update { it.copy(error = "Enter target IP or URL") }
-            return
+            // Auto-detect local subnet if no target entered (like v1.0)
+            val subnet = NetworkUtils.getLocalSubnet()
+            if (subnet != null) {
+                val localIp = NetworkUtils.getLocalIp()
+                target = localIp ?: ""
+                if (target.isNotEmpty()) {
+                    _state.update { it.copy(target = target) }
+                }
+            }
+            if (target.isEmpty()) {
+                _state.update { it.copy(error = "Enter target IP or URL") }
+                return
+            }
         }
 
         _hosts.clear()

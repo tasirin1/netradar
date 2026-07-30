@@ -1,14 +1,13 @@
-package com.example.networkscanner.scanner
+package com.tasirin.network.radar.scanner
 
-import com.example.networkscanner.model.*
+import com.tasirin.network.radar.model.*
+import com.tasirin.network.radar.util.NetworkUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.net.URL
 
 class RouterScanner {
 
@@ -18,30 +17,61 @@ class RouterScanner {
     )
 
     fun scan(target: String): Flow<ScanEvent> = flow {
-        val ips = resolveIps(target)
-        val total = ips.size
+        val ips = NetworkUtils.autoExpandTarget(target)
+        if (ips.isEmpty()) {
+            emit(ScanEvent.Error("No IPs to scan"))
+            return@flow
+        }
 
-        for ((idx, ip) in ips.withIndex()) {
+        // ARP pre-scan like v1.0
+        var scanIps = ips.toList()
+        val localIp = NetworkUtils.getLocalIp()
+        val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
+
+        if (isLocal && ips.size > 1) {
+            emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
+            val subnet = ips.first().substringBeforeLast(".") + "."
+            val live = NetworkUtils.arpScan(subnet)
+            if (live.isNotEmpty()) {
+                scanIps = ips.filter { it in live }
+            }
+        }
+
+        val total = scanIps.size
+        val arpTable = NetworkUtils.readArpTable()
+
+        for ((idx, ip) in scanIps.withIndex()) {
             emit(ScanEvent.Progress(ip, idx, total))
-            val foundServices = scanRouterParallel(ip)
+
+            val mac = arpTable[ip]
+            val vendor = NetworkUtils.lookupMacVendor(mac)
+
+            val hostname = try {
+                val hn = java.net.InetAddress.getByName(ip).hostName
+                if (hn != ip) hn else null
+            } catch (_: Exception) { null }
+
+            val foundServices = scanRouterPorts(ip)
             if (foundServices.isNotEmpty()) {
                 emit(ScanEvent.HostFound(HostInfo(
-                    ip = ip, isAlive = true, openPorts = foundServices
+                    ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
+                    isAlive = true, openPorts = foundServices
                 )))
             }
         }
 
-        emit(ScanEvent.Complete(ScanResult(
-            type = ScanType.ROUTER, target = target
-        )))
+        emit(ScanEvent.Complete(ScanResult(type = ScanType.ROUTER, target = target)))
     }
 
-    private suspend fun scanRouterParallel(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
-        coroutineScope {
-            routerPorts.map { port ->
-                async { probeRouter(ip, port) }
-            }.mapNotNull { it.await() }
+    private suspend fun scanRouterPorts(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
+        val result = mutableListOf<PortInfo>()
+        for (port in routerPorts) {
+            try {
+                val found = probeRouter(ip, port)
+                if (found != null) result.add(found)
+            } catch (_: Exception) { }
         }
+        result
     }
 
     private suspend fun probeRouter(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {
@@ -50,7 +80,6 @@ class RouterScanner {
             sock.connect(InetSocketAddress(ip, port), 300)
             sock.soTimeout = 300
 
-            // Try HTTP probe for web ports
             if (port in listOf(80, 443, 8080, 8443)) {
                 try {
                     val req = "GET / HTTP/1.1\r\nHost: $ip\r\n\r\n"
@@ -104,6 +133,8 @@ class RouterScanner {
                 7547 -> "TR-069 (ISP CWMP)"
                 5000 -> "UPnP Gateway"
                 23 -> "Telnet Router"
+                22 -> "SSH Router"
+                21 -> "FTP Router"
                 161 -> "SNMP Router"
                 2601, 2602 -> "Quagga/FRRouting"
                 1900 -> "UPnP SSDP"
@@ -112,6 +143,4 @@ class RouterScanner {
             return@withContext service?.let { PortInfo(port, it) }
         } catch (_: Exception) { null }
     }
-
-    private fun resolveIps(input: String): List<String> = com.example.networkscanner.util.NetworkUtils.autoExpandTarget(input)
 }
