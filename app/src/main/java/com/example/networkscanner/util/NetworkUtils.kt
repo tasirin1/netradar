@@ -33,13 +33,14 @@ object NetworkUtils {
         try {
             val addr = InetAddress.getByName(baseIp)
             val bytes = addr.address
-            val mask = if (prefix == 0) 0 else 0xFFFFFFFF shl (32 - prefix)
-            val ipInt = bytesToInt(bytes) and mask
+            val ipInt = bytesToInt(bytes)
             val bits = 32 - prefix
             if (bits <= 0 || bits > 24) return listOf(baseIp)
+            val mask = if (bits >= 32) 0 else (-1 shl bits)
+            val masked = ipInt and mask
             val count = 1 shl bits
             return if (count > 65536) emptyList()
-            else (1 until count - 1).map { intToIp(ipInt + it) }
+            else (1 until count - 1).map { intToIp(masked + it) }
         } catch (_: Exception) {
             return listOf(baseIp)
         }
