@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -11,9 +12,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tasirin.network.radar.model.HostInfo
@@ -54,7 +58,7 @@ fun HostCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
-            // ─── IP line ───
+            // ─── IP line with inline port chips ───
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Default.Computer,
@@ -63,6 +67,7 @@ fun HostCard(
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
+                // IP clickable opens http://ip/
                 Text(
                     text = host.ip,
                     fontWeight = FontWeight.Bold,
@@ -83,30 +88,14 @@ fun HostCard(
                         else StatusRed
                     )
                 }
-                if (host.openPorts.isNotEmpty()) {
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "${host.openPorts.size} port(s)",
-                        fontSize = 11.sp,
-                        color = TextSecondary
-                    )
-                }
                 Spacer(Modifier.weight(1f))
-                // Copy IP button
                 if (onCopyIp != null) {
-                    IconButton(
-                        onClick = { onCopyIp(host.ip) },
-                        modifier = Modifier.size(24.dp)
-                    ) {
+                    IconButton(onClick = { onCopyIp(host.ip) }, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.ContentCopy, null, Modifier.size(14.dp), tint = TextSecondary)
                     }
                 }
-                // WoL button if MAC available
                 if (host.macAddress != null && onWol != null) {
-                    IconButton(
-                        onClick = { onWol(host.ip, host.macAddress) },
-                        modifier = Modifier.size(24.dp)
-                    ) {
+                    IconButton(onClick = { onWol(host.ip, host.macAddress) }, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.PowerSettingsNew, null, Modifier.size(14.dp), tint = AccentGreen)
                     }
                 }
@@ -120,8 +109,7 @@ fun HostCard(
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = host.macAddress + (host.macVendor?.let { " ($it)" } ?: ""),
-                        fontSize = 11.sp,
-                        color = TextSecondary
+                        fontSize = 11.sp, color = TextSecondary
                     )
                 }
             }
@@ -129,32 +117,30 @@ fun HostCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Language, null, Modifier.size(12.dp), tint = TextSecondary)
                     Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = host.hostname,
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Text(host.hostname, fontSize = 11.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
 
-            // ─── Ports ───
+            // ─── Ports as inline clickable ip:port chips ───
             if (host.openPorts.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 Divider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 Spacer(Modifier.height(4.dp))
-                host.openPorts.forEach { port ->
-                    PortRow(
-                        ip = host.ip, port = port,
-                        onLongPress = { showPortInfo = port }
-                    )
+
+                // Show ports as wrapped row of clickable chips
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    host.openPorts.forEach { port ->
+                        PortChip(ip = host.ip, port = port, onLongPress = { showPortInfo = port })
+                    }
                 }
             }
         }
     }
 
-    // Port info dialog
     showPortInfo?.let { port ->
         PortInfoDialog(port = port) { showPortInfo = null }
     }
@@ -162,51 +148,44 @@ fun HostCard(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PortRow(
-    ip: String, port: PortInfo,
-    onLongPress: (() -> Unit)? = null
-) {
+fun PortChip(ip: String, port: PortInfo, onLongPress: (() -> Unit)? = null) {
     val uriHandler = LocalUriHandler.current
     val scheme = if (port.port == 443 || port.port == 8443) "https" else "http"
     val url = "$scheme://$ip:${port.port}/"
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    Surface(
         modifier = Modifier
-            .fillMaxWidth()
             .combinedClickable(
                 onClick = { try { uriHandler.openUri(url) } catch (_: Exception) {} },
                 onLongClick = onLongPress
-            )
-            .padding(vertical = 2.dp, horizontal = 4.dp)
+            ),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 1.dp
     ) {
-        val icon = getPortIcon(port)
-        Icon(icon, null, Modifier.size(14.dp), tint = AccentGreen)
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = "$ip:${port.port}",
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = port.service ?: "Unknown",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        if (port.banner != null) {
-            Spacer(Modifier.width(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+        ) {
+            val icon = getPortIcon(port)
+            Icon(icon, null, Modifier.size(12.dp), tint = AccentGreen)
+            Spacer(Modifier.width(3.dp))
             Text(
-                text = port.banner.take(40),
-                fontSize = 10.sp,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                text = "${ip}:${port.port}",
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.primary
             )
+            if (port.service != null) {
+                Spacer(Modifier.width(3.dp))
+                Text(
+                    text = port.service!!,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -231,9 +210,7 @@ fun PortInfoDialog(port: PortInfo, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
 }
 
@@ -257,10 +234,7 @@ private fun getPortIcon(port: PortInfo) = when {
 }
 
 @Composable
-fun UrlResultsList(
-    urls: List<UrlDiscovery>,
-    modifier: Modifier = Modifier
-) {
+fun UrlResultsList(urls: List<UrlDiscovery>, modifier: Modifier = Modifier) {
     if (urls.isEmpty()) return
     Column(modifier = modifier) {
         urls.forEach { url ->
@@ -274,57 +248,29 @@ fun UrlResultsList(
 fun UrlCard(url: UrlDiscovery) {
     val uriHandler = LocalUriHandler.current
     val statusColor = when (url.statusCode) {
-        200 -> StatusGreen
-        301, 302 -> StatusBlue
-        401, 403 -> StatusOrange
-        500 -> StatusRed
+        200 -> StatusGreen; 301, 302 -> StatusBlue; 401, 403 -> StatusOrange; 500 -> StatusRed
         else -> TextSecondary
     }
     val icon = when (url.statusCode) {
-        200 -> Icons.Default.CheckCircle
-        301, 302 -> Icons.Default.Public
-        401, 403 -> Icons.Default.Lock
-        else -> Icons.Default.Public
+        200 -> Icons.Default.CheckCircle; 301, 302 -> Icons.Default.Public
+        401, 403 -> Icons.Default.Lock; else -> Icons.Default.Public
     }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(8.dp)
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
             Icon(icon, null, Modifier.size(14.dp), tint = statusColor)
             Spacer(Modifier.width(6.dp))
-            Text(
-                text = "${url.statusCode}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                color = statusColor
-            )
+            Text("${url.statusCode}", fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace, color = statusColor)
             Spacer(Modifier.width(6.dp))
             Column {
-                Text(
-                    text = url.url,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
+                Text(url.url, fontSize = 11.sp, fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable {
-                        try { uriHandler.openUri(url.url) } catch (_: Exception) {}
-                    }
-                )
-                if (url.title != null) {
-                    Text(
-                        text = url.title,
-                        fontSize = 10.sp,
-                        color = TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                    modifier = Modifier.clickable { try { uriHandler.openUri(url.url) } catch (_: Exception) {} })
+                if (url.title != null) Text(url.title, fontSize = 10.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
