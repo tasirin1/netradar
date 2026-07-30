@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.networkscanner.ui.screens.MainScreen
-import com.example.networkscanner.util.DebugLogger
 import com.example.networkscanner.ui.theme.NetRadarTheme
 import com.example.networkscanner.viewmodel.ScanViewModel
 
@@ -20,7 +19,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        DebugLogger.init(this)
 
         setContent {
             val viewModel: ScanViewModel = viewModel()
@@ -36,13 +34,9 @@ class MainActivity : AppCompatActivity() {
                         onTargetChange = { viewModel.setTarget(it) },
                         onScan = { viewModel.startScan(it) },
                         onStop = { viewModel.stopScan() },
-                        onExportJson = { viewModel.exportJson() },
-                        onExportCsv = { viewModel.exportCsv() },
-                        onExportTxt = { viewModel.exportTxt() },
                         onLoadHistory = { viewModel.loadHistoryEntry(it) },
                         onClearHistory = { viewModel.clearHistory() },
                         onToggleTheme = { viewModel.toggleDarkTheme() },
-                        onShareLog = { DebugLogger.shareLog(this@MainActivity) }
                     )
                 }
             }

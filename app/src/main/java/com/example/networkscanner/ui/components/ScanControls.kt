@@ -84,39 +84,15 @@ fun ScanButtonRow(
 fun ActionButtons(
     isScanning: Boolean,
     onStop: () -> Unit,
-    onExportJson: () -> Unit,
-    onExportCsv: () -> Unit,
-    onExportTxt: () -> Unit,
-    hasResults: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Button(
+        onClick = onStop,
+        enabled = isScanning,
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        contentPadding = PaddingValues(vertical = 8.dp)
     ) {
-        Button(
-            onClick = onStop,
-            enabled = isScanning,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Stop", fontSize = 12.sp)
-        }
-
-        if (hasResults) {
-            listOf(
-                "JSON" to onExportJson,
-                "CSV" to onExportCsv,
-                "TXT" to onExportTxt
-            ).forEach { (label, action) ->
-                OutlinedButton(
-                    onClick = action,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                ) {
-                    Text(label, fontSize = 10.sp)
-                }
-            }
-        }
+        Text("Stop", fontSize = 12.sp)
     }
 }

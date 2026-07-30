@@ -30,8 +30,7 @@ fun MainScreen(
     onExportTxt: () -> Unit,
     onLoadHistory: (Long) -> Unit,
     onClearHistory: () -> Unit,
-    onToggleTheme: () -> Unit,
-    onShareLog: () -> Unit
+    onToggleTheme: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -43,9 +42,6 @@ fun MainScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onShareLog) {
-                        Icon(Icons.Default.BugReport, contentDescription = "Send debug log")
-                    }
                     IconButton(onClick = onToggleTheme) {
                         Icon(
                             imageVector = when (state.isDarkTheme) {
@@ -94,11 +90,7 @@ fun MainScreen(
             // Action Buttons (Stop + Export)
             ActionButtons(
                 isScanning = state.isScanning,
-                onStop = onStop,
-                onExportJson = onExportJson,
-                onExportCsv = onExportCsv,
-                onExportTxt = onExportTxt,
-                hasResults = state.scanResult != null
+                onStop = onStop
             )
 
             Spacer(Modifier.height(4.dp))

@@ -2,7 +2,6 @@ package com.example.networkscanner.scanner
 
 import com.example.networkscanner.model.*
 import kotlinx.coroutines.*
-import com.example.networkscanner.util.DebugLogger
 import kotlinx.coroutines.flow.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -46,7 +45,6 @@ class UrlPathScanner {
         }
 
         for (path in paths) {
-            DebugLogger.log("URL", "Checking $path ($completed/$total)")
 emit(ScanEvent.Progress(baseUrl, completed, total))
             val url = baseUrl.trimEnd('/') + path
             val result = checkPath(url)

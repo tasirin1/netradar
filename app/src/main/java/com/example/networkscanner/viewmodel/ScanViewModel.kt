@@ -3,16 +3,13 @@ package com.example.networkscanner.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.networkscanner.db.ScanHistoryStore
-import com.example.networkscanner.export.Exporter
 import com.example.networkscanner.model.*
 import com.example.networkscanner.scanner.ScannerManager
-import com.example.networkscanner.util.DebugLogger
 import com.example.networkscanner.util.NetworkUtils
 import com.example.networkscanner.util.WakeOnLan
+import com.example.networkscanner.db.ScanHistoryStore
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.io.File
 
 data class ScanUiState(
     val target: String = "",
@@ -48,7 +45,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startScan(type: ScanType) {
         val target = _state.value.target.trim()
-        DebugLogger.log("SCAN", "Starting ${type.label} -> $target")
         if (target.isEmpty()) {
             _state.update { it.copy(error = "Enter target IP or URL") }
             return
@@ -76,7 +72,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         _state.update { it.copy(progress = "Scanning ${event.ip}...", progressPercent = pct) }
                     }
                     is ScanEvent.HostFound -> {
-                        DebugLogger.log("SCAN", "Found: ${event.host.ip} (${event.host.openPorts.size} ports)")
                         _hosts.add(event.host)
                         _state.update { it.copy(hosts = _hosts.toList()) }
                     }
@@ -85,7 +80,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         _state.update { it.copy(discoveredUrls = _urls.toList()) }
                     }
                     is ScanEvent.Error -> {
-                        DebugLogger.log("SCAN", "Error: ${event.message}")
                         _state.update { it.copy(error = event.message) }
                     }
                     is ScanEvent.Complete -> {
@@ -120,30 +114,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopScan() {
-        DebugLogger.log("SCAN", "Stopping scan")
         scannerManager.stop()
         _state.update { it.copy(isScanning = false, summary = "Stopped", summaryColor = 0xFFC62828, isSummaryOk = false) }
     }
 
     fun clearError() { _state.update { it.copy(error = null) } }
-
-    fun exportJson() { shareExport(Exporter::exportToJson) }
-    fun exportCsv() { shareExport(Exporter::exportToCsv) }
-
-    fun exportTxt() {
-        val result = _state.value.scanResult ?: return
-        val app = getApplication<Application>()
-        val file = File(app.cacheDir, "scan_${result.timestamp}.txt")
-        file.writeText(Exporter.exportToTxt(app, result))
-        Exporter.shareFile(app, file)
-    }
-
-    private fun shareExport(fn: (android.content.Context, ScanResult) -> java.io.File) {
-        val result = _state.value.scanResult ?: return
-        val app = getApplication<Application>()
-        val file = fn(app, result)
-        Exporter.shareFile(app, file)
-    }
 
     fun loadHistory() {
         val app = getApplication<Application>()
@@ -179,7 +154,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun getLocalNetworkHint(): String = NetworkUtils.getLocalNetworkPrefix()?.let { "$it.0/24" } ?: ""
 
     fun toggleDarkTheme() {
-        DebugLogger.log("UI", "Toggle theme")
         _state.update { it.copy(isDarkTheme = when (it.isDarkTheme) { null -> true; true -> false; false -> null }) }
     }
 

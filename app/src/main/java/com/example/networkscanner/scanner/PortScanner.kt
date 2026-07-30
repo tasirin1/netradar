@@ -1,7 +1,6 @@
 package com.example.networkscanner.scanner
 
 import com.example.networkscanner.model.*
-import com.example.networkscanner.util.DebugLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.BufferedReader

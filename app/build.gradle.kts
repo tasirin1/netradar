@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
 }
 
 android {
@@ -14,12 +13,6 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "2.0"
-
-        // Room schema export
-        ksp {
-            arg("room.schemaLocation", "$projectDir/schemas")
-        }
-    }
 
     signingConfigs {
         create("release") {
@@ -79,13 +72,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Room (local database)
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
 
     // Gson (JSON export)
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
