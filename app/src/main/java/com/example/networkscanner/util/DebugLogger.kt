@@ -108,7 +108,7 @@ object DebugLogger {
         sb.appendLine("Time:   ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
         sb.appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
         sb.appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-        sb.appendLine("App:    ${getVersion(ctx)}")
+        sb.appendLine("App:    ${context?.let { getVersion(it) } ?: "unknown"}")
         sb.appendLine()
         sb.appendLine("─────────────────────────────────────")
         logs.forEach { sb.appendLine(it) }
