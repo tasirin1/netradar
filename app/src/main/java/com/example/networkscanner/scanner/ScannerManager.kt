@@ -20,7 +20,7 @@ class ScannerManager {
         currentJob?.cancel()
         currentJob = null
 
-        val job = CoroutineScope(Dispatchers.IO + currentJob ?: Job()).launch {
+        val job = CoroutineScope(Dispatchers.IO + (currentJob ?: Job())).launch {
             val flow = when (type) {
                 ScanType.PORT_SCAN -> portScanner.scan(target)
                 ScanType.CAMERA -> cameraScanner.scan(target)

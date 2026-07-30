@@ -89,10 +89,10 @@ class RouterScanner {
                         h.contains("apache") || h.contains("nginx") || h.contains("iis") -> "Generic Web Server"
                         else -> "Web Admin Panel"
                     }
-                    return PortInfo(port, service)
+                    return@withContext PortInfo(port, service)
                 } catch (_: Exception) {
                     sock.close()
-                    return null
+                    return@withContext null
                 }
             }
 
@@ -108,7 +108,7 @@ class RouterScanner {
                 1900 -> "UPnP SSDP"
                 else -> null
             }
-            return service?.let { PortInfo(port, it) }
+            return@withContext service?.let { PortInfo(port, it) }
         } catch (_: Exception) { null }
     }
 

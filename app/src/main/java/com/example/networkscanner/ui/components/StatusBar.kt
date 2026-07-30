@@ -56,7 +56,7 @@ fun StatusBar(
 
         if (isScanning) {
             LinearProgressIndicator(
-                progress = { progressPercent },
+                progress = progressPercent,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant

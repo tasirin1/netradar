@@ -197,7 +197,7 @@ fun UrlCard(url: UrlDiscovery) {
     }
     val icon = when (url.statusCode) {
         200 -> Icons.Default.CheckCircle
-        301, 302 -> Icons.Default.Redirect
+        301, 302 -> Icons.Default.Http
         401, 403 -> Icons.Default.Lock
         else -> Icons.Default.Http
     }

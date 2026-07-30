@@ -162,18 +162,20 @@ class PortScanner {
 
     private fun expandCidr(baseIp: String, prefix: Int): List<String> {
         return try {
+            if (prefix < 8 || prefix > 30) return listOf(baseIp)
             val addr = InetAddress.getByName(baseIp)
             val bytes = addr.address
-            val mask = if (prefix == 0) 0 else 0xFFFFFFFF shl (32 - prefix)
-            val ipInt = (bytes[0].toInt() and 0xFF shl 24) or
-                    (bytes[1].toInt() and 0xFF shl 16) or
-                    (bytes[2].toInt() and 0xFF shl 8) or
+            val ipInt = ((bytes[0].toInt() and 0xFF) shl 24) or
+                    ((bytes[1].toInt() and 0xFF) shl 16) or
+                    ((bytes[2].toInt() and 0xFF) shl 8) or
                     (bytes[3].toInt() and 0xFF)
+            val mask = if (prefix == 0) 0 else (-1 shl (32 - prefix))
             val masked = ipInt and mask
             val count = 1 shl (32 - prefix)
             if (count > 65536 || count <= 2) listOf(baseIp)
             else (1 until count - 1).map {
-                "${(masked + it shr 24) and 0xFF}.${(masked + it shr 16) and 0xFF}.${(masked + it shr 8) and 0xFF}.${(masked + it) and 0xFF}"
+                val ip = masked + it
+                "${(ip shr 24) and 0xFF}.${(ip shr 16) and 0xFF}.${(ip shr 8) and 0xFF}.${ip and 0xFF}"
             }
         } catch (_: Exception) { listOf(baseIp) }
     }
