@@ -53,7 +53,7 @@ fun MainScreen(
                 },
                 actions = {
                     IconButton(onClick = { onAbout?.invoke() }) {
-                        Icon(Icons.Default.Info, null, contentDescription = "About")
+                        Icon(Icons.Default.Info, contentDescription = "About")
                     }
                     IconButton(onClick = onToggleTheme) {
                         Icon(
