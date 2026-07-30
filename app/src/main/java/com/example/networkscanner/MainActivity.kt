@@ -34,8 +34,11 @@ class MainActivity : AppCompatActivity() {
                     MainScreen(
                         state = state,
                         onTargetChange = { viewModel.setTarget(it) },
-                        onCustomPortsChange = { viewModel.setCustomPorts(it) },
-                        onScan = { viewModel.startScan(it) },
+                        onScan = { type ->
+                            // Apply custom ports before scanning
+                            viewModel.useCustomPortsForScan()
+                            viewModel.startScan(type)
+                        },
                         onStop = { viewModel.stopScan() },
                         onToggleTheme = { viewModel.toggleDarkTheme() },
                         onCopyIp = { ip -> viewModel.copyToClipboard("IP", ip) },
@@ -45,9 +48,10 @@ class MainActivity : AppCompatActivity() {
                         },
                         onWol = { ip, mac -> viewModel.wakeOnLan(ip, mac) },
                         onSortMode = { mode -> viewModel.setSortMode(mode) },
-                        onSelectInterface = { viewModel.selectInterface(it) },
-                        onRefreshNetwork = { viewModel.refreshNetworkInfo() },
-                        onToggleAbout = { viewModel.toggleAbout() }
+                        onAbout = { viewModel.toggleAbout() },
+                        onCustomPorts = { ports -> viewModel.setCustomPorts(ports) },
+                        onToggleCustomPorts = { viewModel.toggleCustomPorts() },
+                        onSelectInterface = { name -> viewModel.selectInterface(name) }
                     )
                 }
             }

@@ -1,5 +1,6 @@
 package com.tasirin.network.radar.util
 
+import com.tasirin.network.radar.model.NetworkInterfaceInfo
 import java.io.BufferedReader
 import java.io.FileReader
 import java.net.InetAddress
@@ -12,16 +13,17 @@ import java.util.concurrent.TimeUnit
 
 object NetworkUtils {
 
+    @Volatile
+    var selectedInterfaceName: String = ""
+
     fun resolveTarget(input: String): List<String> {
         val trimmed = input.trim()
-        // Check if CIDR
         if (trimmed.contains("/")) {
             val parts = trimmed.split("/")
             val baseIp = parts[0]
             val prefix = parts[1].toIntOrNull() ?: 24
             return expandCidr(baseIp, prefix)
         }
-        // Check if range like 192.168.0.1-20
         if (trimmed.contains("-")) {
             val parts = trimmed.split("-")
             val baseParts = parts[0].trim().split(".")
@@ -63,12 +65,36 @@ object NetworkUtils {
         return "${(value shr 24) and 0xFF}.${(value shr 16) and 0xFF}.${(value shr 8) and 0xFF}.${value and 0xFF}"
     }
 
-    fun getLocalIp(): String? { return getLocalIpForInterface(forcedInterface) }
-    private fun getLocalIpImpl(): String? {
+    fun getAvailableInterfaces(): List<NetworkInterfaceInfo> {
+        val result = mutableListOf<NetworkInterfaceInfo>()
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val ni = interfaces.nextElement()
+                val addrs = ni.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    val ip = addr.hostAddress ?: continue
+                    if (!addr.isLoopbackAddress && ip.contains(".")) {
+                        result.add(NetworkInterfaceInfo(
+                            name = ni.name,
+                            ip = ip,
+                            isActive = addr.isSiteLocalAddress
+                        ))
+                    }
+                }
+            }
+        } catch (_: Exception) { }
+        return result
+    }
+
+    fun getLocalIp(): String? {
         return try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
                 val ni = interfaces.nextElement()
+                // If interface selected, only check that one
+                if (selectedInterfaceName.isNotEmpty() && ni.name != selectedInterfaceName) continue
                 val addrs = ni.inetAddresses
                 while (addrs.hasMoreElements()) {
                     val addr = addrs.nextElement()
@@ -87,49 +113,27 @@ object NetworkUtils {
         return null
     }
 
-    /**
-     * Automatically expand a single IP to full /24 subnet (like v1.0).
-     * For domain names, resolve to IP first then expand.
-     * For CIDR/range, resolve as-is.
-     */
     fun autoExpandTarget(input: String): List<String> {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return emptyList()
 
-        // Remove protocol prefix like http:// or https://
         var cleaned = trimmed.replaceFirst("^https?://".toRegex(), "")
 
-        // Check if it's a CIDR first (before stripping paths)
         val isCidr = cleaned.contains("/") && cleaned.matches(Regex("""\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d+"""))
-        if (isCidr) {
-            return resolveTarget(cleaned)
-        }
+        if (isCidr) return resolveTarget(cleaned)
 
-        // Strip trailing path (only if not a pure IP with port)
-        if (cleaned.contains("/")) {
-            cleaned = cleaned.substringBefore("/")
-        }
-
-        // Strip port number
+        if (cleaned.contains("/")) cleaned = cleaned.substringBefore("/")
         cleaned = cleaned.substringBefore(":")
-
-        // Strip trailing dots or spaces
         cleaned = cleaned.trimEnd('.')
 
-        // Check for IP range
-        if (cleaned.contains("-")) {
-            return resolveTarget(cleaned)
-        }
+        if (cleaned.contains("-")) return resolveTarget(cleaned)
 
-        // Check if it's a single IP
         val ipRegex = Regex("""^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$""")
         if (ipRegex.matches(cleaned)) {
             val prefix = cleaned.substringBeforeLast(".")
-            // Like v1.0: expand single IP to /24 subnet (1..254)
             return (1..254).map { "$prefix.$it" }
         }
 
-        // Domain name or hostname — resolve to IP (like v1.0)
         try {
             val addr = InetAddress.getByName(cleaned)
             val ip = addr.hostAddress ?: cleaned
@@ -143,10 +147,6 @@ object NetworkUtils {
         }
     }
 
-    /**
-     * Like v1.0: use InetAddress.isReachable with 50 threads
-     * to quickly find live hosts on a subnet.
-     */
     fun arpScan(subnet: String): Set<String> {
         val live = Collections.synchronizedSet(mutableSetOf<String>())
         val pool = Executors.newFixedThreadPool(50)
@@ -161,19 +161,10 @@ object NetworkUtils {
         return live
     }
 
-    /**
-     * Fast pre-scan: returns only live IPs from the target list.
-     * For local subnets, uses ARP-like isReachable discovery.
-     * Falls back to TCP ping on port 80.
-     */
     fun filterLiveHosts(targets: List<String>): List<String> {
         if (targets.isEmpty() || targets.size <= 1) return targets
-
         val localIp = getLocalIp()
-        val isLocal = localIp != null && targets.any {
-            it.startsWith(localIp.substringBeforeLast("."))
-        }
-
+        val isLocal = localIp != null && targets.any { it.startsWith(localIp.substringBeforeLast(".")) }
         if (isLocal) {
             val subnet = targets.first().substringBeforeLast(".") + "."
             val live = arpScan(subnet)
@@ -182,14 +173,11 @@ object NetworkUtils {
                 if (result.isNotEmpty()) return result
             }
         }
-
-        // Fallback: quick TCP connect on port 80 + ICMP
         return targets.filter { ip ->
             try {
                 val sock = Socket()
                 sock.connect(InetSocketAddress(ip, 80), 200)
-                sock.close()
-                true
+                sock.close(); true
             } catch (_: Exception) {
                 try { InetAddress.getByName(ip).isReachable(300) } catch (_: Exception) { false }
             }
@@ -207,25 +195,14 @@ object NetworkUtils {
         return null
     }
 
-    /**
-     * Resolve domain name to IP.
-     */
     fun resolveDomain(host: String): String? {
-        return try {
-            InetAddress.getByName(host).hostAddress
-        } catch (_: Exception) { null }
+        return try { InetAddress.getByName(host).hostAddress } catch (_: Exception) { null }
     }
 
-    /**
-     * Get all gateway IPs related to this target.
-     */
     fun getRelatedGateways(target: String): List<String> {
         val gateways = mutableListOf<String>()
         val prefix = getSubnetPrefix(target)
-        if (prefix != null) {
-            gateways.add("$prefix.1")
-            gateways.add("$prefix.254")
-        }
+        if (prefix != null) { gateways.add("$prefix.1"); gateways.add("$prefix.254") }
         return gateways.distinct()
     }
 
@@ -234,22 +211,16 @@ object NetworkUtils {
         return (1..254).map { "$prefix.$it" }
     }
 
-    /**
-     * Read ARP table for MAC addresses, like v1.0.
-     */
     fun readArpTable(): Map<String, String> {
         val result = mutableMapOf<String, String>()
         try {
             BufferedReader(FileReader("/proc/net/arp")).use { reader ->
-                reader.readLine() // skip header
+                reader.readLine()
                 reader.forEachLine { line ->
                     val parts = line.trim().split("\\s+".toRegex())
                     if (parts.size >= 4 && parts[3] != "00:00:00:00:00:00") {
-                        val ip = parts[0]
-                        val mac = parts[3]
-                        if (mac.count { it == ':' } == 5) {
-                            result[ip] = mac.uppercase(Locale.ROOT)
-                        }
+                        val ip = parts[0]; val mac = parts[3]
+                        if (mac.count { it == ':' } == 5) result[ip] = mac.uppercase(Locale.ROOT)
                     }
                 }
             }
@@ -257,9 +228,6 @@ object NetworkUtils {
         return result
     }
 
-    /**
-     * Lookup MAC vendor from embedded OUI database.
-     */
     fun lookupMacVendor(mac: String?): String? {
         if (mac == null) return null
         val key = mac.uppercase(Locale.ROOT).take(8)
@@ -287,73 +255,4 @@ object NetworkUtils {
         "18:1E:78" to "Google", "E0:AC:CB" to "ONVIF", "00:12:47" to "EDIMAX",
         "00:1A:4A" to "Tenda", "A0:21:B7" to "Tenda", "00:0F:E2" to "TOTOLINK"
     )
-
-    // ─── Network Interface Selection ───
-    @Volatile
-    private var forcedInterface: String? = null
-
-    fun setActiveInterface(name: String?) { forcedInterface = name }
-
-    fun getActiveInterfaceName(): String? {
-        return try {
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val ni = interfaces.nextElement()
-                val addrs = ni.inetAddresses
-                while (addrs.hasMoreElements()) {
-                    val addr = addrs.nextElement()
-                    val ip = addr.hostAddress ?: continue
-                    if (!addr.isLoopbackAddress && ip.contains(".")) return ni.name
-                }
-            }
-            null
-        } catch (_: Exception) { null }
-    }
-
-    fun getAvailableInterfaces(): List<String> {
-        val result = mutableListOf<String>()
-        try {
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val ni = interfaces.nextElement()
-                val name = ni.name
-                val addrs = ni.inetAddresses
-                var hasIpv4 = false
-                while (addrs.hasMoreElements()) {
-                    val addr = addrs.nextElement()
-                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains('.') == true) {
-                        hasIpv4 = true
-                        break
-                    }
-                }
-                if (hasIpv4 && (name.startsWith("wlan") || name.startsWith("eth") || name.startsWith("rmnet") || name.startsWith("p2p") || name.startsWith("usb"))) {
-                    result.add(name)
-                }
-            }
-        } catch (_: Exception) { }
-        return result.distinct()
-    }
-
-    // Override getLocalIp to respect forced interface
-    private fun getLocalIpForInterface(ifaceName: String?): String? {
-        return try {
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val ni = interfaces.nextElement()
-                if (ifaceName != null && ni.name != ifaceName) continue
-                val addrs = ni.inetAddresses
-                while (addrs.hasMoreElements()) {
-                    val addr = addrs.nextElement()
-                    val ip = addr.hostAddress ?: continue
-                    if (!addr.isLoopbackAddress && ip.contains(".")) {
-                        if (ifaceName != null) return ip
-                        if (ni.name.startsWith("wlan") || ni.name.startsWith("eth") || ni.name.startsWith("rmnet")) return ip
-                    }
-                }
-            }
-            null
-        } catch (_: Exception) { null }
-    }
-
-
 }

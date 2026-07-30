@@ -14,7 +14,9 @@ import java.util.concurrent.Semaphore
 class PortScanner {
 
     companion object {
-        val commonPorts = intArrayOf(
+        @Volatile
+        var customPortsOverride: IntArray? = null
+        val defaultPorts = intArrayOf(
             80, 443, 8080, 8443, 22, 23, 21, 53, 3389, 3306,
             8081, 8000, 3000, 5000, 8888, 9000, 81, 444, 5555, 5900,
             6379, 27017, 7547, 6666, 8291, 2000, 135, 139, 445, 1433,
@@ -23,14 +25,13 @@ class PortScanner {
         )
     }
 
-    fun scan(target: String, ports: IntArray = commonPorts): Flow<ScanEvent> = flow {
+    fun scan(target: String, ports: IntArray = customPortsOverride ?: defaultPorts): Flow<ScanEvent> = flow {
         val ips = NetworkUtils.autoExpandTarget(target)
         if (ips.isEmpty()) {
             emit(ScanEvent.Error("No IPs to scan"))
             return@flow
         }
 
-        // ARP pre-scan like v1.0
         val localIp = NetworkUtils.getLocalIp()
         val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
         
@@ -45,11 +46,10 @@ class PortScanner {
             }
         }
 
-        // Sequential hosts, parallel ports per host (safe, controlled parallelism)
         val semaphore = Semaphore(30)
+
         for ((idx, ip) in scanIps.withIndex()) {
             emit(ScanEvent.Progress(ip, idx, scanIps.size))
-
             val hostname = try {
                 val hn = InetAddress.getByName(ip).hostName
                 if (hn != ip) hn else null
@@ -59,18 +59,14 @@ class PortScanner {
             val mac = arpTable[ip]
             val vendor = NetworkUtils.lookupMacVendor(mac)
 
-            // Scan ports in parallel for this host
             val openPorts = scanHostPorts(ip, ports, semaphore)
-
             if (openPorts.isNotEmpty()) {
                 emit(ScanEvent.HostFound(HostInfo(
-                    ip = ip, hostname = hostname,
-                    macAddress = mac, macVendor = vendor,
+                    ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
                     isAlive = true, openPorts = openPorts
                 )))
             }
         }
-
         emit(ScanEvent.Complete(ScanResult(type = ScanType.PORT_SCAN, target = target)))
     }
 
@@ -79,11 +75,7 @@ class PortScanner {
             ports.map { port ->
                 async {
                     semaphore.acquire()
-                    try {
-                        scanPort(ip, port)
-                    } finally {
-                        semaphore.release()
-                    }
+                    try { scanPort(ip, port) } finally { semaphore.release() }
                 }
             }.mapNotNull { it.await() }
         }

@@ -34,7 +34,15 @@ data class ServiceInfo(
 data class NetworkInfo(
     val localIp: String = "",
     val gateway: String = "",
-    val subnet: String = ""
+    val subnet: String = "",
+    val availableInterfaces: List<NetworkInterfaceInfo> = emptyList(),
+    val selectedInterface: String = ""
+)
+
+data class NetworkInterfaceInfo(
+    val name: String,
+    val ip: String,
+    val isActive: Boolean = false
 )
 
 enum class ScanType(val label: String) {
@@ -102,6 +110,42 @@ sealed class ScanEvent {
     data class PingUpdate(val result: PingResult) : ScanEvent()
 }
 
+object PortRangeParser {
+    /**
+     * Parse port string like "80,443,8080" or "1-1000" or "80,443,3000-4000"
+     * Returns list of ports or default list if input is empty.
+     */
+    fun parse(input: String): IntArray {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return defaultPorts
+
+        val ports = mutableSetOf<Int>()
+        val parts = trimmed.split(",").map { it.trim() }
+        for (part in parts) {
+            if (part.contains("-")) {
+                val range = part.split("-").map { it.trim().toIntOrNull() }
+                if (range.size == 2 && range[0] != null && range[1] != null) {
+                    val start = range[0]!!.coerceIn(1, 65535)
+                    val end = range[1]!!.coerceIn(start, 65535)
+                    (start..end).forEach { ports.add(it) }
+                }
+            } else {
+                val p = part.toIntOrNull()
+                if (p != null && p in 1..65535) ports.add(p)
+            }
+        }
+        return if (ports.isEmpty()) defaultPorts else ports.toIntArray()
+    }
+
+    val defaultPorts = intArrayOf(
+        80, 443, 8080, 8443, 22, 23, 21, 53, 3389, 3306,
+        8081, 8000, 3000, 5000, 8888, 9000, 81, 444, 5555, 5900,
+        6379, 27017, 7547, 6666, 8291, 2000, 135, 139, 445, 1433,
+        1521, 2049, 2375, 2376, 3128, 3307, 3388, 4444, 4848, 5432,
+        6378, 7001, 8001, 8082, 8083, 8084, 8085, 8444, 9090, 9200
+    )
+}
+
 object PortDescriptions {
     val map = mapOf(
         20 to "FTP Data",
@@ -134,7 +178,6 @@ object PortDescriptions {
         520 to "RIP - Routing",
         521 to "RIPng - Routing",
         524 to "NCP - NetWare",
-        540 to "UUCP",
         543 to "Kerberos Login",
         544 to "Kerberos Shell",
         546 to "DHCPv6 Client",
