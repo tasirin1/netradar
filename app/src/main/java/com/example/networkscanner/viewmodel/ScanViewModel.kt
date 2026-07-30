@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.*
 
 data class ScanUiState(
     val target: String = "",
+    val customPorts: String = "",
     val isScanning: Boolean = false,
     val scanType: ScanType? = null,
     val progress: String = "",
@@ -29,14 +30,13 @@ data class ScanUiState(
     val scanResult: ScanResult? = null,
     val hostSummary: String = "",
     val isDarkTheme: Boolean? = null,
-    // Network info
     val networkInfo: NetworkInfo = NetworkInfo(),
-    // Sort
+    val networkInterfaces: List<String> = emptyList(),
+    val selectedInterface: String = "",
     val sortMode: SortMode = SortMode.IP,
-    // Ping monitor
     val monitor: PingMonitorState = PingMonitorState(),
-    // Copy feedback
-    val copyFeedback: String? = null
+    val copyFeedback: String? = null,
+    val showAbout: Boolean = false
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -55,14 +55,53 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshNetworkInfo() {
-        val localIp = NetworkUtils.getLocalIp() ?: ""
+        val interfaces = NetworkUtils.getAvailableInterfaces()
+        val defaultIp = NetworkUtils.getLocalIp()
+        val defaultIface = NetworkUtils.getActiveInterfaceName() ?: ""
         val gateway = NetworkUtils.getLocalGateway() ?: ""
         val prefix = NetworkUtils.getLocalNetworkPrefix()
         val subnet = if (prefix != null) "$prefix.0/24" else ""
-        _state.update { it.copy(networkInfo = NetworkInfo(localIp, gateway, subnet)) }
+        _state.update {
+            it.copy(
+                networkInfo = NetworkInfo(defaultIp ?: "", gateway, subnet),
+                networkInterfaces = interfaces,
+                selectedInterface = if (defaultIface in interfaces) defaultIface
+                    else interfaces.firstOrNull() ?: ""
+            )
+        }
+    }
+
+    fun selectInterface(name: String) {
+        _state.update { it.copy(selectedInterface = name) }
+        NetworkUtils.setActiveInterface(name)
+        refreshNetworkInfo()
     }
 
     fun setTarget(target: String) { _state.update { it.copy(target = target) } }
+    fun setCustomPorts(ports: String) { _state.update { it.copy(customPorts = ports) } }
+
+    fun parseCustomPorts(input: String): IntArray? {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return null
+        val ports = mutableListOf<Int>()
+        try {
+            for (part in trimmed.split(",")) {
+                val p = part.trim()
+                if (p.contains("-")) {
+                    val range = p.split("-")
+                    val start = range[0].trim().toIntOrNull() ?: continue
+                    val end = range[1].trim().toIntOrNull() ?: continue
+                    if (start in 1..65535 && end in 1..65535 && start <= end) {
+                        ports.addAll(start..end)
+                    }
+                } else {
+                    val port = p.toIntOrNull()
+                    if (port != null && port in 1..65535) ports.add(port)
+                }
+            }
+        } catch (_: Exception) { }
+        return if (ports.isNotEmpty()) ports.toIntArray() else null
+    }
 
     fun startScan(type: ScanType) {
         var target = _state.value.target.trim()
@@ -100,7 +139,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                scannerManager.scan(type, target).collect { event ->
+                val flow = if (type == ScanType.PORT_SCAN) {
+                    val customPorts = parseCustomPorts(_state.value.customPorts)
+                    scannerManager.scan(type, target, customPorts)
+                } else {
+                    scannerManager.scan(type, target)
+                }
+                flow.collect { event ->
                     when (event) {
                         is ScanEvent.Progress -> {
                             val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
@@ -158,6 +203,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ─── About ───
+    fun toggleAbout() { _state.update { it.copy(showAbout = !it.showAbout) } }
+
     // ─── Continuous Ping Monitor ───
     private fun startMonitor(target: String) {
         val ip = NetworkUtils.resolveDomain(target) ?: target
@@ -166,7 +214,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 summary = "Monitoring $ip...", summaryColor = 0xFF00695C, isSummaryOk = true,
                 monitor = PingMonitorState(ip = ip, isRunning = true, history = emptyList()))
         }
-
         monitorJob?.cancel()
         monitorJob = viewModelScope.launch {
             while (isActive) {
@@ -180,8 +227,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     val history = (it.monitor.history + result).takeLast(50)
                     it.copy(
                         monitor = it.monitor.copy(lastLatency = latency, history = history),
-                        summary = if (latency != null) "ping ${ip} — ${latency}ms"
-                                  else "ping ${ip} — ✗",
+                        summary = if (latency != null) "ping ${ip} — ${latency}ms" else "ping ${ip} — ✗",
                         summaryColor = if (latency != null) 0xFF2E7D32 else 0xFFC62828,
                         isSummaryOk = latency != null
                     )
@@ -208,7 +254,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(hosts = sorted) }
     }
 
-    // ─── Copy to Clipboard ───
+    // ─── Copy ───
     fun copyToClipboard(label: String, text: String) {
         try {
             val ctx = getApplication<Application>()
@@ -220,18 +266,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun clearCopyFeedback() {
-        _state.update { it.copy(copyFeedback = null) }
-    }
+    fun clearCopyFeedback() { _state.update { it.copy(copyFeedback = null) } }
 
-    fun copyHostSummary(): String {
-        val hosts = _state.value.hosts
-        return hosts.joinToString("\n") { host ->
-            val ip = host.ip
-            val mac = host.macAddress?.let { " [$it]" } ?: ""
-            val ports = host.openPorts.joinToString(", ") { "${it.port}" }
-            "$ip$mac" + if (ports.isNotEmpty()) " : $ports" else ""
-        }
+    fun copyHostSummary(): String = _state.value.hosts.joinToString("\n") { host ->
+        val ports = host.openPorts.joinToString(", ") { "${it.port}" }
+        "${host.ip}" + if (ports.isNotEmpty()) " : $ports" else ""
     }
 
     fun copyAllText(scanResult: ScanResult?): String {
@@ -246,19 +285,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             host.macAddress?.let { sb.append(" $it") }
             host.macVendor?.let { sb.append(" ($it)") }
             sb.appendLine()
-            for (p in host.openPorts) {
-                sb.appendLine("  ${host.ip}:${p.port}  ${p.service ?: ""}")
-            }
+            for (p in host.openPorts) sb.appendLine("  ${host.ip}:${p.port}  ${p.service ?: ""}")
         }
-        for (url in result.discoveredUrls) {
-            sb.appendLine("  ${url.url}  [${url.statusCode}] ${url.title ?: ""}")
-        }
+        for (url in result.discoveredUrls) sb.appendLine("  ${url.url}  [${url.statusCode}] ${url.title ?: ""}")
         sb.appendLine("---")
         sb.appendLine(buildSummary(result))
         return sb.toString()
     }
 
-    // ─── Wake on LAN ───
     fun wakeOnLan(ip: String, mac: String) {
         viewModelScope.launch {
             val success = WakeOnLan.wake(ip, mac)
@@ -269,9 +303,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ─── Helpers ───
     fun clearError() { _state.update { it.copy(error = null) } }
-
     fun getLocalNetworkHint(): String = NetworkUtils.getLocalNetworkPrefix()?.let { "$it.0/24" } ?: ""
 
     fun toggleDarkTheme() {

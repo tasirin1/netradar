@@ -63,7 +63,8 @@ object NetworkUtils {
         return "${(value shr 24) and 0xFF}.${(value shr 16) and 0xFF}.${(value shr 8) and 0xFF}.${value and 0xFF}"
     }
 
-    fun getLocalIp(): String? {
+    fun getLocalIp(): String? { return getLocalIpForInterface(forcedInterface) }
+    private fun getLocalIpImpl(): String? {
         return try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
@@ -287,3 +288,73 @@ object NetworkUtils {
         "00:1A:4A" to "Tenda", "A0:21:B7" to "Tenda", "00:0F:E2" to "TOTOLINK"
     )
 }
+
+    // ─── Network Interface Selection ───
+    @Volatile
+    private var forcedInterface: String? = null
+
+    fun setActiveInterface(name: String?) { forcedInterface = name }
+
+    fun getActiveInterfaceName(): String? {
+        return try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val ni = interfaces.nextElement()
+                val addrs = ni.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    val ip = addr.hostAddress ?: continue
+                    if (!addr.isLoopbackAddress && ip.contains(".")) return ni.name
+                }
+            }
+            null
+        } catch (_: Exception) { null }
+    }
+
+    fun getAvailableInterfaces(): List<String> {
+        val result = mutableListOf<String>()
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val ni = interfaces.nextElement()
+                val name = ni.name
+                val addrs = ni.inetAddresses
+                var hasIpv4 = false
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains('.') == true) {
+                        hasIpv4 = true
+                        break
+                    }
+                }
+                if (hasIpv4 && (name.startsWith("wlan") || name.startsWith("eth") || name.startsWith("rmnet") || name.startsWith("p2p") || name.startsWith("usb"))) {
+                    result.add(name)
+                }
+            }
+        } catch (_: Exception) { }
+        return result.distinct()
+    }
+
+    // Override getLocalIp to respect forced interface
+    private fun getLocalIpForInterface(ifaceName: String?): String? {
+        return try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val ni = interfaces.nextElement()
+                if (ifaceName != null && ni.name != ifaceName) continue
+                val addrs = ni.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    val ip = addr.hostAddress ?: continue
+                    if (!addr.isLoopbackAddress && ip.contains(".")) {
+                        if (ifaceName != null) return ip
+                        if (ni.name.startsWith("wlan") || ni.name.startsWith("eth") || ni.name.startsWith("rmnet")) return ip
+                    }
+                }
+            }
+            null
+        } catch (_: Exception) { null }
+    }
+
+    // Override the original getLocalIp to use forced interface
+    private val _originalGetLocalIp = { getLocalIp() }

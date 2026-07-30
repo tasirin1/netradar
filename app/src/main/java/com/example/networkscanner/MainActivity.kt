@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
                     MainScreen(
                         state = state,
                         onTargetChange = { viewModel.setTarget(it) },
+                        onCustomPortsChange = { viewModel.setCustomPorts(it) },
                         onScan = { viewModel.startScan(it) },
                         onStop = { viewModel.stopScan() },
                         onToggleTheme = { viewModel.toggleDarkTheme() },
@@ -43,7 +44,10 @@ class MainActivity : AppCompatActivity() {
                             viewModel.copyToClipboard("Scan Results", text)
                         },
                         onWol = { ip, mac -> viewModel.wakeOnLan(ip, mac) },
-                        onSortMode = { mode -> viewModel.setSortMode(mode) }
+                        onSortMode = { mode -> viewModel.setSortMode(mode) },
+                        onSelectInterface = { viewModel.selectInterface(it) },
+                        onRefreshNetwork = { viewModel.refreshNetworkInfo() },
+                        onToggleAbout = { viewModel.toggleAbout() }
                     )
                 }
             }

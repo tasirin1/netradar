@@ -16,24 +16,25 @@ class ScannerManager {
     @Volatile
     private var currentJob: Job? = null
 
-    fun scan(type: ScanType, target: String): Flow<ScanEvent> = channelFlow {
+    fun scan(type: ScanType, target: String, customPorts: IntArray? = null): Flow<ScanEvent> = channelFlow {
         currentJob?.cancel()
         currentJob = null
 
         val scanJob = launch(Dispatchers.IO) {
-            val scannerFlow = when (type) {
-                ScanType.PORT_SCAN -> portScanner.scan(target)
-                ScanType.CAMERA -> cameraScanner.scan(target)
-                ScanType.ROUTER -> routerScanner.scan(target)
-                ScanType.URL_PATH -> urlPathScanner.scan(target)
-                ScanType.DISCOVER -> discoverScanner.scan(target)
-                ScanType.PING -> pingSweep.scan(target)
-                ScanType.MONITOR -> emptyFlow()
-            }
             try {
-                scannerFlow.collect { event ->
-                    send(event)
+                val scannerFlow = when (type) {
+                    ScanType.PORT_SCAN -> {
+                        if (customPorts != null) portScanner.scan(target, customPorts)
+                        else portScanner.scan(target)
+                    }
+                    ScanType.CAMERA -> cameraScanner.scan(target)
+                    ScanType.ROUTER -> routerScanner.scan(target)
+                    ScanType.URL_PATH -> urlPathScanner.scan(target)
+                    ScanType.DISCOVER -> discoverScanner.scan(target)
+                    ScanType.PING -> pingSweep.scan(target)
+                    ScanType.MONITOR -> emptyFlow()
                 }
+                scannerFlow.collect { event -> send(event) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -52,10 +53,6 @@ class ScannerManager {
         }
     }
 
-    fun stop() {
-        currentJob?.cancel()
-        currentJob = null
-    }
-
+    fun stop() { currentJob?.cancel(); currentJob = null }
     fun isRunning(): Boolean = currentJob?.isActive == true
 }
