@@ -1,7 +1,7 @@
 package com.example.networkscanner
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,7 +14,7 @@ import com.example.networkscanner.ui.screens.MainScreen
 import com.example.networkscanner.ui.theme.NetRadarTheme
 import com.example.networkscanner.viewmodel.ScanViewModel
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -13,6 +13,7 @@ class DiscoverScanner {
     private val sharePorts = intArrayOf(21, 445, 139, 2049, 111, 135, 2049)
 
     fun scan(target: String): Flow<ScanEvent> = channelFlow {
+
         val ips = com.example.networkscanner.util.NetworkUtils.resolveTarget(target)
         val total = ips.size
         var completed = 0
