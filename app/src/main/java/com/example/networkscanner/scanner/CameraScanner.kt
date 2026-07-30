@@ -29,14 +29,11 @@ class CameraScanner {
         var scanIps = ips.toList()
         val localIp = NetworkUtils.getLocalIp()
         val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
-
         if (isLocal && ips.size > 1) {
             emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
             val subnet = ips.first().substringBeforeLast(".") + "."
             val live = NetworkUtils.arpScan(subnet)
-            if (live.isNotEmpty()) {
-                scanIps = ips.filter { it in live }
-            }
+            if (live.isNotEmpty()) scanIps = ips.filter { it in live }
         }
 
         val total = scanIps.size
@@ -44,16 +41,16 @@ class CameraScanner {
 
         for ((idx, ip) in scanIps.withIndex()) {
             emit(ScanEvent.Progress(ip, idx, total))
-
             val mac = arpTable[ip]
             val vendor = NetworkUtils.lookupMacVendor(mac)
-
             val hostname = try {
                 val hn = java.net.InetAddress.getByName(ip).hostName
                 if (hn != ip) hn else null
             } catch (_: Exception) { null }
 
+            // Parallel scan all camera ports on this host
             val foundServices = scanCameraPorts(ip)
+
             if (foundServices.isNotEmpty()) {
                 emit(ScanEvent.HostFound(HostInfo(
                     ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
@@ -66,14 +63,11 @@ class CameraScanner {
     }
 
     private suspend fun scanCameraPorts(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
-        val result = mutableListOf<PortInfo>()
-        for (port in cameraPorts) {
-            try {
-                val found = probeCamera(ip, port)
-                if (found != null) result.add(found)
-            } catch (_: Exception) { }
+        coroutineScope {
+            cameraPorts.map { port ->
+                async { probeCamera(ip, port) }
+            }.mapNotNull { it.await() }
         }
-        result
     }
 
     private suspend fun probeCamera(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {
@@ -90,9 +84,8 @@ class CameraScanner {
                     val resp = StringBuilder()
                     var line: String?
                     while (reader.readLine().also { line = it } != null) resp.append(line).append("\n")
-                    val r = resp.toString()
                     sock.close()
-                    if (r.contains("RTSP", ignoreCase = true)) PortInfo(port, "RTSP Camera")
+                    if (resp.toString().contains("RTSP", ignoreCase = true)) PortInfo(port, "RTSP Camera")
                     else null
                 }
                 34567 -> PortInfo(port, "Hikvision SDK")
@@ -138,9 +131,8 @@ class CameraScanner {
                         conn.outputStream.write(xml.toByteArray())
                         val resp = conn.inputStream.bufferedReader().readText()
                         conn.disconnect()
-                        if (resp.contains("ONVIF", ignoreCase = true) || resp.contains("Device", ignoreCase = true)) {
-                            PortInfo(port, "ONVIF Camera")
-                        } else null
+                        if (resp.contains("ONVIF", ignoreCase = true) || resp.contains("Device", ignoreCase = true))
+                            PortInfo(port, "ONVIF Camera") else null
                     } catch (_: Exception) { null }
                 }
                 else -> PortInfo(port, "Camera Port")

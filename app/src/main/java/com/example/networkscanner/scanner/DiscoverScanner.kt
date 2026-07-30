@@ -17,18 +17,15 @@ class DiscoverScanner {
             return@channelFlow
         }
 
-        // ARP pre-scan like v1.0 to find live hosts
+        // ARP pre-scan like v1.0
         var scanIps = ips.toList()
         val localIp = NetworkUtils.getLocalIp()
         val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
-
         if (isLocal && ips.size > 1) {
             send(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
             val subnet = ips.first().substringBeforeLast(".") + "."
             val live = NetworkUtils.arpScan(subnet)
-            if (live.isNotEmpty()) {
-                scanIps = ips.filter { it in live }
-            }
+            if (live.isNotEmpty()) scanIps = ips.filter { it in live }
         }
 
         val total = scanIps.size
@@ -37,19 +34,18 @@ class DiscoverScanner {
         for ((idx, ip) in scanIps.withIndex()) {
             send(ScanEvent.Progress(ip, idx, total))
 
-            // Quick ping check (like v1.0)
+            // Quick ping check
             val alive = PingUtil.ping(ip, 500) != null
             if (!alive) continue
 
             val mac = arpTable[ip]
             val vendor = NetworkUtils.lookupMacVendor(mac)
-
             val hostname = try {
                 val hn = java.net.InetAddress.getByName(ip).hostName
                 if (hn != ip) hn else null
             } catch (_: Exception) { null }
 
-            // Scan discover ports (camera+router+share)
+            // Parallel scan all discover ports on this host
             val services = scanDiscoverPorts(ip)
 
             if (services.isNotEmpty()) {
@@ -64,26 +60,26 @@ class DiscoverScanner {
     }
 
     private suspend fun scanDiscoverPorts(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
-        val result = mutableListOf<PortInfo>()
         val cameraPorts = intArrayOf(80, 554, 34567, 37777, 37215, 8080, 8899, 8554)
         val routerPorts = intArrayOf(8291, 7547, 5000, 23, 22, 161, 1900)
-        val allPorts = (cameraPorts + routerPorts + sharePorts).distinct().sorted()
+        val allPorts = (cameraPorts + routerPorts + sharePorts).distinct().toList()
 
-        for (port in allPorts) {
-            try {
-                val sock = java.net.Socket()
-                sock.connect(java.net.InetSocketAddress(ip, port), 200)
-                sock.close()
-                val service = detectService(port, ip)
-                if (service != null) {
-                    result.add(PortInfo(port, service))
+        coroutineScope {
+            allPorts.map { port ->
+                async {
+                    try {
+                        val sock = java.net.Socket()
+                        sock.connect(java.net.InetSocketAddress(ip, port), 200)
+                        sock.close()
+                        val service = detectService(port)
+                        if (service != null) PortInfo(port, service) else null
+                    } catch (_: Exception) { null }
                 }
-            } catch (_: Exception) { }
+            }.mapNotNull { it.await() }
         }
-        result
     }
 
-    private suspend fun detectService(port: Int, ip: String): String? = when (port) {
+    private fun detectService(port: Int): String? = when (port) {
         80, 8080 -> "Camera Web"
         554 -> "RTSP Stream"
         34567 -> "Hikvision SDK"

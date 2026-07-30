@@ -27,14 +27,11 @@ class RouterScanner {
         var scanIps = ips.toList()
         val localIp = NetworkUtils.getLocalIp()
         val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
-
         if (isLocal && ips.size > 1) {
             emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
             val subnet = ips.first().substringBeforeLast(".") + "."
             val live = NetworkUtils.arpScan(subnet)
-            if (live.isNotEmpty()) {
-                scanIps = ips.filter { it in live }
-            }
+            if (live.isNotEmpty()) scanIps = ips.filter { it in live }
         }
 
         val total = scanIps.size
@@ -42,16 +39,16 @@ class RouterScanner {
 
         for ((idx, ip) in scanIps.withIndex()) {
             emit(ScanEvent.Progress(ip, idx, total))
-
             val mac = arpTable[ip]
             val vendor = NetworkUtils.lookupMacVendor(mac)
-
             val hostname = try {
                 val hn = java.net.InetAddress.getByName(ip).hostName
                 if (hn != ip) hn else null
             } catch (_: Exception) { null }
 
+            // Parallel scan all router ports on this host
             val foundServices = scanRouterPorts(ip)
+
             if (foundServices.isNotEmpty()) {
                 emit(ScanEvent.HostFound(HostInfo(
                     ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
@@ -64,14 +61,11 @@ class RouterScanner {
     }
 
     private suspend fun scanRouterPorts(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
-        val result = mutableListOf<PortInfo>()
-        for (port in routerPorts) {
-            try {
-                val found = probeRouter(ip, port)
-                if (found != null) result.add(found)
-            } catch (_: Exception) { }
+        coroutineScope {
+            routerPorts.map { port ->
+                async { probeRouter(ip, port) }
+            }.mapNotNull { it.await() }
         }
-        result
     }
 
     private suspend fun probeRouter(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {
@@ -127,7 +121,6 @@ class RouterScanner {
             }
 
             sock.close()
-
             val service = when (port) {
                 8291 -> "Winbox (MikroTik)"
                 7547 -> "TR-069 (ISP CWMP)"

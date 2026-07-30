@@ -9,6 +9,7 @@ import java.io.InputStreamReader
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.Semaphore
 
 class PortScanner {
 
@@ -29,7 +30,7 @@ class PortScanner {
             return@flow
         }
 
-        // Like v1.0: detect local subnet and do ARP pre-scan to find live hosts
+        // ARP pre-scan like v1.0
         val localIp = NetworkUtils.getLocalIp()
         val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
         
@@ -44,7 +45,8 @@ class PortScanner {
             }
         }
 
-        // Like v1.0: sequential hosts with sequential ports (no more crash)
+        // Sequential hosts, parallel ports per host (safe, controlled parallelism)
+        val semaphore = Semaphore(30)
         for ((idx, ip) in scanIps.withIndex()) {
             emit(ScanEvent.Progress(ip, idx, scanIps.size))
 
@@ -57,11 +59,13 @@ class PortScanner {
             val mac = arpTable[ip]
             val vendor = NetworkUtils.lookupMacVendor(mac)
 
-            val openPorts = scanHostPorts(ip, ports)
+            // Scan ports in parallel for this host
+            val openPorts = scanHostPorts(ip, ports, semaphore)
 
             if (openPorts.isNotEmpty()) {
                 emit(ScanEvent.HostFound(HostInfo(
-                    ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
+                    ip = ip, hostname = hostname,
+                    macAddress = mac, macVendor = vendor,
                     isAlive = true, openPorts = openPorts
                 )))
             }
@@ -70,33 +74,43 @@ class PortScanner {
         emit(ScanEvent.Complete(ScanResult(type = ScanType.PORT_SCAN, target = target)))
     }
 
-    private suspend fun scanHostPorts(ip: String, ports: IntArray): List<PortInfo> = withContext(Dispatchers.IO) {
-        val result = mutableListOf<PortInfo>()
-        for (port in ports) {
-            try {
-                val sock = Socket()
-                sock.connect(InetSocketAddress(ip, port), 200)
-                sock.soTimeout = 150
-                var service: String? = null
-                var banner: String? = null
-                try {
-                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
-                    reader.use {
-                        var line: String?
-                        val sb = StringBuilder()
-                        for (i in 0 until 5) {
-                            line = reader.readLine() ?: break
-                            sb.append(line).append(" ")
-                        }
-                        banner = sb.toString().trim().take(100)
+    private suspend fun scanHostPorts(ip: String, ports: IntArray, semaphore: Semaphore): List<PortInfo> = withContext(Dispatchers.IO) {
+        coroutineScope {
+            ports.map { port ->
+                async {
+                    semaphore.acquire()
+                    try {
+                        scanPort(ip, port)
+                    } finally {
+                        semaphore.release()
                     }
-                } catch (_: Exception) {}
-                sock.close()
-                service = detectService(port, banner)
-                result.add(PortInfo(port = port, service = service, banner = banner))
-            } catch (_: Exception) { }
+                }
+            }.mapNotNull { it.await() }
         }
-        result
+    }
+
+    private fun scanPort(ip: String, port: Int): PortInfo? {
+        return try {
+            val sock = Socket()
+            sock.connect(InetSocketAddress(ip, port), 200)
+            sock.soTimeout = 150
+            var banner: String? = null
+            try {
+                val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
+                reader.use {
+                    var line: String?
+                    val sb = StringBuilder()
+                    for (i in 0 until 5) {
+                        line = reader.readLine() ?: break
+                        sb.append(line).append(" ")
+                    }
+                    banner = sb.toString().trim().take(100)
+                }
+            } catch (_: Exception) {}
+            sock.close()
+            val service = detectService(port, banner)
+            PortInfo(port = port, service = service, banner = banner)
+        } catch (_: Exception) { null }
     }
 
     private fun detectService(port: Int, banner: String?): String? {
