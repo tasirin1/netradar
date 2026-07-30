@@ -75,6 +75,48 @@ object NetworkUtils {
         return null
     }
 
+
+
+    /**
+     * Automatically expand a single private IP to full /24 subnet
+     * and include the gateway (.1).
+     * For public IPs, just return the IP itself.
+     */
+    fun autoExpandTarget(input: String): List<String> {
+        val trimmed = input.trim()
+        
+        // If already CIDR or range, resolve as-is
+        if (trimmed.contains("/") || trimmed.contains("-")) {
+            return resolveTarget(trimmed)
+        }
+        
+        // Single IP
+        val parts = trimmed.split(".")
+        if (parts.size != 4) return listOf(trimmed)
+        
+        // Only auto-expand private IP ranges
+        val first = parts[0].toIntOrNull() ?: return listOf(trimmed)
+        val second = parts[1].toIntOrNull() ?: return listOf(trimmed)
+        
+        val isPrivate = (first == 10) ||
+                (first == 172 && second in 16..31) ||
+                (first == 192 && second == 168)
+        
+        if (!isPrivate) return listOf(trimmed)
+        
+        // Expand to /24 subnet
+        val prefix = "${parts[0]}.${parts[1]}.${parts[2]}"
+        return (1..254).map { "$prefix.$it" }
+    }
+
+    /**
+     * Detect local gateway IP (usually .1 on the local subnet)
+     */
+    fun getLocalGateway(): String? {
+        val prefix = getLocalNetworkPrefix() ?: return null
+        return "$prefix.1"
+    }
+
     fun getBroadcastAddress(): String? {
         val prefix = getLocalNetworkPrefix() ?: return null
         return "$prefix.255"

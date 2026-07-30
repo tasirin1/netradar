@@ -139,7 +139,8 @@ class PortScanner {
         }
     }
 
-    private fun resolveTargets(input: String): List<String> {
+    private fun resolveTargetsOrig(input: String): List<String> {
+    private fun resolveTargets(input: String): List<String> = com.example.networkscanner.util.NetworkUtils.autoExpandTarget(input)
         val trimmed = input.trim()
         if (trimmed.contains("/")) {
             val parts = trimmed.split("/")

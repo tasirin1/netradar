@@ -13,7 +13,7 @@ class DiscoverScanner {
     private val pingSweep = PingSweep()
     private val sharePorts = intArrayOf(21, 445, 139, 2049, 111, 135, 2049)
     fun scan(target: String): Flow<ScanEvent> = channelFlow {
-        val ips = com.example.networkscanner.util.NetworkUtils.resolveTarget(target)
+        val ips = com.example.networkscanner.util.NetworkUtils.autoExpandTarget(target)
         val total = ips.size
 
         for ((idx, ip) in ips.withIndex()) {
