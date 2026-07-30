@@ -25,7 +25,7 @@ jobs:
         sudo mv /tmp/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest/
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
         $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-          "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1
+          "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1
         echo "ANDROID_SDK_ROOT=/opt/android" >> $GITHUB_ENV
         echo "ANDROID_HOME=/opt/android" >> $GITHUB_ENV
 
