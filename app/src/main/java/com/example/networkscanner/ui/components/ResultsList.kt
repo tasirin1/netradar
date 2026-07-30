@@ -59,7 +59,7 @@ fun HostCard(host: HostInfo) {
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable { 
-                        uriHandler.openUri("http://${host.ip}/")
+                        try { uriHandler.openUri("http://${host.ip}/") } catch (_: Exception) {}
                     }
                 )
                 if (host.latencyMs != null) {
@@ -114,7 +114,7 @@ fun HostCard(host: HostInfo) {
                 Divider(color = MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.height(4.dp))
                 host.openPorts.forEach { port ->
-                    PortRow(port)
+                    PortRow(ip = host.ip, port = port)
                 }
             }
         }
@@ -122,10 +122,15 @@ fun HostCard(host: HostInfo) {
 }
 
 @Composable
-fun PortRow(port: PortInfo) {
+fun PortRow(ip: String, port: PortInfo) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    val url = if (port.port == 443 || port.port == 8443) "https://$ip:${port.port}/" else "http://$ip:${port.port}/"
+    
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 1.dp)
+        modifier = Modifier.padding(vertical = 1.dp).clickable { 
+            try { uriHandler.openUri(url) } catch (_: Exception) {}
+        }
     ) {
         val icon = getPortIcon(port)
         Icon(icon, null, Modifier.size(14.dp), tint = AccentGreen)
@@ -135,7 +140,7 @@ fun PortRow(port: PortInfo) {
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.primary
         )
         Spacer(Modifier.width(8.dp))
         Text(

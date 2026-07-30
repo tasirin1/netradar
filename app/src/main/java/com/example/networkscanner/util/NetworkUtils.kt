@@ -83,30 +83,66 @@ object NetworkUtils {
      * For public IPs, just return the IP itself.
      */
     fun autoExpandTarget(input: String): List<String> {
-        val trimmed = input.trim()
+        var trimmed = input.trim()
+        
+        // Strip protocol prefix like http:// or https://
+        trimmed = trimmed.replaceFirst("^https?://".toRegex(), "")
+        
+        // Strip trailing path
+        if (trimmed.contains("/")) {
+            trimmed = trimmed.substringBefore("/")
+        }
+        
+        // Strip port number
+        trimmed = trimmed.substringBefore(":")
         
         // If already CIDR or range, resolve as-is
-        if (trimmed.contains("/") || trimmed.contains("-")) {
+        if (trimmed.contains("/") && trimmed.contains(".")) {
             return resolveTarget(trimmed)
         }
         
-        // Single IP
+        // Check if it's an IP address (4 dot-separated numbers)
         val parts = trimmed.split(".")
-        if (parts.size != 4) return listOf(trimmed)
+        if (parts.size == 4 && parts.all { it.toIntOrNull() != null }) {
+            val first = parts[0].toInt()
+            val second = parts[1].toInt()
+            
+            // Only auto-expand private IP ranges
+            val isPrivate = (first == 10) ||
+                    (first == 172 && second in 16..31) ||
+                    (first == 192 && second == 168)
+            
+            if (!isPrivate) return listOf(trimmed)
+            
+            // Expand to /24 subnet
+            val prefix = "${parts[0]}.${parts[1]}.${parts[2]}"
+            return (1..254).map { "$prefix.$it" }
+        }
         
-        // Only auto-expand private IP ranges
-        val first = parts[0].toIntOrNull() ?: return listOf(trimmed)
-        val second = parts[1].toIntOrNull() ?: return listOf(trimmed)
-        
-        val isPrivate = (first == 10) ||
-                (first == 172 && second in 16..31) ||
-                (first == 192 && second == 168)
-        
-        if (!isPrivate) return listOf(trimmed)
-        
-        // Expand to /24 subnet
-        val prefix = "${parts[0]}.${parts[1]}.${parts[2]}"
-        return (1..254).map { "$prefix.$it" }
+        // Domain name or hostname - resolve to IP
+        return try {
+            val addr = java.net.InetAddress.getByName(trimmed)
+            val ip = addr.hostAddress ?: trimmed
+            if (ip.count { it == '.' } == 3) {
+                // Resolved to an IP - auto-expand if private
+                val parts2 = ip.split(".")
+                val first2 = parts2[0].toInt()
+                val second2 = parts2[1].toInt()
+                val isPrivate2 = (first2 == 10) ||
+                        (first2 == 172 && second2 in 16..31) ||
+                        (first2 == 192 && second2 == 168)
+                if (isPrivate2) {
+                    val prefix2 = "${parts2[0]}.${parts2[1]}.${parts2[2]}"
+                    (1..254).map { "$prefix2.$it" }
+                } else {
+                    listOf(ip)
+                }
+            } else {
+                listOf(ip)
+            }
+        } catch (_: Exception) {
+            listOf(trimmed)
+        }
     }
 
     /**
