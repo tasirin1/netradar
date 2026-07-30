@@ -287,7 +287,6 @@ object NetworkUtils {
         "18:1E:78" to "Google", "E0:AC:CB" to "ONVIF", "00:12:47" to "EDIMAX",
         "00:1A:4A" to "Tenda", "A0:21:B7" to "Tenda", "00:0F:E2" to "TOTOLINK"
     )
-}
 
     // ─── Network Interface Selection ───
     @Volatile
@@ -356,3 +355,5 @@ object NetworkUtils {
         } catch (_: Exception) { null }
     }
 
+
+}
