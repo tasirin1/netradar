@@ -105,7 +105,7 @@ fun HostCard(host: HostInfo) {
 
             if (expanded && host.openPorts.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                Divider(color = MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.height(4.dp))
                 host.openPorts.forEach { port ->
                     PortRow(port)
@@ -191,7 +191,7 @@ fun UrlCard(url: UrlDiscovery) {
     }
     val icon = when (url.statusCode) {
         200 -> Icons.Default.CheckCircle
-        301, 302 -> Icons.Default.Redirect // Note: Redirect might need extended icons
+        301, 302 -> Icons.Default.Http // Note: Redirect might need extended icons
         401, 403 -> Icons.Default.Lock
         else -> Icons.Default.Http
     }
