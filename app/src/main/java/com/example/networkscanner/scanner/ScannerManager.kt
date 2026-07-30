@@ -2,6 +2,7 @@ package com.example.networkscanner.scanner
 
 import com.example.networkscanner.model.*
 import kotlinx.coroutines.*
+import com.example.networkscanner.util.DebugLogger
 import kotlinx.coroutines.flow.*
 
 class ScannerManager {
@@ -17,7 +18,7 @@ class ScannerManager {
     private var currentJob: Job? = null
 
     fun scan(type: ScanType, target: String): Flow<ScanEvent> = channelFlow {
-        // Cancel any previous scan
+        DebugLogger.log("MGR", "Scan requested: ${type.label} @ $target")
         currentJob?.cancel()
         currentJob = null
 
@@ -40,7 +41,7 @@ class ScannerManager {
                 // Scan was cancelled, rethrow
                 throw e
             } catch (e: Exception) {
-                // Log other errors silently
+                DebugLogger.log("MGR", "Error: ${e.message}")
                 send(ScanEvent.Error(e.message ?: "Scan error"))
             }
         }
@@ -52,11 +53,13 @@ class ScannerManager {
             scanJob.cancel()
             throw e
         } finally {
+            DebugLogger.log("MGR", "Scan complete")
             currentJob = null
         }
     }
 
     fun stop() {
+        DebugLogger.log("MGR", "Stop requested")
         currentJob?.cancel()
         currentJob = null
     }

@@ -30,7 +30,8 @@ fun MainScreen(
     onExportTxt: () -> Unit,
     onLoadHistory: (Long) -> Unit,
     onClearHistory: () -> Unit,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
+    onShareLog: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -42,6 +43,9 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onShareLog) {
+                        Icon(Icons.Default.BugReport, contentDescription = "Send debug log")
+                    }
                     IconButton(onClick = onToggleTheme) {
                         Icon(
                             imageVector = when (state.isDarkTheme) {

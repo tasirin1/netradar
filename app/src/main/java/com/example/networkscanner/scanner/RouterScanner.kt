@@ -2,6 +2,7 @@ package com.example.networkscanner.scanner
 
 import com.example.networkscanner.model.*
 import kotlinx.coroutines.*
+import com.example.networkscanner.util.DebugLogger
 import kotlinx.coroutines.flow.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -25,7 +26,8 @@ class RouterScanner {
         for (ip in ips) {
             val foundServices = mutableListOf<PortInfo>()
             for (port in routerPorts) {
-                emit(ScanEvent.Progress(ip, completed, total))
+                DebugLogger.log("ROUTER", "Checking $ip:$port")
+emit(ScanEvent.Progress(ip, completed, total))
                 val result = probeRouter(ip, port)
                 if (result != null) {
                     foundServices.add(result)

@@ -7,6 +7,7 @@ import com.example.networkscanner.db.ScanHistoryStore
 import com.example.networkscanner.export.Exporter
 import com.example.networkscanner.model.*
 import com.example.networkscanner.scanner.ScannerManager
+import com.example.networkscanner.util.DebugLogger
 import com.example.networkscanner.util.NetworkUtils
 import com.example.networkscanner.util.WakeOnLan
 import kotlinx.coroutines.flow.*
@@ -47,6 +48,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startScan(type: ScanType) {
         val target = _state.value.target.trim()
+        DebugLogger.log("SCAN", "Starting ${type.label} -> $target")
         if (target.isEmpty()) {
             _state.update { it.copy(error = "Enter target IP or URL") }
             return
@@ -74,6 +76,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         _state.update { it.copy(progress = "Scanning ${event.ip}...", progressPercent = pct) }
                     }
                     is ScanEvent.HostFound -> {
+                        DebugLogger.log("SCAN", "Found: ${event.host.ip} (${event.host.openPorts.size} ports)")
                         _hosts.add(event.host)
                         _state.update { it.copy(hosts = _hosts.toList()) }
                     }
@@ -81,7 +84,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         _urls.add(event.url)
                         _state.update { it.copy(discoveredUrls = _urls.toList()) }
                     }
-                    is ScanEvent.Error -> _state.update { it.copy(error = event.message) }
+                    is ScanEvent.Error -> {
+                        DebugLogger.log("SCAN", "Error: ${event.message}")
+                        _state.update { it.copy(error = event.message) }
+                    }
                     is ScanEvent.Complete -> {
                         val duration = System.currentTimeMillis() - _startTime
                         val result = event.result.copy(
@@ -114,6 +120,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopScan() {
+        DebugLogger.log("SCAN", "Stopping scan")
         scannerManager.stop()
         _state.update { it.copy(isScanning = false, summary = "Stopped", summaryColor = 0xFFC62828, isSummaryOk = false) }
     }
@@ -172,6 +179,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun getLocalNetworkHint(): String = NetworkUtils.getLocalNetworkPrefix()?.let { "$it.0/24" } ?: ""
 
     fun toggleDarkTheme() {
+        DebugLogger.log("UI", "Toggle theme")
         _state.update { it.copy(isDarkTheme = when (it.isDarkTheme) { null -> true; true -> false; false -> null }) }
     }
 

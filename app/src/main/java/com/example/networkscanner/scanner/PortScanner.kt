@@ -2,6 +2,7 @@ package com.example.networkscanner.scanner
 
 import com.example.networkscanner.model.*
 import kotlinx.coroutines.*
+import com.example.networkscanner.util.DebugLogger
 import kotlinx.coroutines.flow.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -27,7 +28,8 @@ class PortScanner {
             val hostOpenPorts = mutableListOf<PortInfo>()
 
             for (port in ports) {
-                emit(ScanEvent.Progress(ip, completed, totalTargets))
+                DebugLogger.log("PORT", "Probing $ip:$port (${completed+1}/$totalTargets)")
+emit(ScanEvent.Progress(ip, completed, totalTargets))
                 val result = probePort(ip, port)
                 if (result != null) {
                     hostOpenPorts.add(result)

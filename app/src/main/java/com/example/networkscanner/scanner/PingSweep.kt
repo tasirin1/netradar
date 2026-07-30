@@ -4,6 +4,7 @@ import com.example.networkscanner.model.*
 import com.example.networkscanner.util.MacVendorLookup
 import com.example.networkscanner.util.PingUtil
 import kotlinx.coroutines.*
+import com.example.networkscanner.util.DebugLogger
 import kotlinx.coroutines.flow.*
 
 class PingSweep {
@@ -15,7 +16,8 @@ class PingSweep {
         val arpTable = MacVendorLookup.readArpTable()
 
         for (ip in ips) {
-            emit(ScanEvent.Progress(ip, completed, total))
+            DebugLogger.log("PING", "Pinging $ip")
+emit(ScanEvent.Progress(ip, completed, total))
 
             val latency = PingUtil.ping(ip)
             if (latency != null) {

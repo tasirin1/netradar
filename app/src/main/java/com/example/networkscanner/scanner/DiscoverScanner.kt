@@ -2,6 +2,7 @@ package com.example.networkscanner.scanner
 
 import com.example.networkscanner.model.*
 import kotlinx.coroutines.*
+import com.example.networkscanner.util.DebugLogger
 import kotlinx.coroutines.flow.*
 
 class DiscoverScanner {
@@ -19,7 +20,8 @@ class DiscoverScanner {
         var completed = 0
 
         for (ip in ips) {
-            send(ScanEvent.Progress(ip, completed, total))
+            DebugLogger.log("DISC", "Probing $ip")
+send(ScanEvent.Progress(ip, completed, total))
 
             // Ping check
             val alive = com.example.networkscanner.util.PingUtil.ping(ip, 800) != null
