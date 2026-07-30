@@ -247,6 +247,7 @@ fun NetworkChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: Str
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun SortBar(currentSort: SortMode, onSortMode: (SortMode) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,

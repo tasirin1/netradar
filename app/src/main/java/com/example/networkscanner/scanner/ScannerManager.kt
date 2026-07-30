@@ -28,6 +28,7 @@ class ScannerManager {
                 ScanType.URL_PATH -> urlPathScanner.scan(target)
                 ScanType.DISCOVER -> discoverScanner.scan(target)
                 ScanType.PING -> pingSweep.scan(target)
+                ScanType.MONITOR -> emptyFlow()
             }
             try {
                 scannerFlow.collect { event ->
