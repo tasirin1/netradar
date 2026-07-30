@@ -46,8 +46,5 @@ emit(ScanEvent.Progress(ip, completed, total))
         )))
     }
 
-    private fun resolveIpsOrig(input: String): List<String> {
     private fun resolveIps(input: String): List<String> = com.example.networkscanner.util.NetworkUtils.autoExpandTarget(input)
-        return com.example.networkscanner.util.NetworkUtils.resolveTarget(input)
-    }
 }

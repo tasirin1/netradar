@@ -137,46 +137,5 @@ class PortScanner {
             else -> null
         }
     }
-
-    private fun resolveTargetsOrig(input: String): List<String> {
     private fun resolveTargets(input: String): List<String> = com.example.networkscanner.util.NetworkUtils.autoExpandTarget(input)
-        val trimmed = input.trim()
-        if (trimmed.contains("/")) {
-            val parts = trimmed.split("/")
-            val prefix = parts.getOrNull(1)?.toIntOrNull() ?: 24
-            return expandCidr(parts[0], prefix)
-        }
-        if (trimmed.contains("-")) {
-            val parts = trimmed.split("-")
-            val base = parts[0].trim()
-            val baseParts = base.split(".")
-            if (baseParts.size == 4) {
-                val start = baseParts[3].toIntOrNull() ?: return listOf(trimmed)
-                val end = parts[1].trim().toIntOrNull() ?: return listOf(trimmed)
-                val prefix = baseParts.dropLast(1).joinToString(".")
-                return (start..end).map { "$prefix.$it" }
-            }
-        }
-        return listOf(trimmed)
-    }
-
-    private fun expandCidr(baseIp: String, prefix: Int): List<String> {
-        return try {
-            if (prefix < 8 || prefix > 30) return listOf(baseIp)
-            val addr = InetAddress.getByName(baseIp)
-            val bytes = addr.address
-            val ipInt = ((bytes[0].toInt() and 0xFF) shl 24) or
-                    ((bytes[1].toInt() and 0xFF) shl 16) or
-                    ((bytes[2].toInt() and 0xFF) shl 8) or
-                    (bytes[3].toInt() and 0xFF)
-            val mask = if (prefix == 0) 0 else (-1 shl (32 - prefix))
-            val masked = ipInt and mask
-            val count = 1 shl (32 - prefix)
-            if (count > 65536 || count <= 2) listOf(baseIp)
-            else (1 until count - 1).map {
-                val ip = masked + it
-                "${(ip shr 24) and 0xFF}.${(ip shr 16) and 0xFF}.${(ip shr 8) and 0xFF}.${ip and 0xFF}"
-            }
-        } catch (_: Exception) { listOf(baseIp) }
-    }
 }
