@@ -2,6 +2,8 @@ package com.example.networkscanner.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -50,11 +52,15 @@ fun HostCard(host: HostInfo) {
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
+                val uriHandler = LocalUriHandler.current
                 Text(
                     text = host.ip,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { 
+                        uriHandler.openUri("http://${host.ip}/")
+                    }
                 )
                 if (host.latencyMs != null) {
                     Spacer(Modifier.width(8.dp))
@@ -216,11 +222,15 @@ fun UrlCard(url: UrlDiscovery) {
             )
             Spacer(Modifier.width(6.dp))
             Column {
+                val uriHandler = LocalUriHandler.current
                 Text(
                     text = url.url,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { 
+                        try { uriHandler.openUri(url.url) } catch (_: Exception) {}
+                    }
                 )
                 if (url.title != null) {
                     Text(

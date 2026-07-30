@@ -20,29 +20,29 @@ class CameraScanner {
 
     fun scan(target: String): Flow<ScanEvent> = flow {
         val ips = resolveIps(target)
-        var completed = 0
-        val total = ips.size * cameraPorts.size
+        val total = ips.size
 
-        for (ip in ips) {
-            val foundServices = mutableListOf<PortInfo>()
-            for (port in cameraPorts) {
-                DebugLogger.log("CAM", "Checking $ip:$port")
-emit(ScanEvent.Progress(ip, completed, total))
-                val result = probeCamera(ip, port)
-                if (result != null) {
-                    foundServices.add(result)
-                    emit(ScanEvent.HostFound(HostInfo(
-                        ip = ip, isAlive = true, openPorts = foundServices.toList()
-                    )))
-                }
-                completed++
-                delay(10)
+        for ((idx, ip) in ips.withIndex()) {
+            emit(ScanEvent.Progress(ip, idx, total))
+            val foundServices = scanCameraParallel(ip)
+            if (foundServices.isNotEmpty()) {
+                emit(ScanEvent.HostFound(HostInfo(
+                    ip = ip, isAlive = true, openPorts = foundServices
+                )))
             }
         }
 
         emit(ScanEvent.Complete(ScanResult(
             type = ScanType.CAMERA, target = target
         )))
+    }
+
+    private suspend fun scanCameraParallel(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
+        coroutineScope {
+            cameraPorts.map { port ->
+                async { probeCamera(ip, port) }
+            }.mapNotNull { it.await() }
+        }
     }
 
     private suspend fun probeCamera(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {

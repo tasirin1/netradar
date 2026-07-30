@@ -20,29 +20,29 @@ class RouterScanner {
 
     fun scan(target: String): Flow<ScanEvent> = flow {
         val ips = resolveIps(target)
-        var completed = 0
-        val total = ips.size * routerPorts.size
+        val total = ips.size
 
-        for (ip in ips) {
-            val foundServices = mutableListOf<PortInfo>()
-            for (port in routerPorts) {
-                DebugLogger.log("ROUTER", "Checking $ip:$port")
-emit(ScanEvent.Progress(ip, completed, total))
-                val result = probeRouter(ip, port)
-                if (result != null) {
-                    foundServices.add(result)
-                    emit(ScanEvent.HostFound(HostInfo(
-                        ip = ip, isAlive = true, openPorts = foundServices.toList()
-                    )))
-                }
-                completed++
-                delay(10)
+        for ((idx, ip) in ips.withIndex()) {
+            emit(ScanEvent.Progress(ip, idx, total))
+            val foundServices = scanRouterParallel(ip)
+            if (foundServices.isNotEmpty()) {
+                emit(ScanEvent.HostFound(HostInfo(
+                    ip = ip, isAlive = true, openPorts = foundServices
+                )))
             }
         }
 
         emit(ScanEvent.Complete(ScanResult(
             type = ScanType.ROUTER, target = target
         )))
+    }
+
+    private suspend fun scanRouterParallel(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
+        coroutineScope {
+            routerPorts.map { port ->
+                async { probeRouter(ip, port) }
+            }.mapNotNull { it.await() }
+        }
     }
 
     private suspend fun probeRouter(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {

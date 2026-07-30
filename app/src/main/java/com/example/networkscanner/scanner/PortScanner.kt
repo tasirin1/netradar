@@ -1,13 +1,14 @@
 package com.example.networkscanner.scanner
 
 import com.example.networkscanner.model.*
-import kotlinx.coroutines.*
 import com.example.networkscanner.util.DebugLogger
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.net.*
-import kotlin.math.min
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Socket
 
 class PortScanner {
 
@@ -21,51 +22,48 @@ class PortScanner {
 
     fun scan(target: String, ports: IntArray = commonPorts): Flow<ScanEvent> = flow {
         val ips = resolveTargets(target)
-        val totalTargets = ips.size * ports.size
-        var completed = 0
+        val totalTargets = ips.size
 
-        for (ip in ips) {
-            val hostOpenPorts = mutableListOf<PortInfo>()
+        for ((ipIdx, ip) in ips.withIndex()) {
+            emit(ScanEvent.Progress(ip, ipIdx, totalTargets))
 
-            for (port in ports) {
-                DebugLogger.log("PORT", "Probing $ip:$port (${completed+1}/$totalTargets)")
-emit(ScanEvent.Progress(ip, completed, totalTargets))
-                val result = probePort(ip, port)
-                if (result != null) {
-                    hostOpenPorts.add(result)
-                }
-                completed++
-                // Small delay to avoid flooding network
-                delay(5)
-            }
+            // Scan ports in parallel for this IP (like v1.0 did with thread pool)
+            val openPorts = scanPortsParallel(ip, ports)
 
-            if (hostOpenPorts.isNotEmpty()) {
+            if (openPorts.isNotEmpty()) {
                 val host = HostInfo(
                     ip = ip,
                     isAlive = true,
-                    openPorts = hostOpenPorts
+                    openPorts = openPorts
                 )
                 emit(ScanEvent.HostFound(host))
             }
         }
 
         emit(ScanEvent.Complete(ScanResult(
-            type = ScanType.PORT_SCAN,
-            target = target,
-            hosts = emptyList(), // Results collected in ViewModel
-            summary = ScanSummary(totalHosts = ips.size)
+            type = ScanType.PORT_SCAN, target = target
         )))
     }
 
-    private suspend fun probePort(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {
-        try {
+    // Parallel port scan — mimics v1.0's Executors.newFixedThreadPool(255)
+    private suspend fun scanPortsParallel(ip: String, ports: IntArray): List<PortInfo> = withContext(Dispatchers.IO) {
+        coroutineScope {
+            ports.map { port ->
+                async {
+                    probePort(ip, port)
+                }
+            }.mapNotNull { it.await() }
+        }
+    }
+
+    private fun probePort(ip: String, port: Int): PortInfo? {
+        return try {
             val sock = Socket()
             sock.connect(InetSocketAddress(ip, port), 200)
-            sock.soTimeout = 200
+            sock.soTimeout = 150
             var service: String? = null
             var banner: String? = null
 
-            // Try to read banner
             try {
                 val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
                 reader.use {
