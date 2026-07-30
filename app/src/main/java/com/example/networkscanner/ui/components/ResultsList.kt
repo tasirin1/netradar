@@ -2,15 +2,12 @@ package com.example.networkscanner.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -27,9 +24,8 @@ fun HostResultsList(
     modifier: Modifier = Modifier
 ) {
     if (hosts.isEmpty()) return
-
-    LazyColumn(modifier = modifier) {
-        items(hosts, key = { it.ip }) { host ->
+    Column(modifier = modifier) {
+        hosts.forEach { host ->
             HostCard(host = host)
             Spacer(Modifier.height(6.dp))
         }
@@ -87,7 +83,6 @@ fun HostCard(host: HostInfo) {
                 }
             }
 
-            // MAC + Vendor
             if (host.macAddress != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Hub, null, Modifier.size(12.dp), tint = TextSecondary)
@@ -100,7 +95,6 @@ fun HostCard(host: HostInfo) {
                 }
             }
 
-            // Hostname
             if (!host.hostname.isNullOrBlank() && host.hostname != host.ip) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Language, null, Modifier.size(12.dp), tint = TextSecondary)
@@ -109,10 +103,9 @@ fun HostCard(host: HostInfo) {
                 }
             }
 
-            // Expanded: open ports
             if (expanded && host.openPorts.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                Divider(color = MaterialTheme.colorScheme.outline)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.height(4.dp))
                 host.openPorts.forEach { port ->
                     PortRow(port)
@@ -128,23 +121,7 @@ fun PortRow(port: PortInfo) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(vertical = 1.dp)
     ) {
-        val icon = when {
-            port.service?.contains("HTTP", true) == true -> Icons.Default.Public
-            port.service?.contains("Camera", true) == true ||
-            port.service?.contains("Hikvision", true) == true ||
-            port.service?.contains("Dahua", true) == true ||
-            port.service?.contains("ONVIF", true) == true ||
-            port.service?.contains("RTSP", true) == true -> Icons.Default.Videocam
-            port.service?.contains("Router", true) == true ||
-            port.service?.contains("MikroTik", true) == true ||
-            port.service?.contains("Winbox", true) == true -> Icons.Default.Router
-            port.service?.contains("FTP", true) == true ||
-            port.service?.contains("SMB", true) == true ||
-            port.service?.contains("NFS", true) == true -> Icons.Default.Folder
-            port.service?.contains("SSH", true) == true ||
-            port.service?.contains("Telnet", true) == true -> Icons.Default.Terminal
-            else -> Icons.Default.RadioButtonChecked
-        }
+        val icon = getPortIcon(port)
         Icon(icon, null, Modifier.size(14.dp), tint = AccentGreen)
         Spacer(Modifier.width(6.dp))
         Text(
@@ -171,15 +148,32 @@ fun PortRow(port: PortInfo) {
     }
 }
 
+private fun getPortIcon(port: PortInfo) = when {
+    port.service?.contains("HTTP", true) == true -> Icons.Default.Public
+    port.service?.contains("Camera", true) == true ||
+    port.service?.contains("Hikvision", true) == true ||
+    port.service?.contains("Dahua", true) == true ||
+    port.service?.contains("ONVIF", true) == true ||
+    port.service?.contains("RTSP", true) == true -> Icons.Default.Videocam
+    port.service?.contains("Router", true) == true ||
+    port.service?.contains("MikroTik", true) == true ||
+    port.service?.contains("Winbox", true) == true -> Icons.Default.Router
+    port.service?.contains("FTP", true) == true ||
+    port.service?.contains("SMB", true) == true ||
+    port.service?.contains("NFS", true) == true -> Icons.Default.Folder
+    port.service?.contains("SSH", true) == true ||
+    port.service?.contains("Telnet", true) == true -> Icons.Default.Terminal
+    else -> Icons.Default.RadioButtonChecked
+}
+
 @Composable
 fun UrlResultsList(
     urls: List<UrlDiscovery>,
     modifier: Modifier = Modifier
 ) {
     if (urls.isEmpty()) return
-
-    LazyColumn(modifier = modifier) {
-        items(urls, key = { it.url }) { url ->
+    Column(modifier = modifier) {
+        urls.forEach { url ->
             UrlCard(url)
             Spacer(Modifier.height(4.dp))
         }
@@ -197,7 +191,7 @@ fun UrlCard(url: UrlDiscovery) {
     }
     val icon = when (url.statusCode) {
         200 -> Icons.Default.CheckCircle
-        301, 302 -> Icons.Default.Http
+        301, 302 -> Icons.Default.Redirect // Note: Redirect might need extended icons
         401, 403 -> Icons.Default.Lock
         else -> Icons.Default.Http
     }

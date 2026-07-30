@@ -1,9 +1,9 @@
 package com.example.networkscanner.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -54,9 +54,10 @@ fun HistoryPanel(
                 modifier = Modifier.padding(vertical = 16.dp)
             )
         } else {
-            LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
-                items(entries.take(30), key = { it.id }) { entry ->
+            Column(modifier = Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
+                entries.take(30).forEach { entry ->
                     HistoryItem(entry = entry, onClick = { onLoadEntry(entry.id) })
+                    Spacer(Modifier.height(2.dp))
                 }
             }
         }
