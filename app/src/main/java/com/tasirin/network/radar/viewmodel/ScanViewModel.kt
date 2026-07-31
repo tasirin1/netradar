@@ -27,6 +27,7 @@ data class ScanUiState(
     val progressPercent: Float = 0f,
     val hosts: List<HostInfo> = emptyList(),
     val discoveredUrls: List<UrlDiscovery> = emptyList(),
+    val selectedHosts: Set<String> = emptySet(),
     val summary: String = "Ready",
     val summaryColor: Long = 0xFF00695C,
     val isSummaryOk: Boolean = true,
@@ -111,7 +112,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(isScanning = true, isPaused = false, scanType = type, error = null,
                 summary = "${type.label} starting...",
                 summaryColor = 0xFF00695C, isSummaryOk = true, progress = "", progressPercent = 0f,
-                hostSummary = "", scanResult = null)
+                hostSummary = "", scanResult = null, selectedHosts = emptySet())
         }
 
         viewModelScope.launch {
@@ -184,7 +185,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         monitorJob?.cancel(); monitorJob = null
         persistResults(force = true)
         _state.update { it.copy(isScanning = false, isPaused = false, summary = "Stopped",
-            summaryColor = 0xFFC62828, isSummaryOk = false, monitor = PingMonitorState()) }
+            summaryColor = 0xFFC62828, isSummaryOk = false, monitor = PingMonitorState(), selectedHosts = emptySet()) }
     }
 
     private fun startMonitor(target: String) {
@@ -252,10 +253,29 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         return sb.toString()
     }
 
-    fun deleteHost(ip: String) {
-        _hosts.remove(ip)
+    fun toggleHostSelection(ip: String) {
         _state.update {
-            it.copy(hosts = _hosts.values.toList(), summary = "Removed $ip — ${_hosts.size} host(s) tersisa",
+            val sel = it.selectedHosts.toMutableSet()
+            if (!sel.add(ip)) sel.remove(ip)
+            it.copy(selectedHosts = sel)
+        }
+    }
+
+    fun selectAllHosts() {
+        _state.update { it.copy(selectedHosts = _hosts.keys.toSet()) }
+    }
+
+    fun clearSelection() {
+        _state.update { it.copy(selectedHosts = emptySet()) }
+    }
+
+    fun deleteSelectedHosts() {
+        val toDelete = _state.value.selectedHosts
+        if (toDelete.isEmpty()) return
+        toDelete.forEach { _hosts.remove(it) }
+        _state.update {
+            it.copy(hosts = _hosts.values.toList(), selectedHosts = emptySet(),
+                summary = "Removed ${toDelete.size} host(s) — ${_hosts.size} tersisa",
                 summaryColor = 0xFFC62828, isSummaryOk = false)
         }
         persistResults(force = true)
@@ -265,7 +285,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _hosts.clear(); _urls.clear()
         _state.update {
             it.copy(hosts = emptyList(), discoveredUrls = emptyList(), hostSummary = "", scanResult = null,
-                summary = "Results cleared", summaryColor = 0xFF00695C, isSummaryOk = true)
+                selectedHosts = emptySet(), summary = "Results cleared", summaryColor = 0xFF00695C, isSummaryOk = true)
         }
         persistResults(force = true)
     }

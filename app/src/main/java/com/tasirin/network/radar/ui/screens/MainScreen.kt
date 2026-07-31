@@ -31,7 +31,10 @@ fun MainScreen(
     onToggleTheme: () -> Unit,
     onCopyIp: ((String) -> Unit)? = null,
     onCopyAll: (() -> Unit)? = null,
-    onDeleteHost: ((String) -> Unit)? = null,
+    onToggleHostSelect: ((String) -> Unit)? = null,
+    onDeleteSelected: (() -> Unit)? = null,
+    onSelectAllHosts: (() -> Unit)? = null,
+    onClearSelection: (() -> Unit)? = null,
     onClearResults: (() -> Unit)? = null,
     onWol: ((String, String) -> Unit)? = null,
     onSortMode: ((SortMode) -> Unit)? = null,
@@ -199,6 +202,28 @@ fun MainScreen(
                 Spacer(Modifier.height(6.dp))
             }
 
+            // ─── Selection bar ───
+            if (state.selectedHosts.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("${state.selectedHosts.size} dipilih", fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { onSelectAllHosts?.invoke() },
+                        contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Semua", fontSize = 12.sp) }
+                    Button(
+                        onClick = { onDeleteSelected?.invoke() },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) { Text("Hapus (${state.selectedHosts.size})", fontSize = 12.sp) }
+                    TextButton(onClick = { onClearSelection?.invoke() },
+                        contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Batal", fontSize = 12.sp) }
+                }
+            }
+
             // ─── Results - Hosts ───
             if (state.hosts.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -206,8 +231,13 @@ fun MainScreen(
                         color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(4.dp))
-                HostResultsList(hosts = state.hosts, onCopyIp = onCopyIp, onWol = onWol,
-                    onDeleteHost = onDeleteHost)
+                HostResultsList(
+                    hosts = state.hosts,
+                    onCopyIp = onCopyIp,
+                    onWol = onWol,
+                    selectedHosts = state.selectedHosts,
+                    onToggleSelect = onToggleHostSelect
+                )
             }
 
             // ─── Results - URLs ───
@@ -383,7 +413,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         HelpBullet("Use Custom Ports for specific ports")
                         HelpBullet("Long-press on port chip for port info")
                         HelpBullet("Traceroute shows each hop (needs ping -t)")
-                        HelpBullet("Long-press a host card to delete it")
+                        HelpBullet("Long-press host to select, then delete many at once")
                         HelpBullet("Results persist until you delete them")
                         HelpBullet("WoL button ⚡ wakes sleeping devices")
                         HelpBullet("Monitor mode pings every 1.5s")

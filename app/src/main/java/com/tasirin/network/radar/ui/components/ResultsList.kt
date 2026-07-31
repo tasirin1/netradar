@@ -28,12 +28,21 @@ fun HostResultsList(
     modifier: Modifier = Modifier,
     onCopyIp: ((String) -> Unit)? = null,
     onWol: ((String, String) -> Unit)? = null,
-    onDeleteHost: ((String) -> Unit)? = null
+    selectedHosts: Set<String> = emptySet(),
+    onToggleSelect: ((String) -> Unit)? = null
 ) {
     if (hosts.isEmpty()) return
+    val selectionMode = selectedHosts.isNotEmpty()
     Column(modifier = modifier) {
         hosts.forEach { host ->
-            HostCard(host = host, onCopyIp = onCopyIp, onWol = onWol, onDeleteHost = onDeleteHost)
+            HostCard(
+                host = host,
+                onCopyIp = onCopyIp,
+                onWol = onWol,
+                isSelected = host.ip in selectedHosts,
+                selectionMode = selectionMode,
+                onToggleSelect = onToggleSelect?.let { { it(host.ip) } }
+            )
             Spacer(Modifier.height(6.dp))
         }
     }
@@ -45,20 +54,24 @@ fun HostCard(
     host: HostInfo,
     onCopyIp: ((String) -> Unit)? = null,
     onWol: ((String, String) -> Unit)? = null,
-    onDeleteHost: ((String) -> Unit)? = null
+    isSelected: Boolean = false,
+    selectionMode: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null
 ) {
     val uriHandler = LocalUriHandler.current
     var showPortInfo by remember { mutableStateOf<PortInfo?>(null) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = {},
-                onLongClick = { if (onDeleteHost != null) showDeleteConfirm = true }
+                onClick = { if (selectionMode) onToggleSelect?.invoke() },
+                onLongClick = { onToggleSelect?.invoke() }
             ),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
@@ -77,7 +90,7 @@ fun HostCard(
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable {
+                    modifier = Modifier.clickable(enabled = !selectionMode) {
                         val firstPort = host.openPorts.firstOrNull()
                         val url = if (firstPort != null) {
                             "http://${host.ip}:${firstPort.port}/"
@@ -97,6 +110,10 @@ fun HostCard(
                         else if (host.latencyMs < 50) StatusOrange
                         else StatusRed
                     )
+                }
+                if (isSelected) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.CheckCircle, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                 }
                 Spacer(Modifier.weight(1f))
                 if (onCopyIp != null) {
@@ -144,7 +161,8 @@ fun HostCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     host.openPorts.forEach { port ->
-                        PortChip(ip = host.ip, port = port, onLongPress = { showPortInfo = port })
+                        PortChip(ip = host.ip, port = port, selectionMode = selectionMode,
+                            onLongPress = { showPortInfo = port })
                     }
                 }
             }
@@ -155,26 +173,11 @@ fun HostCard(
         PortInfoDialog(port = port) { showPortInfo = null }
     }
 
-    if (showDeleteConfirm && onDeleteHost != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            icon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Hapus Host", fontWeight = FontWeight.Bold) },
-            text = { Text("Hapus ${host.ip} dari daftar hasil?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDeleteHost(host.ip)
-                    showDeleteConfirm = false
-                }) { Text("Hapus", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Batal") } }
-        )
-    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PortChip(ip: String, port: PortInfo, onLongPress: (() -> Unit)? = null) {
+fun PortChip(ip: String, port: PortInfo, selectionMode: Boolean = false, onLongPress: (() -> Unit)? = null) {
     val uriHandler = LocalUriHandler.current
     val scheme = if (port.port == 443 || port.port == 8443) "https" else "http"
     val url = "$scheme://$ip:${port.port}/"
@@ -182,6 +185,7 @@ fun PortChip(ip: String, port: PortInfo, onLongPress: (() -> Unit)? = null) {
     Surface(
         modifier = Modifier
             .combinedClickable(
+                enabled = !selectionMode,
                 onClick = { try { uriHandler.openUri(url) } catch (_: Exception) {} },
                 onLongClick = onLongPress
             ),

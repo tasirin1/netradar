@@ -56,7 +56,10 @@ class MainActivity : AppCompatActivity() {
                         onCopyAll = {
                             viewModel.copyToClipboard("Scan Results", viewModel.copyAllText())
                         },
-                        onDeleteHost = { ip -> viewModel.deleteHost(ip) },
+                        onToggleHostSelect = { ip -> viewModel.toggleHostSelection(ip) },
+                        onDeleteSelected = { viewModel.deleteSelectedHosts() },
+                        onSelectAllHosts = { viewModel.selectAllHosts() },
+                        onClearSelection = { viewModel.clearSelection() },
                         onClearResults = { viewModel.clearResults() },
                         onWol = { ip, mac -> viewModel.wakeOnLan(ip, mac) },
                         onSortMode = { mode -> viewModel.setSortMode(mode) },
