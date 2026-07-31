@@ -34,8 +34,9 @@ class RouterScanner {
         subnets.forEach { subnet ->
             ScanPause.checkPause()
             val ips = NetworkUtils.expandSubnetHosts(subnet)
-            val liveIps = if (isWide) ips else NetworkUtils.discoverLiveHosts(ips).toList()
-            val scanIps = if (liveIps.isNotEmpty()) liveIps else ips.take(10)
+            // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
+            // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
+            val scanIps = ips
 
             val results = withContext(Dispatchers.IO) {
                 scanIps.chunked(hostConcurrency).map { chunk ->

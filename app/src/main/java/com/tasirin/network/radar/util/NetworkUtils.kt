@@ -4,18 +4,12 @@ import com.tasirin.network.radar.model.NetworkInterfaceInfo
 import java.io.BufferedReader
 import java.io.FileReader
 import java.net.InetAddress
-import java.net.InetSocketAddress
 import java.net.NetworkInterface
-import java.net.Socket
 import java.util.*
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 object NetworkUtils {
 
     @Volatile var selectedInterfaceName: String = ""
-    const val MAX_WIDE_IPS = 1024
     const val MAX_SUBNETS = 65536 // max /24 subnets materialized (≈16.7M hosts max)
 
     /**
@@ -180,54 +174,6 @@ object NetworkUtils {
         val parts = ip.split(".")
         if (parts.size == 4) return "${parts[0]}.${parts[1]}.${parts[2]}"
         return null
-    }
-
-    fun arpScan(subnet: String): Set<String> {
-        val live = Collections.synchronizedSet(mutableSetOf<String>())
-        val pool = Executors.newFixedThreadPool(100)
-        for (i in 1..254) {
-            val ip = "$subnet$i"
-            pool.execute {
-                try { if (InetAddress.getByName(ip).isReachable(100)) live.add(ip) } catch (_: Exception) { }
-            }
-        }
-        pool.shutdown()
-        try { pool.awaitTermination(4, TimeUnit.SECONDS) } catch (_: Exception) { }
-        return live
-    }
-
-    fun tcpQuickScan(ips: List<String>, timeoutMs: Int = 200): List<String> {
-        val live = Collections.synchronizedList(mutableListOf<String>())
-        val pool = Executors.newFixedThreadPool(200)
-        val latch = CountDownLatch(ips.size)
-        for (ip in ips) {
-            pool.execute {
-                try {
-                    val sock = Socket()
-                    sock.connect(InetSocketAddress(ip, 80), timeoutMs)
-                    sock.close()
-                    live.add(ip)
-                } catch (_: Exception) { }
-                latch.countDown()
-            }
-        }
-        pool.shutdown()
-        try { latch.await(30, TimeUnit.SECONDS) } catch (_: Exception) { }
-        return live.toList().sorted()
-    }
-
-    /**
-     * Discover live hosts from a list of target IPs.
-     */
-    fun discoverLiveHosts(ips: List<String>): Set<String> {
-        if (ips.size <= 1) return ips.toSet()
-        val subnets = ips.map { it.substringBeforeLast(".") }.distinct()
-        if (subnets.size <= 1) {
-            return arpScan(subnets.first() + ".")
-        } else if (subnets.size <= 256 && ips.size <= MAX_WIDE_IPS) {
-            return tcpQuickScan(ips, 300).toSet()
-        }
-        return ips.toSet()
     }
 
     fun getLocalGateway(): String? {
