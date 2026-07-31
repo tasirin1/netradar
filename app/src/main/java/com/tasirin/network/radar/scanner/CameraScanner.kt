@@ -33,7 +33,9 @@ class CameraScanner {
         var found = 0
         val startMs = System.currentTimeMillis()
 
-        emit(ScanEvent.Progress("CCTV scan ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
+        emit(ScanEvent.Progress(
+            "CCTV scan ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
+            0, total.toInt()))
 
         val totalSubnets = subnets.size
         subnets.forEachIndexed { subnetIndex, subnet ->
@@ -51,6 +53,9 @@ class CameraScanner {
                 coroutineScope {
                     val deferreds = chunk.map { ip ->
                         async {
+                            val foundServices = scanCameraPorts(ip)
+                            if (foundServices.isEmpty()) return@async (ip to null)
+
                             val mac = arpTable[ip]
                             val vendor = NetworkUtils.lookupMacVendor(mac)
                             val hostname = try {
@@ -58,11 +63,8 @@ class CameraScanner {
                                     java.net.InetAddress.getByName(ip).hostName
                                 }.let { if (it != ip) it else null }
                             } catch (_: Exception) { null }
-                            val foundServices = scanCameraPorts(ip)
-                            ip to if (foundServices.isNotEmpty()) {
-                                HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-                                    macVendor = vendor, isAlive = true, openPorts = foundServices)
-                            } else null
+                            ip to HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+                                macVendor = vendor, isAlive = true, openPorts = foundServices)
                         }
                     }
                     deferreds.forEach { deferred ->

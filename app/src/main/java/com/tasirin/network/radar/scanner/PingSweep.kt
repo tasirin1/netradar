@@ -23,7 +23,9 @@ class PingSweep {
         val startMs = System.currentTimeMillis()
         val arpTable = NetworkUtils.readArpTable()
 
-        emit(ScanEvent.Progress("Scanning ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
+        emit(ScanEvent.Progress(
+            "Ping ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
+            0, total.toInt()))
 
         val totalSubnets = subnets.size
         subnets.forEachIndexed { subnetIndex, subnet ->

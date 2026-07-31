@@ -20,7 +20,7 @@ class PortScanner {
 
     // Batasi total socket terbuka bersamaan (30 host x 50 port = 1500 socket > batas
     // file-descriptor Android ~1024 → "Too many open files" bikin port ke-skip diam-diam)
-    private val socketPermits = Semaphore(300)
+    private val socketPermits = Semaphore(500)
 
     fun scan(target: String, ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
@@ -37,7 +37,9 @@ class PortScanner {
         var found = 0
         val startMs = System.currentTimeMillis()
 
-        emit(ScanEvent.Progress("Port scan ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
+        emit(ScanEvent.Progress(
+            "Port scan ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
+            0, total.toInt()))
 
         val totalSubnets = subnets.size
         subnets.forEachIndexed { subnetIndex, subnet ->
@@ -55,20 +57,20 @@ class PortScanner {
                 coroutineScope {
                     val deferreds = chunk.map { ip ->
                         async {
+                            // Port scan dulu — DNS reverse lookup HANYA untuk host yang ketemu
+                            // (DNS per-IP bikin subnet lambat/macet, padahal mayoritas mati)
+                            val openPorts = scanHostPorts(ip, ports)
+                            if (openPorts.isEmpty()) return@async (ip to null)
+
                             val hostname = try {
                                 kotlinx.coroutines.withTimeout(300) {
                                     InetAddress.getByName(ip).hostName
                                 }.let { if (it != ip) it else null }
                             } catch (_: Exception) { null }
-
                             val mac = arpTable[ip]
                             val vendor = NetworkUtils.lookupMacVendor(mac)
-                            val openPorts = scanHostPorts(ip, ports)
-
-                            ip to if (openPorts.isNotEmpty()) {
-                                HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-                                    macVendor = vendor, isAlive = true, openPorts = openPorts)
-                            } else null
+                            ip to HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+                                macVendor = vendor, isAlive = true, openPorts = openPorts)
                         }
                     }
                     deferreds.forEach { deferred ->

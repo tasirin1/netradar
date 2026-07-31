@@ -25,7 +25,9 @@ class DiscoverScanner {
         var found = 0
         val startMs = System.currentTimeMillis()
 
-        send(ScanEvent.Progress("Discover ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
+        send(ScanEvent.Progress(
+            "Discover ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
+            0, total.toInt()))
 
         val totalSubnets = subnets.size
         subnets.forEachIndexed { subnetIndex, subnet ->
