@@ -214,6 +214,39 @@ object NetworkUtils {
     }
 
     /**
+
+    /**
+     * Discover live hosts from a list of target IPs.
+     * Handles single /24 subnet (fast arpScan) and multi-subnet (wide scan).
+     */
+    fun discoverLiveHosts(ips: List<String>): Set<String> {
+        if (ips.size <= 1) return ips.toSet()
+        val subnets = ips.map { it.substringBeforeLast(".") }.distinct()
+        if (subnets.size <= 1) {
+            // Single subnet: fast ARP scan
+            return arpScan(subnets.first() + ".")
+        } else if (subnets.size <= 256) {
+            // Multi-subnet: wide parallel scan
+            val parts = subnets.first().split(".")
+            val basePrefix = parts.take(2).joinToString(".")
+            val thirdRange = subnets.mapNotNull { it.split(".").getOrNull(2)?.toIntOrNull() }
+            if (basePrefix.isNotEmpty() && thirdRange.isNotEmpty()) {
+                val min3 = thirdRange.minOrNull() ?: 0
+                val max3 = thirdRange.maxOrNull() ?: 255
+                return filterLiveHostsWide(basePrefix, min3..max3).toSet()
+            }
+        }
+        // Fallback: TCP quick-check on port 80 for all targets
+        return ips.filter { ip ->
+            try {
+                val sock = Socket()
+                sock.connect(InetSocketAddress(ip, 80), 100)
+                sock.close(); true
+            } catch (_: Exception) { false }
+        }.toSet()
+    }
+
+
      * Fast wide scan for large IP ranges like 192.168.x.x (65024 IPs).
      */
     fun filterLiveHostsWide(prefix: String, thirdRange: IntRange = 0..255): List<String> {

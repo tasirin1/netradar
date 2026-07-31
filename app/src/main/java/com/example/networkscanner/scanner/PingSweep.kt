@@ -20,12 +20,12 @@ class PingSweep {
         val localIp = NetworkUtils.getLocalIp()
         val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
 
-        if (isLocal && ips.size > 1) {
+        if (ips.size > 1) {
             emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
-            val subnet = ips.first().substringBeforeLast(".") + "."
-            val live = NetworkUtils.arpScan(subnet)
+            val live = NetworkUtils.discoverLiveHosts(ips)
             if (live.isNotEmpty()) {
                 scanIps = ips.filter { it in live }
+                if (scanIps.isEmpty()) scanIps = ips.take(10)
             }
         }
 

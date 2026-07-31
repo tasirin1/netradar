@@ -27,13 +27,13 @@ class CameraScanner {
 
         // ARP pre-scan like v1.0
         var scanIps = ips.toList()
-        val localIp = NetworkUtils.getLocalIp()
-        val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
-        if (isLocal && ips.size > 1) {
+        if (ips.size > 1) {
             emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
-            val subnet = ips.first().substringBeforeLast(".") + "."
-            val live = NetworkUtils.arpScan(subnet)
-            if (live.isNotEmpty()) scanIps = ips.filter { it in live }
+            val live = NetworkUtils.discoverLiveHosts(ips)
+            if (live.isNotEmpty()) {
+                scanIps = ips.filter { it in live }
+                if (scanIps.isEmpty()) scanIps = ips.take(10)
+            }
         }
 
         val total = scanIps.size

@@ -32,21 +32,34 @@ class PortScanner {
             return@flow
         }
 
-        val localIp = NetworkUtils.getLocalIp()
-        val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
-        
+        // Count unique /24 subnets
+        val subnets = ips.map { it.substringBeforeLast(".") }.distinct()
+        val isMultiSubnet = subnets.size > 1
+
         var scanIps = ips.toList()
-        if (isLocal && ips.size > 1) {
-            emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
-            val subnet = ips.first().substringBeforeLast(".") + "."
-            val live = NetworkUtils.arpScan(subnet)
+
+        if (ips.size > 1) {
+            emit(ScanEvent.Progress("Discovering live hosts (${subnets.size} subnet(s))...", 0, ips.size))
+            val live = if (isMultiSubnet && subnets.size <= 256) {
+                // Wide scan across multiple subnets
+                val basePrefix = subnets.first().substringBeforeLast(".")
+                val thirdMin = subnets.map { it.substringAfterLast(".").toInt() }.minOrNull() ?: 0
+                val thirdMax = subnets.map { it.substringAfterLast(".").toInt() }.maxOrNull() ?: 255
+                NetworkUtils.filterLiveHostsWide(basePrefix, thirdMin..thirdMax).toSet()
+            } else {
+                // Single subnet scan (faster)
+                val subnet = ips.first().substringBeforeLast(".") + "."
+                NetworkUtils.arpScan(subnet)
+            }
             if (live.isNotEmpty()) {
                 scanIps = ips.filter { it in live }
+                if (scanIps.isEmpty()) scanIps = ips.take(10) // fallback
                 emit(ScanEvent.Progress("Found ${scanIps.size} live host(s)", 0, scanIps.size))
             }
         }
 
         val semaphore = Semaphore(30)
+        var progressIdx = 0
 
         for ((idx, ip) in scanIps.withIndex()) {
             emit(ScanEvent.Progress(ip, idx, scanIps.size))
@@ -66,6 +79,7 @@ class PortScanner {
                     isAlive = true, openPorts = openPorts
                 )))
             }
+            progressIdx++
         }
         emit(ScanEvent.Complete(ScanResult(type = ScanType.PORT_SCAN, target = target)))
     }
