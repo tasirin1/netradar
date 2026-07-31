@@ -9,55 +9,48 @@ import kotlinx.coroutines.flow.*
 class PingSweep {
 
     fun scan(target: String): Flow<ScanEvent> = flow {
-        val ips = NetworkUtils.autoExpandTarget(target)
-        if (ips.isEmpty()) {
+        val subnets = NetworkUtils.expandTargetSubnets(target)
+        if (subnets.isEmpty()) {
             emit(ScanEvent.Error("No IPs to scan"))
             return@flow
         }
 
-        val isWide = ips.size > 1024 || ips.map { it.substringBeforeLast(".") }.distinct().size > 4
-        var scanIps = ips.toList()
-
-        if (!isWide && ips.size > 1) {
-            emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
-            val live = NetworkUtils.discoverLiveHosts(ips)
-            if (live.isNotEmpty()) {
-                scanIps = ips.filter { it in live }
-                if (scanIps.isEmpty()) scanIps = ips.take(10)
-            }
-        } else if (isWide) {
-            emit(ScanEvent.Progress("Wide scan: ${ips.size} IPs in ${ips.map { it.substringBeforeLast(".") }.distinct().size} subnets", 0, ips.size))
-        }
-
-        val total = scanIps.size
-        var completed = 0
+        val total = subnets.size * 254L
+        val isWide = subnets.size > 4
+        val batchSize = if (isWide) 50 else 10
+        var completed = 0L
         val arpTable = NetworkUtils.readArpTable()
-        val batchSize = if (isWide) 50 else 1
 
-        // ★ Fix: collect results inside coroutineScope, emit OUTSIDE
-        scanIps.chunked(batchSize).forEach { batch ->
-            val batchResults = coroutineScope {
-                batch.map { ip ->
-                    async(Dispatchers.IO) {
-                        val latency = PingUtil.ping(ip)
-                        if (latency != null) {
-                            val mac = arpTable[ip]
-                            val vendor = NetworkUtils.lookupMacVendor(mac)
-                            val hostname = try {
-                                kotlinx.coroutines.withTimeout(300) {
-                                    java.net.InetAddress.getByName(ip).hostName
-                                }.let { if (it != ip) it else null }
-                            } catch (_: Exception) { null }
-                            HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-                                macVendor = vendor, latencyMs = latency, isAlive = true)
-                        } else null
-                    }
-                }.map { it.await() }
+        emit(ScanEvent.Progress("Scanning ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
+
+        subnets.forEach { subnet ->
+            ScanPause.checkPause()
+            val ips = NetworkUtils.expandSubnetHosts(subnet)
+
+            val results = withContext(Dispatchers.IO) {
+                ips.chunked(batchSize).map { chunk ->
+                    chunk.map { ip ->
+                        async {
+                            val latency = PingUtil.ping(ip)
+                            if (latency != null) {
+                                val mac = arpTable[ip]
+                                val vendor = NetworkUtils.lookupMacVendor(mac)
+                                val hostname = try {
+                                    kotlinx.coroutines.withTimeout(300) {
+                                        java.net.InetAddress.getByName(ip).hostName
+                                    }.let { if (it != ip) it else null }
+                                } catch (_: Exception) { null }
+                                HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+                                    macVendor = vendor, latencyMs = latency, isAlive = true)
+                            } else null
+                        }
+                    }.awaitAll()
+                }.flatten()
             }
-            // Emit hasil setelah coroutineScope selesai
-            batchResults.forEach { host ->
+
+            results.forEach { host ->
                 completed++
-                emit(ScanEvent.Progress(host?.ip ?: "", completed, total))
+                emit(ScanEvent.Progress(host?.ip ?: subnet, completed.toInt(), total.toInt()))
                 if (host != null) emit(ScanEvent.HostFound(host))
             }
         }

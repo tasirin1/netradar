@@ -19,6 +19,7 @@ data class ScanUiState(
     val customPorts: String = "",
     val showCustomPorts: Boolean = false,
     val isScanning: Boolean = false,
+    val isPaused: Boolean = false,
     val scanType: ScanType? = null,
     val progress: String = "",
     val progressPercent: Float = 0f,
@@ -91,7 +92,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _hosts.clear(); _urls.clear()
         _startTime = System.currentTimeMillis()
         _state.update {
-            it.copy(isScanning = true, scanType = type, error = null, hosts = emptyList(),
+            it.copy(isScanning = true, isPaused = false, scanType = type, error = null, hosts = emptyList(),
                 discoveredUrls = emptyList(), summary = "${type.label} starting...",
                 summaryColor = 0xFF00695C, isSummaryOk = true, progress = "", progressPercent = 0f,
                 hostSummary = "", scanResult = null)
@@ -103,7 +104,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     when (event) {
                         is ScanEvent.Progress -> {
                             val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
-                            _state.update { it.copy(progress = "Scanning ${event.ip}...", progressPercent = pct) }
+                            val pctText = if (event.total > 0) " (${event.current}/${event.total})" else ""
+                            _state.update { it.copy(progress = "Scanning ${event.ip}$pctText", progressPercent = pct) }
                         }
                         is ScanEvent.HostFound -> { _hosts.add(event.host); applySort() }
                         is ScanEvent.UrlFound -> { _urls.add(event.url); _state.update { it.copy(discoveredUrls = _urls.toList()) } }
@@ -118,7 +120,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                                     urlsFound = _urls.size, durationMs = duration))
                             val summaryText = buildSummary(result)
                             val ok = _hosts.isNotEmpty() || _urls.isNotEmpty()
-                            _state.update { it.copy(isScanning = false, scanType = null,
+                            _state.update { it.copy(isScanning = false, isPaused = false, scanType = null,
                                 progress = "", progressPercent = 1f, summary = summaryText,
                                 summaryColor = if (ok) 0xFF2E7D32 else 0xFFC62828, isSummaryOk = ok,
                                 hostSummary = buildHostSummary(result), scanResult = result) }
@@ -130,6 +132,17 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(isScanning = false, summary = "Cancelled", summaryColor = 0xFFC62828) }
             }
         }
+    }
+
+    fun pauseScan() {
+        scannerManager.pause()
+        _state.update { it.copy(isPaused = true, summary = "Paused — ${_hosts.size} host(s) ditemukan",
+            summaryColor = 0xFFE65100, isSummaryOk = true) }
+    }
+
+    fun resumeScan() {
+        scannerManager.resume()
+        _state.update { it.copy(isPaused = false, summary = "Resuming...", summaryColor = 0xFF00695C, isSummaryOk = true) }
     }
 
     fun useCustomPortsForScan() {
@@ -146,7 +159,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun stopScan() {
         scannerManager.stop()
         monitorJob?.cancel(); monitorJob = null
-        _state.update { it.copy(isScanning = false, summary = "Stopped",
+        _state.update { it.copy(isScanning = false, isPaused = false, summary = "Stopped",
             summaryColor = 0xFFC62828, isSummaryOk = false, monitor = PingMonitorState()) }
     }
 

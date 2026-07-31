@@ -16,6 +16,117 @@ object NetworkUtils {
 
     @Volatile var selectedInterfaceName: String = ""
     const val MAX_WIDE_IPS = 1024
+    const val MAX_SUBNETS = 65536 // max /24 subnets materialized (≈16.7M hosts max)
+
+    /**
+     * Expand target to a list of /24 subnet prefixes ("192.168.1").
+     * Supports: full IP, domain, CIDR, range (192.168.0.1-100),
+     * partial prefix ("192.", "192.168.", "192.168.5.").
+     * Partial prefixes expand to ALL matching /24 subnets, continuing
+     * from the given octet up to 255 (e.g. "192.168." → 192.168.0 … 192.255.255).
+     */
+    fun expandTargetSubnets(input: String): List<String> {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        var cleaned = trimmed.replaceFirst("^https?://".toRegex(), "")
+
+        // CIDR → break into /24 subnets
+        if (cleaned.contains("/")) {
+            val parts = cleaned.split("/")
+            val base = parts[0].trim()
+            val prefix = parts[1].trim().toIntOrNull() ?: 24
+            return expandCidrSubnets(base, prefix)
+        }
+
+        // Range: 192.168.0.1-254 → one /24 subnet
+        if (cleaned.contains("-")) {
+            val parts = cleaned.split("-")
+            val startParts = parts[0].trim().split(".")
+            if (startParts.size == 4) {
+                val start = startParts[3].toIntOrNull()
+                val end = parts[1].trim().toIntOrNull()
+                if (start != null && end != null && start in 1..254 && end in 1..254 && start <= end) {
+                    return listOf(startParts.dropLast(1).joinToString("."))
+                }
+            }
+        }
+
+        // Partial prefix with trailing dot
+        if (cleaned.endsWith(".")) {
+            val parts = cleaned.trimEnd('.').split(".")
+            return when (parts.size) {
+                1 -> {
+                    // "192." → all 192.x.x.x /24 subnets
+                    val a = parts[0].toIntOrNull() ?: return emptyList()
+                    expandSubnetRange(a, 0, 255)
+                }
+                2 -> {
+                    // "192.168." → 192.168.x → 192.255.x (continue sampai 255)
+                    val a = parts[0].toIntOrNull() ?: return emptyList()
+                    val bStart = parts[1].toIntOrNull() ?: return emptyList()
+                    expandSubnetRange(a, bStart, 255)
+                }
+                3 -> {
+                    // "192.168.5." → satu subnet
+                    val prefix3 = cleaned.trimEnd('.')
+                    if (prefix3.split(".").all { it.toIntOrNull() in 0..255 }) listOf(prefix3)
+                    else emptyList()
+                }
+                else -> emptyList()
+            }
+        }
+
+        // Full IP / domain → one /24 subnet
+        cleaned = cleaned.substringBefore(":").trimEnd('.')
+        val ip = resolveToIp(cleaned) ?: return emptyList()
+        return listOf(ip.substringBeforeLast("."))
+    }
+
+    /** Generate /24 subnets for 1 octet + second-octet range. */
+    private fun expandSubnetRange(a: Int, bStart: Int, bEnd: Int): List<String> {
+        if (a !in 0..255 || bStart !in 0..255 || bEnd !in 0..255 || bStart > bEnd) return emptyList()
+        // "10." sangat luas → batasi ke 16 /16 pertama biar wajar
+        val maxB = if (a == 10 && bEnd - bStart > 15) (bStart + 15).coerceAtMost(255) else bEnd
+        val result = mutableListOf<String>()
+        val count = (maxB - bStart + 1) * 256
+        if (count > MAX_SUBNETS) return emptyList()
+        for (b in bStart..maxB) {
+            for (c in 0..255) result.add("$a.$b.$c")
+        }
+        return result
+    }
+
+    private fun expandCidrSubnets(baseIp: String, prefix: Int): List<String> {
+        try {
+            val addr = InetAddress.getByName(baseIp)
+            val ipInt = bytesToInt(addr.address)
+            val hostBits = 32 - prefix
+            if (hostBits < 8) return listOf(intToIp(ipInt).substringBeforeLast("."))
+            val totalSubnets = 1 shl (hostBits - 8)
+            if (totalSubnets > MAX_SUBNETS) return emptyList()
+            val mask = if (hostBits >= 32) 0 else (-1 shl hostBits)
+            val start = ipInt and mask
+            val result = mutableListOf<String>()
+            for (i in 0 until totalSubnets) {
+                result.add(intToIp(start + (i shl 8)).substringBeforeLast("."))
+            }
+            return result
+        } catch (_: Exception) { return emptyList() }
+    }
+
+    private fun resolveToIp(host: String): String? {
+        if (host.isBlank()) return null
+        return try {
+            val addr = InetAddress.getByName(host)
+            addr.hostAddress?.takeIf { it.count { c -> c == '.' } == 3 }
+        } catch (_: Exception) { null }
+    }
+
+    /** Expand a /24 subnet prefix to its 254 host IPs. */
+    fun expandSubnetHosts(subnet: String): List<String> {
+        return (1..254).map { "$subnet.$it" }
+    }
 
     fun resolveTarget(input: String): List<String> {
         val trimmed = input.trim()
@@ -107,115 +218,22 @@ object NetworkUtils {
     }
 
     fun isWideScan(input: String): Boolean {
-        val ips = autoExpandTarget(input)
-        if (ips.isEmpty() || ips.size <= 254) return false
-        val subnets = ips.map { it.substringBeforeLast(".") }.distinct()
-        return subnets.size > 1
+        return expandTargetSubnets(input).size > 1
     }
 
     /**
-     * Auto-expand target to list of IPs.
+     * Auto-expand target to a materialized IP list.
+     * Only returns when the target is small (≤512 subnets); huge targets
+     * should use expandTargetSubnets() instead to avoid OOM.
      */
     fun autoExpandTarget(input: String): List<String> {
-        val trimmed = input.trim()
-        if (trimmed.isEmpty()) return emptyList()
-
-        var cleaned = trimmed.replaceFirst("^https?://".toRegex(), "")
-
-        // Check CIDR
-        val isCidr = cleaned.contains("/") && cleaned.matches(Regex("""\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d+"""))
-        if (isCidr) return resolveTarget(cleaned)
-
-        // ─── Partial prefix: "192." or "192.168." → scan ALL matching subnets ───
-        if (cleaned.endsWith(".")) {
-            val hasOneOctet = cleaned.matches(Regex("""\d{1,3}\."""))
-            val hasTwoOctets = cleaned.matches(Regex("""\d{1,3}\.\d{1,3}\."""))
-            if (hasOneOctet || hasTwoOctets) {
-                val parts = cleaned.trimEnd('.').split(".")
-                when {
-                    // "192." → scan ALL 192.x.x.x (one /24 per /16 subnet)
-                    parts.size == 1 && parts[0] == "192" -> {
-                        val result = mutableListOf<String>()
-                        for (second in 0..255) {
-                            for (last in 1..254) result.add("192.${second}.0.${last}")
-                        }
-                        return result
-                    }
-                    // "192.168." → scan all 192.168.x.x (256 /24 subnets)
-                    parts.size == 2 && parts[0] == "192" && parts[1] == "168" -> {
-                        val result = mutableListOf<String>()
-                        for (third in 0..255) {
-                            for (last in 1..254) result.add("192.168.${third}.${last}")
-                        }
-                        return result
-                    }
-                    // "192.168.5." → scan specific subnet 192.168.5.x
-                    parts.size == 3 -> {
-                        val prefix = cleaned.trimEnd('.')
-                        return (1..254).map { "${prefix}.${it}" }
-                    }
-                    // "10." → scan first 16 /16 subnets of 10.x.x.x
-                    parts.size == 1 && parts[0] == "10" -> {
-                        val result = mutableListOf<String>()
-                        for (second in 0..15) {
-                            for (last in 1..254) result.add("10.${second}.0.${last}")
-                        }
-                        return result
-                    }
-                    // "10.5." → scan all 10.5.x.x (256 /24 subnets)
-                    parts.size == 2 && parts[0] == "10" -> {
-                        val result = mutableListOf<String>()
-                        for (third in 0..255) {
-                            for (last in 1..254) result.add("10.${parts[1]}.${third}.${last}")
-                        }
-                        return result
-                    }
-                    // "172." or "172.16." → scan 172.16.x.x
-                    parts.size == 1 && parts[0] == "172" -> {
-                        val result = mutableListOf<String>()
-                        for (last in 1..254) result.add("172.16.0.${last}")
-                        return result
-                    }
-                    parts.size == 2 && parts[0] == "172" -> {
-                        val result = mutableListOf<String>()
-                        for (last in 1..254) result.add(cleaned.trimEnd('.') + ".0." + last)
-                        return result
-                    }
-                    // Other prefixes → use local subnet
-                    else -> {
-                        val localPrefix = getLocalNetworkPrefix()
-                        if (localPrefix != null) return (1..254).map { "${localPrefix}.${it}" }
-                        else return emptyList()
-                    }
-                }
-            }
+        val subnets = expandTargetSubnets(input)
+        if (subnets.isEmpty() || subnets.size > 512) return emptyList()
+        val result = ArrayList<String>(subnets.size * 254)
+        for (subnet in subnets) {
+            for (i in 1..254) result.add("$subnet.$i")
         }
-
-        if (cleaned.contains("/")) cleaned = cleaned.substringBefore("/")
-        cleaned = cleaned.substringBefore(":")
-        cleaned = cleaned.trimEnd('.')
-
-        if (cleaned.contains("-")) return resolveTarget(cleaned)
-
-        // Full single IP → scan its /24 subnet
-        val ipRegex = Regex("""^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$""")
-        if (ipRegex.matches(cleaned)) {
-            val prefix = cleaned.substringBeforeLast(".")
-            return (1..254).map { "${prefix}.${it}" }
-        }
-
-        // Domain name
-        try {
-            val addr = InetAddress.getByName(cleaned)
-            val ip = addr.hostAddress ?: cleaned
-            if (ipRegex.matches(ip)) {
-                val prefix = ip.substringBeforeLast(".")
-                return (1..254).map { "${prefix}.${it}" }
-            }
-            return listOf(ip)
-        } catch (_: Exception) {
-            return listOf(cleaned)
-        }
+        return result
     }
 
     fun arpScan(subnet: String): Set<String> {
@@ -237,7 +255,6 @@ object NetworkUtils {
         val subnets = targets.map { it.substringBeforeLast(".") }.distinct()
         val isWide = subnets.size > 4 || targets.size > MAX_WIDE_IPS
         if (isWide) {
-            // For wide scans, use fast TCP discovery instead of ARP (which is local-only)
             return tcpQuickScan(targets, 300)
         }
         val localIp = getLocalIp()
@@ -276,41 +293,16 @@ object NetworkUtils {
 
     /**
      * Discover live hosts from a list of target IPs.
-     * Handles single /24 subnet (fast arpScan) and multi-subnet (wide scan).
      */
     fun discoverLiveHosts(ips: List<String>): Set<String> {
         if (ips.size <= 1) return ips.toSet()
         val subnets = ips.map { it.substringBeforeLast(".") }.distinct()
         if (subnets.size <= 1) {
-            // Single subnet: fast ARP scan
             return arpScan(subnets.first() + ".")
         } else if (subnets.size <= 256 && ips.size <= MAX_WIDE_IPS) {
-            // Multi-subnet: wide parallel scan via TCP
             return tcpQuickScan(ips, 300).toSet()
         }
-        // Too many IPs → return all (skip pre-filter)
         return ips.toSet()
-    }
-
-    /**
-     * Fast wide scan for large IP ranges like 192.168.x.x (65024 IPs).
-     */
-    fun filterLiveHostsWide(prefix: String, thirdRange: IntRange = 0..255): List<String> {
-        val live = Collections.synchronizedSet(mutableSetOf<String>())
-        val pool = Executors.newFixedThreadPool(100)
-        for (third in thirdRange) {
-            for (last in 1..254) {
-                val ip = "$prefix.$third.$last"
-                pool.execute {
-                    try {
-                        if (InetAddress.getByName(ip).isReachable(100)) live.add(ip)
-                    } catch (_: Exception) { }
-                }
-            }
-        }
-        pool.shutdown()
-        try { pool.awaitTermination(60, TimeUnit.SECONDS) } catch (_: Exception) { }
-        return live.toList().sorted()
     }
 
     fun getLocalGateway(): String? {

@@ -19,6 +19,7 @@ class ScannerManager {
     fun scan(type: ScanType, target: String, customPorts: IntArray? = null): Flow<ScanEvent> = channelFlow {
         currentJob?.cancel()
         currentJob = null
+        ScanPause.resume() // scan baru mulai dalam keadaan tidak paused
 
         val scanJob = launch(Dispatchers.IO) {
             try {
@@ -50,9 +51,13 @@ class ScannerManager {
             throw e
         } finally {
             currentJob = null
+            ScanPause.resume()
         }
     }
 
-    fun stop() { currentJob?.cancel(); currentJob = null }
+    fun pause() { ScanPause.pause() }
+    fun resume() { ScanPause.resume() }
+    fun isPaused(): Boolean = ScanPause.paused
+    fun stop() { currentJob?.cancel(); currentJob = null; ScanPause.resume() }
     fun isRunning(): Boolean = currentJob?.isActive == true
 }

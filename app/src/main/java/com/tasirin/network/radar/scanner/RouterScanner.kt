@@ -17,54 +17,50 @@ class RouterScanner {
     )
 
     fun scan(target: String): Flow<ScanEvent> = flow {
-        val ips = NetworkUtils.autoExpandTarget(target)
-        if (ips.isEmpty()) {
+        val subnets = NetworkUtils.expandTargetSubnets(target)
+        if (subnets.isEmpty()) {
             emit(ScanEvent.Error("No IPs to scan"))
             return@flow
         }
 
-        val subnets = ips.map { it.substringBeforeLast(".") }.distinct()
-        val isWide = subnets.size > 4 || ips.size > NetworkUtils.MAX_WIDE_IPS
-
-        var scanIps = ips.toList()
-        if (!isWide && ips.size > 1) {
-            emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
-            val live = NetworkUtils.discoverLiveHosts(ips)
-            if (live.isNotEmpty()) {
-                scanIps = ips.filter { it in live }
-                if (scanIps.isEmpty()) scanIps = ips.take(10)
-            }
-        } else if (isWide) {
-            emit(ScanEvent.Progress("Wide scan: ${ips.size} IPs in ${subnets.size} subnets", 0, ips.size))
-        }
-
-        val total = scanIps.size
+        val total = subnets.size * 254L
+        val isWide = subnets.size > 4
+        val hostConcurrency = if (isWide) 20 else 5
         val arpTable = NetworkUtils.readArpTable()
-        val hostConcurrency = if (isWide) 20 else 1
+        var completed = 0L
 
-        scanIps.chunked(hostConcurrency).forEach { batch ->
-            val batchResults = withContext(Dispatchers.IO) {
-                batch.map { ip ->
-                    async {
-                        val mac = arpTable[ip]
-                        val vendor = NetworkUtils.lookupMacVendor(mac)
-                        val hostname = try {
-                            kotlinx.coroutines.withTimeout(300) {
-                                java.net.InetAddress.getByName(ip).hostName
-                            }.let { if (it != ip) it else null }
-                        } catch (_: Exception) { null }
-                        val foundServices = scanRouterPorts(ip)
-                        if (foundServices.isNotEmpty()) {
-                            HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-                                macVendor = vendor, isAlive = true, openPorts = foundServices)
-                        } else null
-                    }
-                }.awaitAll()
+        emit(ScanEvent.Progress("Router scan ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
+
+        subnets.forEach { subnet ->
+            ScanPause.checkPause()
+            val ips = NetworkUtils.expandSubnetHosts(subnet)
+            val liveIps = if (isWide) ips else NetworkUtils.discoverLiveHosts(ips).toList()
+            val scanIps = if (liveIps.isNotEmpty()) liveIps else ips.take(10)
+
+            val results = withContext(Dispatchers.IO) {
+                scanIps.chunked(hostConcurrency).map { chunk ->
+                    chunk.map { ip ->
+                        async {
+                            val mac = arpTable[ip]
+                            val vendor = NetworkUtils.lookupMacVendor(mac)
+                            val hostname = try {
+                                kotlinx.coroutines.withTimeout(300) {
+                                    java.net.InetAddress.getByName(ip).hostName
+                                }.let { if (it != ip) it else null }
+                            } catch (_: Exception) { null }
+                            val foundServices = scanRouterPorts(ip)
+                            if (foundServices.isNotEmpty()) {
+                                HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+                                    macVendor = vendor, isAlive = true, openPorts = foundServices)
+                            } else null
+                        }
+                    }.awaitAll()
+                }.flatten()
             }
-            var idx = 0
-            batchResults.forEach { host ->
-                emit(ScanEvent.Progress(host?.ip ?: batch[0], idx, total))
-                idx++
+
+            results.forEach { host ->
+                completed++
+                emit(ScanEvent.Progress(host?.ip ?: subnet, completed.toInt(), total.toInt()))
                 if (host != null) emit(ScanEvent.HostFound(host))
             }
         }

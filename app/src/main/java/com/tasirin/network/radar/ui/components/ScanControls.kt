@@ -98,6 +98,8 @@ fun ScanButtonRow(
 fun ActionButtons(
     isScanning: Boolean,
     onStop: () -> Unit,
+    isPaused: Boolean = false,
+    onPauseResume: (() -> Unit)? = null,
     hasResults: Boolean = false,
     onCopyAll: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -106,6 +108,19 @@ fun ActionButtons(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        if (isScanning && onPauseResume != null) {
+            Button(
+                onClick = onPauseResume,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isPaused) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.tertiary
+                ),
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(vertical = 8.dp)
+            ) {
+                Text(if (isPaused) "Resume" else "Pause", fontSize = 12.sp)
+            }
+        }
         Button(
             onClick = onStop,
             enabled = isScanning,

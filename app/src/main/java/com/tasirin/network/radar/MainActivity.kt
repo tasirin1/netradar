@@ -40,6 +40,9 @@ class MainActivity : AppCompatActivity() {
                             viewModel.startScan(type)
                         },
                         onStop = { viewModel.stopScan() },
+                        onPauseResume = {
+                            if (state.isPaused) viewModel.resumeScan() else viewModel.pauseScan()
+                        },
                         onToggleTheme = { viewModel.toggleDarkTheme() },
                         onCopyIp = { ip -> viewModel.copyToClipboard("IP", ip) },
                         onCopyAll = {

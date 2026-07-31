@@ -185,6 +185,7 @@ class UrlPathScanner {
         // Parallel scanning: process paths in batches of 30
         withContext(Dispatchers.IO) {
             paths.chunked(30).forEach { batch ->
+                ScanPause.checkPause()
                 val deferred = batch.map { path ->
                     async {
                         val url = baseUrl.trimEnd('/') + path

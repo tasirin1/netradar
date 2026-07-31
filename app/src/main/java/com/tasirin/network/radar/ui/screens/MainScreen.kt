@@ -27,6 +27,7 @@ fun MainScreen(
     onTargetChange: (String) -> Unit,
     onScan: (ScanType) -> Unit,
     onStop: () -> Unit,
+    onPauseResume: (() -> Unit)? = null,
     onToggleTheme: () -> Unit,
     onCopyIp: ((String) -> Unit)? = null,
     onCopyAll: (() -> Unit)? = null,
@@ -136,10 +137,12 @@ fun MainScreen(
             ScanButtonRow(isScanning = state.isScanning, onScan = onScan)
             Spacer(Modifier.height(4.dp))
 
-            // ─── Stop + Copy All ───
+            // ─── Pause + Stop + Copy All ───
             ActionButtons(
                 isScanning = state.isScanning,
                 onStop = onStop,
+                isPaused = state.isPaused,
+                onPauseResume = onPauseResume,
                 hasResults = state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty(),
                 onCopyAll = onCopyAll
             )
