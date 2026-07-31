@@ -37,30 +37,33 @@ class DiscoverScanner {
         val hostConcurrency = if (isWide) 20 else 1
 
         scanIps.chunked(hostConcurrency).forEach { batch ->
-            coroutineScope {
+            val batchResults = withContext(Dispatchers.IO) {
                 batch.map { ip ->
-                    async(Dispatchers.IO) {
+                    async {
                         val alive = PingUtil.ping(ip, 500) != null
                         if (!alive) return@async null
 
                         val mac = arpTable[ip]
                         val vendor = NetworkUtils.lookupMacVendor(mac)
                         val hostname = try {
-                            val hn = java.net.InetAddress.getByName(ip).hostName
-                            if (hn != ip) hn else null
+                            kotlinx.coroutines.withTimeout(300) {
+                                java.net.InetAddress.getByName(ip).hostName
+                            }.let { if (it != ip) it else null }
                         } catch (_: Exception) { null }
 
                         val services = scanDiscoverPorts(ip)
                         if (services.isNotEmpty()) {
-                            HostInfo(ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
-                                isAlive = true, openPorts = services)
+                            HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+                                macVendor = vendor, isAlive = true, openPorts = services)
                         } else null
                     }
-                }.forEachIndexed { idx, deferred ->
-                    val host = deferred.await()
-                    send(ScanEvent.Progress(host?.ip ?: "", idx, total))
-                    if (host != null) send(ScanEvent.HostFound(host))
-                }
+                }.awaitAll()
+            }
+            var idx = 0
+            batchResults.forEach { host ->
+                send(ScanEvent.Progress(host?.ip ?: batch[0], idx, total))
+                idx++
+                if (host != null) send(ScanEvent.HostFound(host))
             }
         }
 

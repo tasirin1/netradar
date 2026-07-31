@@ -18,7 +18,6 @@ class PingSweep {
         val isWide = ips.size > 1024 || ips.map { it.substringBeforeLast(".") }.distinct().size > 4
         var scanIps = ips.toList()
 
-        // Only pre-filter for small scans (single subnet or a few IPs)
         if (!isWide && ips.size > 1) {
             emit(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
             val live = NetworkUtils.discoverLiveHosts(ips)
@@ -33,12 +32,11 @@ class PingSweep {
         val total = scanIps.size
         var completed = 0
         val arpTable = NetworkUtils.readArpTable()
-
-        // Parallel batch scanning for wide scans
         val batchSize = if (isWide) 50 else 1
 
+        // ★ Fix: collect results inside coroutineScope, emit OUTSIDE
         scanIps.chunked(batchSize).forEach { batch ->
-            coroutineScope {
+            val batchResults = coroutineScope {
                 batch.map { ip ->
                     async(Dispatchers.IO) {
                         val latency = PingUtil.ping(ip)
@@ -46,28 +44,21 @@ class PingSweep {
                             val mac = arpTable[ip]
                             val vendor = NetworkUtils.lookupMacVendor(mac)
                             val hostname = try {
-                                val hn = java.net.InetAddress.getByName(ip).hostName
-                                if (hn != ip) hn else null
+                                kotlinx.coroutines.withTimeout(300) {
+                                    java.net.InetAddress.getByName(ip).hostName
+                                }.let { if (it != ip) it else null }
                             } catch (_: Exception) { null }
-
-                            HostInfo(
-                                ip = ip,
-                                hostname = hostname,
-                                macAddress = mac,
-                                macVendor = vendor,
-                                latencyMs = latency,
-                                isAlive = true
-                            )
+                            HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+                                macVendor = vendor, latencyMs = latency, isAlive = true)
                         } else null
                     }
-                }.forEach { deferred ->
-                    val host = deferred.await()
-                    completed++
-                    emit(ScanEvent.Progress(host?.ip ?: "", completed, total))
-                    if (host != null) {
-                        emit(ScanEvent.HostFound(host))
-                    }
-                }
+                }.map { it.await() }
+            }
+            // Emit hasil setelah coroutineScope selesai
+            batchResults.forEach { host ->
+                completed++
+                emit(ScanEvent.Progress(host?.ip ?: "", completed, total))
+                if (host != null) emit(ScanEvent.HostFound(host))
             }
         }
 

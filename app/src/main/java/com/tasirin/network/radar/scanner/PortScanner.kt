@@ -9,7 +9,6 @@ import java.io.InputStreamReader
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.util.concurrent.Semaphore
 
 class PortScanner {
 
@@ -37,7 +36,6 @@ class PortScanner {
 
         var scanIps = ips.toList()
 
-        // Pre-filter live hosts only for small scans
         if (!isWide && ips.size > 1) {
             emit(ScanEvent.Progress("Discovering live hosts (${subnets.size} subnet(s))...", 0, ips.size))
             val live = if (subnets.size <= 1) {
@@ -54,54 +52,49 @@ class PortScanner {
             emit(ScanEvent.Progress("Wide scan: ${ips.size} IPs in ${subnets.size} subnets", 0, ips.size))
         }
 
-        val semaphore = Semaphore(30)
         val arpTable = NetworkUtils.readArpTable()
         var progressIdx = 0
-
-        // Parallel host scanning with bounded concurrency
         val hostConcurrency = if (isWide) 30 else 1
 
+        // ★ Fix: kumpulin hasil batch dulu, emit setelah coroutineScope
         scanIps.chunked(hostConcurrency).forEach { batch ->
-            coroutineScope {
+            val batchResults = withContext(Dispatchers.IO) {
                 batch.map { ip ->
-                    async(Dispatchers.IO) {
+                    async {
                         val hostname = try {
-                            val hn = InetAddress.getByName(ip).hostName
-                            if (hn != ip) hn else null
+                            kotlinx.coroutines.withTimeout(300) {
+                                InetAddress.getByName(ip).hostName
+                            }.let { if (it != ip) it else null }
                         } catch (_: Exception) { null }
 
                         val mac = arpTable[ip]
                         val vendor = NetworkUtils.lookupMacVendor(mac)
-                        val openPorts = scanHostPorts(ip, ports, semaphore)
+                        // Hapus Semaphore blocking → pake kotlinx coroutine async biasa
+                        val openPorts = scanHostPorts(ip, ports)
 
                         if (openPorts.isNotEmpty()) {
-                            HostInfo(
-                                ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
-                                isAlive = true, openPorts = openPorts
-                            )
+                            HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+                                macVendor = vendor, isAlive = true, openPorts = openPorts)
                         } else null
                     }
-                }.forEach { deferred ->
-                    val host = deferred.await()
-                    progressIdx++
-                    emit(ScanEvent.Progress(host?.ip ?: batch[0], progressIdx, scanIps.size))
-                    if (host != null) {
-                        emit(ScanEvent.HostFound(host))
-                    }
-                }
+                }.awaitAll()
+            }
+            // Emit dari flow context (aman)
+            batchResults.forEach { host ->
+                progressIdx++
+                emit(ScanEvent.Progress(host?.ip ?: batch[0], progressIdx, scanIps.size))
+                if (host != null) emit(ScanEvent.HostFound(host))
             }
         }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.PORT_SCAN, target = target)))
     }
 
-    private suspend fun scanHostPorts(ip: String, ports: IntArray, semaphore: Semaphore): List<PortInfo> = withContext(Dispatchers.IO) {
+    // ★ Fix: pake Dispatchers.IO + awaitAll, tanpa blocking Semaphore
+    private suspend fun scanHostPorts(ip: String, ports: IntArray): List<PortInfo> = withContext(Dispatchers.IO) {
         coroutineScope {
             ports.map { port ->
-                async {
-                    semaphore.acquire()
-                    try { scanPort(ip, port) } finally { semaphore.release() }
-                }
+                async { scanPort(ip, port) }
             }.mapNotNull { it.await() }
         }
     }
