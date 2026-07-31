@@ -12,6 +12,7 @@ class ScannerManager {
     private val urlPathScanner = UrlPathScanner()
     private val discoverScanner = DiscoverScanner()
     private val pingSweep = PingSweep()
+    private val tracerouteScanner = TracerouteScanner()
 
     @Volatile
     private var currentJob: Job? = null
@@ -33,6 +34,7 @@ class ScannerManager {
                     ScanType.URL_PATH -> urlPathScanner.scan(target)
                     ScanType.DISCOVER -> discoverScanner.scan(target)
                     ScanType.PING -> pingSweep.scan(target)
+                    ScanType.TRACE -> tracerouteScanner.scan(target)
                     ScanType.MONITOR -> emptyFlow()
                 }
                 scannerFlow.collect { event -> send(event) }

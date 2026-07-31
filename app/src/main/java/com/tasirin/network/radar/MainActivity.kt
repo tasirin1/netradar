@@ -1,11 +1,13 @@
 package com.tasirin.network.radar
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -23,6 +25,14 @@ class MainActivity : AppCompatActivity() {
         setContent {
             val viewModel: ScanViewModel = viewModel()
             val state = viewModel.state.collectAsStateWithLifecycle().value
+
+            // Cegah layar mati saat scanning / monitoring
+            LaunchedEffect(state.isScanning, state.monitor.isRunning) {
+                if (state.isScanning || state.monitor.isRunning)
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
 
             NetRadarTheme(darkThemeOverride = state.isDarkTheme) {
                 Surface(
@@ -53,6 +63,8 @@ class MainActivity : AppCompatActivity() {
                         onAbout = { viewModel.toggleAbout() },
                         onCustomPorts = { ports -> viewModel.setCustomPorts(ports) },
                         onToggleCustomPorts = { viewModel.toggleCustomPorts() },
+                        selectedProfile = state.selectedProfile,
+                        onSelectProfile = { profile -> viewModel.setPortProfile(profile) },
                         onSelectInterface = { name -> viewModel.selectInterface(name) }
                     )
                 }

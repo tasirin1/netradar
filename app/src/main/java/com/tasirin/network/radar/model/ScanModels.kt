@@ -37,6 +37,7 @@ enum class ScanType(val label: String) {
     URL_PATH("URL Path"),
     DISCOVER("Discover"),
     PING("Ping Sweep"),
+    TRACE("Traceroute"),
     MONITOR("Monitor")
 }
 
@@ -84,6 +85,15 @@ sealed class ScanEvent {
     data class UrlFound(val url: UrlDiscovery) : ScanEvent()
     data class Error(val message: String) : ScanEvent()
     data class Complete(val result: ScanResult) : ScanEvent()
+}
+
+/** Preset port profile untuk scan cepat. DEFAULT = daftar default parser. */
+enum class PortProfile(val label: String, val ports: IntArray) {
+    DEFAULT("Default", PortRangeParser.defaultPorts),
+    WEB("Web", intArrayOf(80, 443, 8080, 8443, 81, 8000, 8888, 3000, 5000, 9000)),
+    CCTV("CCTV", intArrayOf(80, 443, 554, 8554, 8000, 8080, 8899, 34567, 37215, 37777)),
+    IOT("IoT", intArrayOf(22, 23, 53, 80, 443, 502, 623, 2323, 6666, 7547)),
+    DB("DB", intArrayOf(3306, 5432, 1433, 1521, 6379, 27017, 11211, 9042, 9200, 8443))
 }
 
 object PortRangeParser {

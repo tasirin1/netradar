@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.*
 data class ScanUiState(
     val target: String = "",
     val customPorts: String = "",
+    val selectedProfile: PortProfile = PortProfile.DEFAULT,
     val showCustomPorts: Boolean = false,
     val isScanning: Boolean = false,
     val isPaused: Boolean = false,
@@ -86,6 +87,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTarget(target: String) { _state.update { it.copy(target = target) } }
     fun setCustomPorts(ports: String) { _state.update { it.copy(customPorts = ports) } }
+    fun setPortProfile(profile: PortProfile) { _state.update { it.copy(selectedProfile = profile) } }
     fun toggleCustomPorts() { _state.update { it.copy(showCustomPorts = !it.showCustomPorts) } }
     fun toggleAbout() { _state.update { it.copy(showAbout = !it.showAbout) } }
 
@@ -168,13 +170,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun useCustomPortsForScan() {
+        val profile = _state.value.selectedProfile
         val custom = _state.value.customPorts
-        if (custom.isNotBlank()) {
-            val parsed = PortRangeParser.parse(custom)
-            // Pass to PortScanner via a custom static field
-            com.tasirin.network.radar.scanner.PortScanner.customPortsOverride = parsed
-        } else {
-            com.tasirin.network.radar.scanner.PortScanner.customPortsOverride = null
+        com.tasirin.network.radar.scanner.PortScanner.customPortsOverride = when {
+            profile != PortProfile.DEFAULT -> profile.ports
+            custom.isNotBlank() -> PortRangeParser.parse(custom)
+            else -> null
         }
     }
 

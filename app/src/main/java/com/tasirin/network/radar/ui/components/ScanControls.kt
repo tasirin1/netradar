@@ -44,6 +44,7 @@ fun ScanButtonRow(
         ScanType.URL_PATH to "URL Path",
         ScanType.DISCOVER to "Discover",
         ScanType.PING to "Ping Sweep",
+        ScanType.TRACE to "Trace",
         ScanType.MONITOR to "Monitor"
     )
 
@@ -87,8 +88,8 @@ fun ScanButtonRow(
                     Text(text = label, fontSize = 10.sp, maxLines = 1)
                 }
             }
-            // Fill remaining slot
-            Spacer(Modifier.weight(1f))
+            // Isi slot kosong bila jumlah tombol baris kedua < 4
+            if (buttons.size - 4 < 4) Spacer(Modifier.weight(1f))
         }
     }
 }

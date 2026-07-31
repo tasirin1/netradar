@@ -38,6 +38,8 @@ fun MainScreen(
     onAbout: (() -> Unit)? = null,
     onCustomPorts: ((String) -> Unit)? = null,
     onToggleCustomPorts: (() -> Unit)? = null,
+    selectedProfile: PortProfile = PortProfile.DEFAULT,
+    onSelectProfile: ((PortProfile) -> Unit)? = null,
     onSelectInterface: ((String) -> Unit)? = null
 ) {
     // About dialog
@@ -119,6 +121,20 @@ fun MainScreen(
                     )
                     Spacer(Modifier.width(4.dp))
                     Text("Custom Ports", fontSize = 11.sp)
+                }
+            }
+
+            // Preset Port Profile
+            if (onSelectProfile != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PortProfile.entries.forEach { profile ->
+                        FilterChip(
+                            selected = state.selectedProfile == profile,
+                            onClick = { onSelectProfile(profile) },
+                            label = { Text(profile.label, fontSize = 10.sp) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
                 }
             }
 
@@ -363,8 +379,10 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         Spacer(Modifier.height(6.dp))
                         Text("Tips:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Spacer(Modifier.height(4.dp))
+                        HelpBullet("Preset ports: Web / CCTV / IoT / DB")
                         HelpBullet("Use Custom Ports for specific ports")
                         HelpBullet("Long-press on port chip for port info")
+                        HelpBullet("Traceroute shows each hop (needs ping -t)")
                         HelpBullet("Long-press a host card to delete it")
                         HelpBullet("Results persist until you delete them")
                         HelpBullet("WoL button ⚡ wakes sleeping devices")
