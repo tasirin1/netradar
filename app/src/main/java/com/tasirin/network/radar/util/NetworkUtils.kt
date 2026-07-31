@@ -79,7 +79,7 @@ object NetworkUtils {
 
         // Full IP / domain → one /24 subnet
         cleaned = cleaned.substringBefore(":").trimEnd('.')
-        val ip = resolveToIp(cleaned) ?: return emptyList()
+        val ip = resolveDomain(cleaned) ?: return emptyList()
         return listOf(ip.substringBeforeLast("."))
     }
 
@@ -115,7 +115,8 @@ object NetworkUtils {
         } catch (_: Exception) { return emptyList() }
     }
 
-    private fun resolveToIp(host: String): String? {
+    /** Resolve a hostname/domain to its IPv4 address, or null if it fails. */
+    fun resolveDomain(host: String): String? {
         if (host.isBlank()) return null
         return try {
             val addr = InetAddress.getByName(host)
