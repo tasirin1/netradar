@@ -191,7 +191,8 @@ class UrlPathScanner {
                         url to checkPath(url)
                     }
                 }
-                deferred.forEach { (url, result) ->
+                deferred.forEach { deferred ->
+                    val (url, result) = deferred.await()
                     completed++
                     send(ScanEvent.Progress(url, completed, total))
                     if (result != null) {
