@@ -17,7 +17,12 @@ class ScannerManager {
     @Volatile
     private var currentJob: Job? = null
 
-    fun scan(type: ScanType, target: String, customPorts: IntArray? = null): Flow<ScanEvent> = channelFlow {
+    fun scan(
+        type: ScanType,
+        target: String,
+        customPorts: IntArray? = null,
+        speed: ScanSpeed = ScanSpeed.SEDANG
+    ): Flow<ScanEvent> = channelFlow {
         currentJob?.cancel()
         currentJob = null
         ScanPause.resume() // scan baru mulai dalam keadaan tidak paused
@@ -26,14 +31,14 @@ class ScannerManager {
             try {
                 val scannerFlow = when (type) {
                     ScanType.PORT_SCAN -> {
-                        if (customPorts != null) portScanner.scan(target, customPorts)
-                        else portScanner.scan(target)
+                        if (customPorts != null) portScanner.scan(target, customPorts, speed)
+                        else portScanner.scan(target, speed = speed)
                     }
-                    ScanType.CAMERA -> cameraScanner.scan(target)
-                    ScanType.ROUTER -> routerScanner.scan(target)
+                    ScanType.CAMERA -> cameraScanner.scan(target, speed)
+                    ScanType.ROUTER -> routerScanner.scan(target, speed)
                     ScanType.URL_PATH -> urlPathScanner.scan(target)
-                    ScanType.DISCOVER -> discoverScanner.scan(target)
-                    ScanType.PING -> pingSweep.scan(target)
+                    ScanType.DISCOVER -> discoverScanner.scan(target, speed)
+                    ScanType.PING -> pingSweep.scan(target, speed)
                     ScanType.TRACE -> tracerouteScanner.scan(target)
                     ScanType.MONITOR -> emptyFlow()
                 }

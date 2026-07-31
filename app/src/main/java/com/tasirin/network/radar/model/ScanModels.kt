@@ -113,6 +113,24 @@ sealed class ScanEvent {
     data class Complete(val result: ScanResult) : ScanEvent()
 }
 
+/**
+ * Level sensitivitas scan: mengatur host paralel, timeout koneksi, dan batas socket.
+ * Stabil = paling jinak ke jaringan (sedikit skip, lebih lambat);
+ * Extreme = paling agresif (lebih cepat, risiko skip saat jaringan padat).
+ */
+enum class ScanSpeed(
+    val label: String,
+    val hostWide: Int,
+    val hostLocal: Int,
+    val timeoutMs: Int,
+    val socketPermits: Int
+) {
+    STABIL("Stabil", 15, 5, 400, 150),
+    SEDANG("Sedang", 30, 10, 200, 400),
+    CEPAT("Cepat", 50, 15, 150, 500),
+    EXTREME("Extreme", 80, 20, 100, 600)
+}
+
 /** Preset port profile untuk scan cepat. DEFAULT = daftar default parser. */
 enum class PortProfile(val label: String, val ports: IntArray) {
     DEFAULT("Default", PortRangeParser.defaultPorts),

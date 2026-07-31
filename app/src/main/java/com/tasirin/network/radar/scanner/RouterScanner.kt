@@ -16,7 +16,7 @@ class RouterScanner {
         23, 22, 21, 161, 2601, 2602, 1900
     )
 
-    fun scan(target: String): Flow<ScanEvent> = flow {
+    fun scan(target: String, speed: ScanSpeed = ScanSpeed.SEDANG): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
         if (subnets.isEmpty()) {
             emit(ScanEvent.Error("No IPs to scan"))
@@ -25,7 +25,7 @@ class RouterScanner {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) 20 else 5
+        val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
         var found = 0
@@ -51,7 +51,7 @@ class RouterScanner {
                 coroutineScope {
                     val deferreds = chunk.map { ip ->
                         async {
-                            val foundServices = scanRouterPorts(ip)
+                            val foundServices = scanRouterPorts(ip, speed.timeoutMs)
                             if (foundServices.isEmpty()) return@async (ip to null)
 
                             val mac = arpTable[ip]
@@ -80,19 +80,19 @@ class RouterScanner {
         emit(ScanEvent.Complete(ScanResult(type = ScanType.ROUTER, target = target)))
     }
 
-    private suspend fun scanRouterPorts(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
+    private suspend fun scanRouterPorts(ip: String, timeoutMs: Int): List<PortInfo> = withContext(Dispatchers.IO) {
         coroutineScope {
             routerPorts.map { port ->
-                async { probeRouter(ip, port) }
+                async { probeRouter(ip, port, timeoutMs) }
             }.mapNotNull { it.await() }
         }
     }
 
-    private suspend fun probeRouter(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {
+    private suspend fun probeRouter(ip: String, port: Int, timeoutMs: Int): PortInfo? = withContext(Dispatchers.IO) {
         try {
             val sock = Socket()
-            sock.connect(InetSocketAddress(ip, port), 300)
-            sock.soTimeout = 300
+            sock.connect(InetSocketAddress(ip, port), timeoutMs)
+            sock.soTimeout = timeoutMs
 
             if (port in listOf(80, 443, 8080, 8443)) {
                 try {

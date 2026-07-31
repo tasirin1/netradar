@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.*
 
 class PingSweep {
 
-    fun scan(target: String): Flow<ScanEvent> = flow {
+    fun scan(target: String, speed: ScanSpeed = ScanSpeed.SEDANG): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
         if (subnets.isEmpty()) {
             emit(ScanEvent.Error("No IPs to scan"))
@@ -17,7 +17,7 @@ class PingSweep {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val batchSize = if (isWide) 50 else 10
+        val batchSize = if (isWide) speed.hostWide else speed.hostLocal
         var completed = 0L
         var found = 0
         val startMs = System.currentTimeMillis()

@@ -18,7 +18,7 @@ class CameraScanner {
         8899, 9000, 7070, 6666, 87, 85
     )
 
-    fun scan(target: String): Flow<ScanEvent> = flow {
+    fun scan(target: String, speed: ScanSpeed = ScanSpeed.SEDANG): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
         if (subnets.isEmpty()) {
             emit(ScanEvent.Error("No IPs to scan"))
@@ -27,7 +27,7 @@ class CameraScanner {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) 20 else 5
+        val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
         var found = 0
@@ -53,7 +53,7 @@ class CameraScanner {
                 coroutineScope {
                     val deferreds = chunk.map { ip ->
                         async {
-                            val foundServices = scanCameraPorts(ip)
+                            val foundServices = scanCameraPorts(ip, speed.timeoutMs)
                             if (foundServices.isEmpty()) return@async (ip to null)
 
                             val mac = arpTable[ip]
@@ -82,19 +82,19 @@ class CameraScanner {
         emit(ScanEvent.Complete(ScanResult(type = ScanType.CAMERA, target = target)))
     }
 
-    private suspend fun scanCameraPorts(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
+    private suspend fun scanCameraPorts(ip: String, timeoutMs: Int): List<PortInfo> = withContext(Dispatchers.IO) {
         coroutineScope {
             cameraPorts.map { port ->
-                async { probeCamera(ip, port) }
+                async { probeCamera(ip, port, timeoutMs) }
             }.mapNotNull { it.await() }
         }
     }
 
-    private suspend fun probeCamera(ip: String, port: Int): PortInfo? = withContext(Dispatchers.IO) {
+    private suspend fun probeCamera(ip: String, port: Int, timeoutMs: Int): PortInfo? = withContext(Dispatchers.IO) {
         try {
             val sock = Socket()
-            sock.connect(InetSocketAddress(ip, port), 300)
-            sock.soTimeout = 300
+            sock.connect(InetSocketAddress(ip, port), timeoutMs)
+            sock.soTimeout = timeoutMs
 
             when (port) {
                 554, 8554 -> {
@@ -147,7 +147,7 @@ class CameraScanner {
                         conn.requestMethod = "POST"
                         conn.setRequestProperty("Content-Type", "application/soap+xml")
                         conn.doOutput = true
-                        conn.connectTimeout = 300
+                        conn.connectTimeout = timeoutMs
                         conn.outputStream.write(xml.toByteArray())
                         val resp = conn.inputStream.bufferedReader().readText()
                         conn.disconnect()

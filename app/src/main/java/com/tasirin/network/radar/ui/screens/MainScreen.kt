@@ -46,6 +46,8 @@ fun MainScreen(
     onToggleCustomPorts: (() -> Unit)? = null,
     selectedProfile: PortProfile = PortProfile.DEFAULT,
     onSelectProfile: ((PortProfile) -> Unit)? = null,
+    scanSpeed: ScanSpeed = ScanSpeed.SEDANG,
+    onSelectScanSpeed: ((ScanSpeed) -> Unit)? = null,
     onSearchChange: ((String) -> Unit)? = null,
     onDeviceFilter: ((DeviceFilter) -> Unit)? = null,
     onRescanHost: ((String) -> Unit)? = null,
@@ -161,6 +163,22 @@ fun MainScreen(
                                     selected = state.selectedProfile == profile,
                                     onClick = { onSelectProfile(profile) },
                                     label = { Text(profile.label, fontSize = 10.sp) },
+                                    modifier = Modifier.height(28.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Level sensitivitas scan: host paralel + timeout koneksi
+                    if (onSelectScanSpeed != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Speed", fontSize = 11.sp, color = TextSecondary)
+                            ScanSpeed.entries.forEach { speed ->
+                                FilterChip(
+                                    selected = state.scanSpeed == speed,
+                                    onClick = { onSelectScanSpeed(speed) },
+                                    label = { Text(speed.label, fontSize = 10.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                             }

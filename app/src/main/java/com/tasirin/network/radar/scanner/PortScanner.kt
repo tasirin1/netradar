@@ -18,11 +18,12 @@ class PortScanner {
         var customPortsOverride: IntArray? = null
     }
 
-    // Batasi total socket terbuka bersamaan. Terlalu tinggi (60 host x 50 port) justru
-    // membuat AP/router kewalahan → SYN dropped → connect timeout → port ke-skip.
-    private val socketPermits = Semaphore(400)
 
-    fun scan(target: String, ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts): Flow<ScanEvent> = flow {
+    fun scan(
+        target: String,
+        ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts,
+        speed: ScanSpeed = ScanSpeed.SEDANG
+    ): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
         if (subnets.isEmpty()) {
             emit(ScanEvent.Error("No IPs to scan"))
@@ -31,7 +32,8 @@ class PortScanner {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) 30 else 10
+        val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
+        val permits = Semaphore(speed.socketPermits)
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
         var found = 0
@@ -59,7 +61,7 @@ class PortScanner {
                         async {
                             // Port scan dulu — DNS reverse lookup HANYA untuk host yang ketemu
                             // (DNS per-IP bikin subnet lambat/macet, padahal mayoritas mati)
-                            val openPorts = scanHostPorts(ip, ports)
+                            val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
                             if (openPorts.isEmpty()) return@async (ip to null)
 
                             val hostname = try {
@@ -89,31 +91,37 @@ class PortScanner {
     }
 
     /** Scan satu host saja (dipakai untuk rescan per-host). */
-    suspend fun scanHost(ip: String, ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts): HostInfo? {
+    suspend fun scanHost(
+        ip: String,
+        ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts,
+        speed: ScanSpeed = ScanSpeed.SEDANG
+    ): HostInfo? {
         val hostname = try {
             withTimeout(300) { InetAddress.getByName(ip).hostName }.let { if (it != ip) it else null }
         } catch (_: Exception) { null }
         val mac = NetworkUtils.readArpTable()[ip]
         val vendor = NetworkUtils.lookupMacVendor(mac)
-        val openPorts = scanHostPorts(ip, ports)
+        val permits = Semaphore(speed.socketPermits)
+        val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
         return if (openPorts.isNotEmpty()) HostInfo(ip = ip, hostname = hostname, macAddress = mac,
             macVendor = vendor, isAlive = true, openPorts = openPorts) else null
     }
 
-    private suspend fun scanHostPorts(ip: String, ports: IntArray): List<PortInfo> = withContext(Dispatchers.IO) {
-        coroutineScope {
-            ports.map { port ->
-                async { scanPort(ip, port) }
-            }.mapNotNull { it.await() }
+    private suspend fun scanHostPorts(ip: String, ports: IntArray, timeoutMs: Int, permits: Semaphore): List<PortInfo> =
+        withContext(Dispatchers.IO) {
+            coroutineScope {
+                ports.map { port ->
+                    async { scanPort(ip, port, timeoutMs, permits) }
+                }.mapNotNull { it.await() }
+            }
         }
-    }
 
     /** Connect dengan 1x retry jika timeout (host padat/AP kewalahan → SYN dropped). */
-    private fun connectWithRetry(ip: String, port: Int): Socket? {
-        fun tryConnect(timeoutMs: Int): Socket? {
+    private fun connectWithRetry(ip: String, port: Int, timeoutMs: Int): Socket? {
+        fun tryConnect(t: Int): Socket? {
             val sock = Socket()
             return try {
-                sock.connect(InetSocketAddress(ip, port), timeoutMs)
+                sock.connect(InetSocketAddress(ip, port), t)
                 sock.soTimeout = 150
                 sock
             } catch (_: Exception) {
@@ -121,13 +129,13 @@ class PortScanner {
                 null
             }
         }
-        return tryConnect(200) ?: tryConnect(400)
+        return tryConnect(timeoutMs) ?: tryConnect(timeoutMs * 2)
     }
 
-    private fun scanPort(ip: String, port: Int): PortInfo? {
-        socketPermits.acquire()
+    private fun scanPort(ip: String, port: Int, timeoutMs: Int, permits: Semaphore): PortInfo? {
+        permits.acquire()
         try {
-            val sock = connectWithRetry(ip, port)
+            val sock = connectWithRetry(ip, port, timeoutMs)
             if (sock == null) return null
             try {
                 var banner: String? = null
@@ -151,7 +159,7 @@ class PortScanner {
         } catch (_: Exception) {
             return null
         } finally {
-            socketPermits.release()
+            permits.release()
         }
     }
 

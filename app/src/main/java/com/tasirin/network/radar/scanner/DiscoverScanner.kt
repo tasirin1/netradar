@@ -10,7 +10,7 @@ class DiscoverScanner {
 
     private val sharePorts = intArrayOf(21, 445, 139, 2049, 111, 135)
 
-    fun scan(target: String): Flow<ScanEvent> = channelFlow {
+    fun scan(target: String, speed: ScanSpeed = ScanSpeed.SEDANG): Flow<ScanEvent> = channelFlow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
         if (subnets.isEmpty()) {
             send(ScanEvent.Error("No IPs to scan"))
@@ -19,7 +19,7 @@ class DiscoverScanner {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) 20 else 5
+        val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
         var found = 0
@@ -56,7 +56,7 @@ class DiscoverScanner {
                                 }.let { if (it != ip) it else null }
                             } catch (_: Exception) { null }
 
-                            val services = scanDiscoverPorts(ip)
+                            val services = scanDiscoverPorts(ip, speed.timeoutMs)
                             ip to if (services.isNotEmpty()) {
                                 HostInfo(ip = ip, hostname = hostname, macAddress = mac,
                                     macVendor = vendor, isAlive = true, openPorts = services)
@@ -78,7 +78,7 @@ class DiscoverScanner {
         send(ScanEvent.Complete(ScanResult(type = ScanType.DISCOVER, target = target)))
     }
 
-    private suspend fun scanDiscoverPorts(ip: String): List<PortInfo> = withContext(Dispatchers.IO) {
+    private suspend fun scanDiscoverPorts(ip: String, timeoutMs: Int): List<PortInfo> = withContext(Dispatchers.IO) {
         val cameraPorts = intArrayOf(80, 554, 34567, 37777, 37215, 8080, 8899, 8554)
         val routerPorts = intArrayOf(8291, 7547, 5000, 23, 22, 161, 1900)
         val allPorts = (cameraPorts + routerPorts + sharePorts).distinct().toList()
@@ -88,7 +88,7 @@ class DiscoverScanner {
                 async {
                     try {
                         val sock = java.net.Socket()
-                        sock.connect(java.net.InetSocketAddress(ip, port), 200)
+                        sock.connect(java.net.InetSocketAddress(ip, port), timeoutMs)
                         sock.close()
                         val service = detectService(port)
                         if (service != null) PortInfo(port, service) else null

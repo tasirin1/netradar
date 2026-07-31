@@ -79,6 +79,8 @@ class MainActivity : AppCompatActivity() {
                         onToggleCustomPorts = { viewModel.toggleCustomPorts() },
                         selectedProfile = state.selectedProfile,
                         onSelectProfile = { profile -> viewModel.setPortProfile(profile) },
+                        scanSpeed = state.scanSpeed,
+                        onSelectScanSpeed = { speed -> viewModel.setScanSpeed(speed) },
                         onSearchChange = { q -> viewModel.setSearchQuery(q) },
                         onDeviceFilter = { f -> viewModel.setDeviceFilter(f) },
                         onRescanHost = { ip -> viewModel.rescanHost(ip) },

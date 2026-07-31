@@ -27,6 +27,7 @@ data class ScanUiState(
     val target: String = "",
     val customPorts: String = "",
     val selectedProfile: PortProfile = PortProfile.DEFAULT,
+    val scanSpeed: ScanSpeed = ScanSpeed.SEDANG,
     val showCustomPorts: Boolean = false,
     val isScanning: Boolean = false,
     val isPaused: Boolean = false,
@@ -108,6 +109,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun setTarget(target: String) { _state.update { it.copy(target = target) } }
     fun setCustomPorts(ports: String) { _state.update { it.copy(customPorts = ports) } }
     fun setPortProfile(profile: PortProfile) { _state.update { it.copy(selectedProfile = profile) } }
+    fun setScanSpeed(speed: ScanSpeed) { _state.update { it.copy(scanSpeed = speed) } }
     fun setSearchQuery(query: String) { _state.update { it.copy(searchQuery = query) } }
     fun setDeviceFilter(filter: DeviceFilter) { _state.update { it.copy(deviceFilter = filter) } }
     fun toggleCustomPorts() { _state.update { it.copy(showCustomPorts = !it.showCustomPorts) } }
@@ -139,7 +141,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                scannerManager.scan(type, target).collect { event ->
+                scannerManager.scan(type, target, speed = _state.value.scanSpeed).collect { event ->
                     when (event) {
                         is ScanEvent.Progress -> {
                             val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
@@ -325,7 +327,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(summary = "Scan ulang $ip...", summaryColor = 0xFF00695C, isSummaryOk = true) }
         viewModelScope.launch {
             try {
-                val host = withContext(Dispatchers.IO) { portScanner.scanHost(ip) }
+                val host = withContext(Dispatchers.IO) { portScanner.scanHost(ip, speed = _state.value.scanSpeed) }
                 val ports = host?.openPorts?.size ?: 0
                 if (host != null) _hosts[ip] = host
                 _state.update {
