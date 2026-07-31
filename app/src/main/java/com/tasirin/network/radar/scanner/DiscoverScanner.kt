@@ -27,9 +27,14 @@ class DiscoverScanner {
 
         send(ScanEvent.Progress("Discover ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
 
-        subnets.forEach { subnet ->
+        val totalSubnets = subnets.size
+        subnets.forEachIndexed { subnetIndex, subnet ->
             ScanPause.checkPause()
             val ips = NetworkUtils.expandSubnetHosts(subnet)
+            val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
+
+            send(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
+
             // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
             // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
             val scanIps = ips
@@ -61,7 +66,7 @@ class DiscoverScanner {
                         completed++
                         if (host != null) found++
                         val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                        send(ScanEvent.Progress("$ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
+                        send(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
                         if (host != null) send(ScanEvent.HostFound(host))
                     }
                 }
