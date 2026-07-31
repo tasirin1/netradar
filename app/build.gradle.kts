@@ -74,4 +74,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Unit test (logika murni JVM)
+    testImplementation("junit:junit:4.13.2")
 }
