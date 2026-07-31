@@ -18,9 +18,9 @@ class PortScanner {
         var customPortsOverride: IntArray? = null
     }
 
-    // Batasi total socket terbuka bersamaan (30 host x 50 port = 1500 socket > batas
+    // Batasi total socket terbuka bersamaan (60 host x 50 port = 3000 socket > batas
     // file-descriptor Android ~1024 → "Too many open files" bikin port ke-skip diam-diam)
-    private val socketPermits = Semaphore(500)
+    private val socketPermits = Semaphore(700)
 
     fun scan(target: String, ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
@@ -31,7 +31,7 @@ class PortScanner {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) 30 else 10
+        val hostConcurrency = if (isWide) 60 else 15
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
         var found = 0
