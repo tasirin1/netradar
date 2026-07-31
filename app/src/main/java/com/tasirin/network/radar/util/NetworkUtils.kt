@@ -46,33 +46,21 @@ object NetworkUtils {
             }
         }
 
-        // Partial prefix with trailing dot
-        if (cleaned.endsWith(".")) {
-            val parts = cleaned.trimEnd('.').split(".")
+        // Partial IPv4 prefix (dengan/tanpa titik akhir): "192", "192.16", "192.168.",
+        // "192.168.5" → lanjut sampai 255 (mis. 192.16 → 192.16.x … 192.255.x)
+        cleaned = cleaned.substringBefore(":").trimEnd('.')
+        val parts = cleaned.split(".")
+        if (parts.size in 1..3 && parts.all { it.isNotEmpty() && it.all(Char::isDigit) }) {
+            val octets = parts.map { it.toInt() }
+            if (octets.any { it > 255 }) return emptyList()
             return when (parts.size) {
-                1 -> {
-                    // "192." → all 192.x.x.x /24 subnets
-                    val a = parts[0].toIntOrNull() ?: return emptyList()
-                    expandSubnetRange(a, 0, 255)
-                }
-                2 -> {
-                    // "192.168." → 192.168.x → 192.255.x (continue sampai 255)
-                    val a = parts[0].toIntOrNull() ?: return emptyList()
-                    val bStart = parts[1].toIntOrNull() ?: return emptyList()
-                    expandSubnetRange(a, bStart, 255)
-                }
-                3 -> {
-                    // "192.168.5." → satu subnet
-                    val prefix3 = cleaned.trimEnd('.')
-                    if (prefix3.split(".").all { it.toIntOrNull() in 0..255 }) listOf(prefix3)
-                    else emptyList()
-                }
-                else -> emptyList()
+                1 -> expandSubnetRange(octets[0], 0, 255)          // "192" → 192.0.x … 192.255.x
+                2 -> expandSubnetRange(octets[0], octets[1], 255)  // "192.16" → 192.16.x … 192.255.x
+                else -> listOf("${octets[0]}.${octets[1]}.${octets[2]}")  // "192.168.5" → satu subnet
             }
         }
 
         // Full IP / domain → one /24 subnet
-        cleaned = cleaned.substringBefore(":").trimEnd('.')
         val ip = resolveDomain(cleaned) ?: return emptyList()
         return listOf(ip.substringBeforeLast("."))
     }
