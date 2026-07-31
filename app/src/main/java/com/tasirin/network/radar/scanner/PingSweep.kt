@@ -17,7 +17,7 @@ class PingSweep {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val batchSize = if (isWide) 80 else 20
+        val batchSize = if (isWide) 50 else 10
         var completed = 0L
         var found = 0
         val startMs = System.currentTimeMillis()

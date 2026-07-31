@@ -18,9 +18,9 @@ class PortScanner {
         var customPortsOverride: IntArray? = null
     }
 
-    // Batasi total socket terbuka bersamaan (60 host x 50 port = 3000 socket > batas
-    // file-descriptor Android ~1024 → "Too many open files" bikin port ke-skip diam-diam)
-    private val socketPermits = Semaphore(700)
+    // Batasi total socket terbuka bersamaan. Terlalu tinggi (60 host x 50 port) justru
+    // membuat AP/router kewalahan → SYN dropped → connect timeout → port ke-skip.
+    private val socketPermits = Semaphore(400)
 
     fun scan(target: String, ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
@@ -31,7 +31,7 @@ class PortScanner {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) 60 else 15
+        val hostConcurrency = if (isWide) 30 else 10
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
         var found = 0
@@ -108,13 +108,28 @@ class PortScanner {
         }
     }
 
+    /** Connect dengan 1x retry jika timeout (host padat/AP kewalahan → SYN dropped). */
+    private fun connectWithRetry(ip: String, port: Int): Socket? {
+        fun tryConnect(timeoutMs: Int): Socket? {
+            val sock = Socket()
+            return try {
+                sock.connect(InetSocketAddress(ip, port), timeoutMs)
+                sock.soTimeout = 150
+                sock
+            } catch (_: Exception) {
+                try { sock.close() } catch (_: Exception) {}
+                null
+            }
+        }
+        return tryConnect(200) ?: tryConnect(400)
+    }
+
     private fun scanPort(ip: String, port: Int): PortInfo? {
         socketPermits.acquire()
         try {
-            val sock = Socket()
+            val sock = connectWithRetry(ip, port)
+            if (sock == null) return null
             try {
-                sock.connect(InetSocketAddress(ip, port), 200)
-                sock.soTimeout = 150
                 var banner: String? = null
                 try {
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))

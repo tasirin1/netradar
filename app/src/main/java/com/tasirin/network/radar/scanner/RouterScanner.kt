@@ -25,7 +25,7 @@ class RouterScanner {
 
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) 30 else 8
+        val hostConcurrency = if (isWide) 20 else 5
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
         var found = 0
