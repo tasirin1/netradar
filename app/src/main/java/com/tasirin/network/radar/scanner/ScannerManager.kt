@@ -57,7 +57,5 @@ class ScannerManager {
 
     fun pause() { ScanPause.pause() }
     fun resume() { ScanPause.resume() }
-    fun isPaused(): Boolean = ScanPause.paused
     fun stop() { currentJob?.cancel(); currentJob = null; ScanPause.resume() }
-    fun isRunning(): Boolean = currentJob?.isActive == true
 }

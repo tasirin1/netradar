@@ -15,16 +15,9 @@ class PortScanner {
     companion object {
         @Volatile
         var customPortsOverride: IntArray? = null
-        val defaultPorts = intArrayOf(
-            80, 443, 8080, 8443, 22, 23, 21, 53, 3389, 3306,
-            8081, 8000, 3000, 5000, 8888, 9000, 81, 444, 5555, 5900,
-            6379, 27017, 7547, 6666, 8291, 2000, 135, 139, 445, 1433,
-            1521, 2049, 2375, 2376, 3128, 3307, 3388, 4444, 4848, 5432,
-            6378, 7001, 8001, 8082, 8083, 8084, 8085, 8444, 9090, 9200
-        )
     }
 
-    fun scan(target: String, ports: IntArray = customPortsOverride ?: defaultPorts): Flow<ScanEvent> = flow {
+    fun scan(target: String, ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
         if (subnets.isEmpty()) {
             emit(ScanEvent.Error("No IPs to scan"))

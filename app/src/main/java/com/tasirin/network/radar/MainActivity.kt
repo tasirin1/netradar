@@ -10,8 +10,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.tasirin.network.radar.model.ScanType
-import com.tasirin.network.radar.model.SortMode
 import com.tasirin.network.radar.ui.screens.MainScreen
 import com.tasirin.network.radar.ui.theme.NetRadarTheme
 import com.tasirin.network.radar.viewmodel.ScanViewModel

@@ -1,16 +1,9 @@
 package com.tasirin.network.radar.model
 
-data class ScanTarget(
-    val raw: String,
-    val resolvedIps: List<String> = emptyList(),
-    val isCidr: Boolean = false
-)
-
 data class PortInfo(
     val port: Int,
     val service: String? = null,
-    val banner: String? = null,
-    val isOpen: Boolean = true
+    val banner: String? = null
 )
 
 data class HostInfo(
@@ -20,15 +13,7 @@ data class HostInfo(
     val macVendor: String? = null,
     val latencyMs: Long? = null,
     val isAlive: Boolean = true,
-    val openPorts: List<PortInfo> = emptyList(),
-    val services: List<ServiceInfo> = emptyList()
-)
-
-data class ServiceInfo(
-    val port: Int,
-    val name: String,
-    val version: String? = null,
-    val details: String? = null
+    val openPorts: List<PortInfo> = emptyList()
 )
 
 data class NetworkInfo(
@@ -78,13 +63,6 @@ data class UrlDiscovery(
 )
 
 data class ScanSummary(
-    val totalHosts: Int = 0,
-    val aliveHosts: Int = 0,
-    val openPorts: Int = 0,
-    val camerasFound: Int = 0,
-    val routersFound: Int = 0,
-    val sharesFound: Int = 0,
-    val urlsFound: Int = 0,
     val durationMs: Long = 0
 )
 
@@ -96,7 +74,6 @@ data class PingMonitorState(
 )
 
 data class PingResult(
-    val timestamp: Long,
     val latencyMs: Long?,
     val isAlive: Boolean
 )
@@ -107,7 +84,6 @@ sealed class ScanEvent {
     data class UrlFound(val url: UrlDiscovery) : ScanEvent()
     data class Error(val message: String) : ScanEvent()
     data class Complete(val result: ScanResult) : ScanEvent()
-    data class PingUpdate(val result: PingResult) : ScanEvent()
 }
 
 object PortRangeParser {
@@ -222,7 +198,6 @@ object PortDescriptions {
         8080 to "HTTP Proxy/Alt",
         8081 to "HTTP Alt",
         8082 to "HTTP Alt",
-        8443 to "HTTPS Alt",
         27017 to "MongoDB - Database",
         34567 to "Hikvision SDK",
         37215 to "Hikvision Backdoor",

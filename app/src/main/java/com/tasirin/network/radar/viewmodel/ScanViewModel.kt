@@ -107,17 +107,19 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             val pctText = if (event.total > 0) " (${event.current}/${event.total})" else ""
                             _state.update { it.copy(progress = "Scanning ${event.ip}$pctText", progressPercent = pct) }
                         }
-                        is ScanEvent.HostFound -> { _hosts.add(event.host); applySort() }
+                        is ScanEvent.HostFound -> {
+                            _hosts.add(event.host)
+                            if (_hosts.size <= 500) applySort()
+                            else _state.update { it.copy(hosts = _hosts.toList()) }
+                        }
                         is ScanEvent.UrlFound -> { _urls.add(event.url); _state.update { it.copy(discoveredUrls = _urls.toList()) } }
                         is ScanEvent.Error -> { _state.update { it.copy(error = event.message) } }
                         is ScanEvent.Complete -> {
                             val duration = System.currentTimeMillis() - _startTime
+                            applySort()
                             val result = event.result.copy(hosts = _hosts.toList(),
                                 discoveredUrls = _urls.toList(),
-                                summary = ScanSummary(totalHosts = _hosts.size,
-                                    aliveHosts = _hosts.count { it.isAlive },
-                                    openPorts = _hosts.sumOf { it.openPorts.size },
-                                    urlsFound = _urls.size, durationMs = duration))
+                                summary = ScanSummary(durationMs = duration))
                             val summaryText = buildSummary(result)
                             val ok = _hosts.isNotEmpty() || _urls.isNotEmpty()
                             _state.update { it.copy(isScanning = false, isPaused = false, scanType = null,
@@ -172,7 +174,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         monitorJob = viewModelScope.launch {
             while (isActive) {
                 val latency = PingUtil.ping(ip)
-                val result = PingResult(System.currentTimeMillis(), latency, latency != null)
+                val result = PingResult(latency, latency != null)
                 _state.update {
                     val history = (it.monitor.history + result).takeLast(50)
                     it.copy(monitor = it.monitor.copy(lastLatency = latency, history = history),
@@ -206,8 +208,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) { _state.update { it.copy(error = "Failed to copy") } }
     }
 
-    fun clearCopyFeedback() { _state.update { it.copy(copyFeedback = null) } }
-
     fun copyAllText(scanResult: ScanResult?): String {
         val result = scanResult ?: return ""
         val sb = StringBuilder()
@@ -236,8 +236,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun clearError() { _state.update { it.copy(error = null) } }
-    fun getLocalNetworkHint(): String = NetworkUtils.getLocalNetworkPrefix()?.let { "$it.0/24" } ?: ""
 
     fun toggleDarkTheme() {
         _state.update { it.copy(isDarkTheme = when (it.isDarkTheme) { null -> true; true -> false; false -> null }) }

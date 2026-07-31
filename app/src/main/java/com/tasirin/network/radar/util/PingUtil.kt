@@ -24,17 +24,4 @@ object PingUtil {
             } else null
         } catch (_: Exception) { null }
     }
-
-    /**
-     * TCP connect check (fallback when ICMP ping not available).
-     */
-    fun tcpPing(ip: String, port: Int = 80, timeoutMs: Int = 500): Long? {
-        return try {
-            val start = System.currentTimeMillis()
-            val sock = java.net.Socket()
-            sock.connect(java.net.InetSocketAddress(ip, port), timeoutMs)
-            sock.close()
-            System.currentTimeMillis() - start
-        } catch (_: Exception) { null }
-    }
 }

@@ -128,42 +128,6 @@ object NetworkUtils {
         return (1..254).map { "$subnet.$it" }
     }
 
-    fun resolveTarget(input: String): List<String> {
-        val trimmed = input.trim()
-        if (trimmed.contains("/")) {
-            val parts = trimmed.split("/")
-            val baseIp = parts[0]
-            val prefix = parts[1].toIntOrNull() ?: 24
-            return expandCidr(baseIp, prefix)
-        }
-        if (trimmed.contains("-")) {
-            val parts = trimmed.split("-")
-            val baseParts = parts[0].trim().split(".")
-            if (baseParts.size == 4) {
-                val start = baseParts[3].toIntOrNull() ?: return listOf(trimmed)
-                val end = parts[1].trim().toIntOrNull() ?: return listOf(trimmed)
-                val prefix = baseParts.dropLast(1).joinToString(".")
-                return (start..end).map { "$prefix.$it" }
-            }
-        }
-        return listOf(trimmed)
-    }
-
-    private fun expandCidr(baseIp: String, prefix: Int): List<String> {
-        try {
-            val addr = InetAddress.getByName(baseIp)
-            val bytes = addr.address
-            val ipInt = bytesToInt(bytes)
-            val bits = 32 - prefix
-            if (bits <= 0 || bits > 24) return listOf(baseIp)
-            val mask = if (bits >= 32) 0 else (-1 shl bits)
-            val masked = ipInt and mask
-            val count = 1 shl bits
-            return if (count > 65536) emptyList()
-            else (1 until count - 1).map { intToIp(masked + it) }
-        } catch (_: Exception) { return listOf(baseIp) }
-    }
-
     private fun bytesToInt(bytes: ByteArray): Int {
         return ((bytes[0].toInt() and 0xFF) shl 24) or
                 ((bytes[1].toInt() and 0xFF) shl 16) or
@@ -217,25 +181,6 @@ object NetworkUtils {
         return null
     }
 
-    fun isWideScan(input: String): Boolean {
-        return expandTargetSubnets(input).size > 1
-    }
-
-    /**
-     * Auto-expand target to a materialized IP list.
-     * Only returns when the target is small (≤512 subnets); huge targets
-     * should use expandTargetSubnets() instead to avoid OOM.
-     */
-    fun autoExpandTarget(input: String): List<String> {
-        val subnets = expandTargetSubnets(input)
-        if (subnets.isEmpty() || subnets.size > 512) return emptyList()
-        val result = ArrayList<String>(subnets.size * 254)
-        for (subnet in subnets) {
-            for (i in 1..254) result.add("$subnet.$i")
-        }
-        return result
-    }
-
     fun arpScan(subnet: String): Set<String> {
         val live = Collections.synchronizedSet(mutableSetOf<String>())
         val pool = Executors.newFixedThreadPool(100)
@@ -248,27 +193,6 @@ object NetworkUtils {
         pool.shutdown()
         try { pool.awaitTermination(4, TimeUnit.SECONDS) } catch (_: Exception) { }
         return live
-    }
-
-    fun filterLiveHosts(targets: List<String>): List<String> {
-        if (targets.isEmpty() || targets.size <= 1) return targets
-        val subnets = targets.map { it.substringBeforeLast(".") }.distinct()
-        val isWide = subnets.size > 4 || targets.size > MAX_WIDE_IPS
-        if (isWide) {
-            return tcpQuickScan(targets, 300)
-        }
-        val localIp = getLocalIp()
-        val localPrefix = localIp?.let { it.substringBeforeLast(".") }
-        val isLocal = localPrefix != null && targets.any { it.startsWith(localPrefix) }
-        if (isLocal) {
-            val subnet = localPrefix + "."
-            val arpLive = arpScan(subnet)
-            if (arpLive.isNotEmpty()) {
-                val result = targets.filter { it in arpLive }
-                if (result.isNotEmpty()) return result
-            }
-        }
-        return tcpQuickScan(targets, 200)
     }
 
     fun tcpQuickScan(ips: List<String>, timeoutMs: Int = 200): List<String> {
@@ -310,23 +234,6 @@ object NetworkUtils {
         return "$prefix.1"
     }
 
-    fun getSubnetPrefix(ip: String): String? {
-        val parts = ip.split(".")
-        if (parts.size == 4) return "${parts[0]}.${parts[1]}.${parts[2]}"
-        return null
-    }
-
-    fun resolveDomain(host: String): String? {
-        return try { InetAddress.getByName(host).hostAddress } catch (_: Exception) { null }
-    }
-
-    fun getRelatedGateways(target: String): List<String> {
-        val gateways = mutableListOf<String>()
-        val prefix = getSubnetPrefix(target)
-        if (prefix != null) { gateways.add("$prefix.1"); gateways.add("$prefix.254") }
-        return gateways.distinct()
-    }
-
     fun getLocalSubnet(): List<String>? {
         val prefix = getLocalNetworkPrefix() ?: return null
         return (1..254).map { "$prefix.$it" }
@@ -352,9 +259,12 @@ object NetworkUtils {
     fun lookupMacVendor(mac: String?): String? {
         if (mac == null) return null
         val key = mac.uppercase(Locale.ROOT).take(8)
-        return vendorMap.entries.firstOrNull { (oui) ->
-            key.startsWith(oui.uppercase(Locale.ROOT).take(8))
-        }?.value
+        return vendorList.firstOrNull { (oui) -> key.startsWith(oui) }?.second
+    }
+
+    // Precomputed uppercase OUI prefixes agar lookup cepat tanpa re-uppercase tiap call
+    private val vendorList: List<Pair<String, String>> by lazy {
+        vendorMap.map { (oui, vendor) -> oui.uppercase(Locale.ROOT).take(8) to vendor }
     }
 
     private val vendorMap = mapOf(
