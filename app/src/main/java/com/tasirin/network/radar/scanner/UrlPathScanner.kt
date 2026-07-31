@@ -8,8 +8,8 @@ import java.net.URL
 
 class UrlPathScanner {
 
-    // Comprehensive path list organized by category. Destructive paths excluded.
-    private val paths = listOf(
+    // Comprehensive path list. Destructive/logout paths are excluded at the bottom.
+    private val rawPaths = listOf(
         // ── Admin / Panel ──
         "/admin", "/admin/", "/admin/login", "/admin/login/",
         "/login", "/login/", "/login/admin",
@@ -146,13 +146,24 @@ class UrlPathScanner {
         "/.shell", "/.backdoor"
     )
 
-    // Keywords that indicate a destructive path (logout, delete, etc.)
+    // Paths CONTAINING these keywords are DESTRUCTIVE and will be filtered out
     private val destructivePatterns = listOf(
-        "logout", "signout", "sign-out", "log-out",
+        "logout", "signout", "sign-out", "log-out", "logoff", "log-off",
         "exit", "quit", "end-session", "kill",
-        "delete", "remove", "destroy", "wipe",
-        "SysToolReboot", "factory", "defaults"
+        "delete", "remove", "destroy", "wipe", "erase",
+        "SysToolReboot", "reboot", "restart", "shutdown",
+        "factory", "defaults", "reset",
+        "SysToolUpgrade", "firmware", "flash",
+        "clear", "purge", "uninstall"
     )
+
+    // Only keep non-destructive paths
+    private val paths by lazy {
+        rawPaths.filter { path ->
+            val lower = path.lowercase()
+            !destructivePatterns.any { pattern -> lower.contains(pattern) }
+        }
+    }
 
     fun scan(target: String): Flow<ScanEvent> = channelFlow {
         val baseUrl = normalizeTarget(target)
@@ -161,33 +172,26 @@ class UrlPathScanner {
             return@channelFlow
         }
 
-        // Filter out destructive paths
-        val safePaths = paths.filter { path ->
-            val lower = path.lowercase()
-            !destructivePatterns.any { lower.contains(it) }
-        }
-
-        if (safePaths.isEmpty()) {
+        if (paths.isEmpty()) {
             send(ScanEvent.Error("No valid paths to scan"))
             return@channelFlow
         }
 
-        val total = safePaths.size
+        val total = paths.size
         var completed = 0
 
         send(ScanEvent.Progress(baseUrl, 0, total))
 
-        // Parallel scanning: process paths in batches of 20
+        // Parallel scanning: process paths in batches of 30
         withContext(Dispatchers.IO) {
-            safePaths.chunked(20).forEach { batch ->
+            paths.chunked(30).forEach { batch ->
                 val deferred = batch.map { path ->
                     async {
                         val url = baseUrl.trimEnd('/') + path
                         url to checkPath(url)
                     }
                 }
-                deferred.forEach { deferred ->
-                    val (url, result) = deferred.await()
+                deferred.forEach { (url, result) ->
                     completed++
                     send(ScanEvent.Progress(url, completed, total))
                     if (result != null) {
@@ -241,7 +245,7 @@ class UrlPathScanner {
 
             conn.disconnect()
 
-            // Report interesting status codes
+            // Report interesting status codes (exclude not-found)
             if (code in listOf(200, 301, 302, 303, 307, 308, 401, 403, 500, 502, 503)) {
                 UrlDiscovery(url = url, statusCode = code, title = title)
             } else null

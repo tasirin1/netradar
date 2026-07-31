@@ -8,13 +8,14 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.Socket
 import java.util.*
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 object NetworkUtils {
 
-    @Volatile
-    var selectedInterfaceName: String = ""
+    @Volatile var selectedInterfaceName: String = ""
+    const val MAX_WIDE_IPS = 1024
 
     fun resolveTarget(input: String): List<String> {
         val trimmed = input.trim()
@@ -105,6 +106,13 @@ object NetworkUtils {
         return null
     }
 
+    fun isWideScan(input: String): Boolean {
+        val ips = autoExpandTarget(input)
+        if (ips.isEmpty() || ips.size <= 254) return false
+        val subnets = ips.map { it.substringBeforeLast(".") }.distinct()
+        return subnets.size > 1
+    }
+
     /**
      * Auto-expand target to list of IPs.
      */
@@ -124,28 +132,61 @@ object NetworkUtils {
             val hasTwoOctets = cleaned.matches(Regex("""\d{1,3}\.\d{1,3}\."""))
             if (hasOneOctet || hasTwoOctets) {
                 val parts = cleaned.trimEnd('.').split(".")
-                if (parts.size == 1 && parts[0] == "192") {
-                    // "192." → scan all 192.168.x.x subnets
-                    val result = mutableListOf<String>()
-                    for (third in 0..255) {
-                        for (last in 1..254) result.add("192.168.$third.$last")
+                when {
+                    // "192." → scan ALL 192.x.x.x (one /24 per /16 subnet)
+                    parts.size == 1 && parts[0] == "192" -> {
+                        val result = mutableListOf<String>()
+                        for (second in 0..255) {
+                            for (last in 1..254) result.add("192.${second}.0.${last}")
+                        }
+                        return result
                     }
-                    return result
-                } else if (parts.size == 2 && parts[0] == "192" && parts[1] == "168") {
-                    // "192.168." → scan all 192.168.x.x subnets
-                    val result = mutableListOf<String>()
-                    for (third in 0..255) {
-                        for (last in 1..254) result.add("192.168.$third.$last")
+                    // "192.168." → scan all 192.168.x.x (256 /24 subnets)
+                    parts.size == 2 && parts[0] == "192" && parts[1] == "168" -> {
+                        val result = mutableListOf<String>()
+                        for (third in 0..255) {
+                            for (last in 1..254) result.add("192.168.${third}.${last}")
+                        }
+                        return result
                     }
-                    return result
-                } else if (parts.size == 1 && parts[0] == "10") {
-                    // "10." → use local prefix
-                    val localPrefix = getLocalNetworkPrefix()
-                    if (localPrefix != null) return (1..254).map { "$localPrefix.$it" }
-                } else {
+                    // "192.168.5." → scan specific subnet 192.168.5.x
+                    parts.size == 3 -> {
+                        val prefix = cleaned.trimEnd('.')
+                        return (1..254).map { "${prefix}.${it}" }
+                    }
+                    // "10." → scan first 16 /16 subnets of 10.x.x.x
+                    parts.size == 1 && parts[0] == "10" -> {
+                        val result = mutableListOf<String>()
+                        for (second in 0..15) {
+                            for (last in 1..254) result.add("10.${second}.0.${last}")
+                        }
+                        return result
+                    }
+                    // "10.5." → scan all 10.5.x.x (256 /24 subnets)
+                    parts.size == 2 && parts[0] == "10" -> {
+                        val result = mutableListOf<String>()
+                        for (third in 0..255) {
+                            for (last in 1..254) result.add("10.${parts[1]}.${third}.${last}")
+                        }
+                        return result
+                    }
+                    // "172." or "172.16." → scan 172.16.x.x
+                    parts.size == 1 && parts[0] == "172" -> {
+                        val result = mutableListOf<String>()
+                        for (last in 1..254) result.add("172.16.0.${last}")
+                        return result
+                    }
+                    parts.size == 2 && parts[0] == "172" -> {
+                        val result = mutableListOf<String>()
+                        for (last in 1..254) result.add(cleaned.trimEnd('.') + ".0." + last)
+                        return result
+                    }
                     // Other prefixes → use local subnet
-                    val localPrefix = getLocalNetworkPrefix()
-                    if (localPrefix != null) return (1..254).map { "$localPrefix.$it" }
+                    else -> {
+                        val localPrefix = getLocalNetworkPrefix()
+                        if (localPrefix != null) return (1..254).map { "${localPrefix}.${it}" }
+                        else return emptyList()
+                    }
                 }
             }
         }
@@ -156,10 +197,11 @@ object NetworkUtils {
 
         if (cleaned.contains("-")) return resolveTarget(cleaned)
 
+        // Full single IP → scan its /24 subnet
         val ipRegex = Regex("""^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$""")
         if (ipRegex.matches(cleaned)) {
             val prefix = cleaned.substringBeforeLast(".")
-            return (1..254).map { "$prefix.$it" }
+            return (1..254).map { "${prefix}.${it}" }
         }
 
         // Domain name
@@ -168,7 +210,7 @@ object NetworkUtils {
             val ip = addr.hostAddress ?: cleaned
             if (ipRegex.matches(ip)) {
                 val prefix = ip.substringBeforeLast(".")
-                return (1..254).map { "$prefix.$it" }
+                return (1..254).map { "${prefix}.${it}" }
             }
             return listOf(ip)
         } catch (_: Exception) {
@@ -192,28 +234,45 @@ object NetworkUtils {
 
     fun filterLiveHosts(targets: List<String>): List<String> {
         if (targets.isEmpty() || targets.size <= 1) return targets
+        val subnets = targets.map { it.substringBeforeLast(".") }.distinct()
+        val isWide = subnets.size > 4 || targets.size > MAX_WIDE_IPS
+        if (isWide) {
+            // For wide scans, use fast TCP discovery instead of ARP (which is local-only)
+            return tcpQuickScan(targets, 300)
+        }
         val localIp = getLocalIp()
-        val isLocal = localIp != null && targets.any { it.startsWith(localIp.substringBeforeLast(".")) }
+        val localPrefix = localIp?.let { it.substringBeforeLast(".") }
+        val isLocal = localPrefix != null && targets.any { it.startsWith(localPrefix) }
         if (isLocal) {
-            val subnet = targets.first().substringBeforeLast(".") + "."
-            val live = arpScan(subnet)
-            if (live.isNotEmpty()) {
-                val result = targets.filter { it in live }
+            val subnet = localPrefix + "."
+            val arpLive = arpScan(subnet)
+            if (arpLive.isNotEmpty()) {
+                val result = targets.filter { it in arpLive }
                 if (result.isNotEmpty()) return result
             }
         }
-        return targets.filter { ip ->
-            try {
-                val sock = Socket()
-                sock.connect(InetSocketAddress(ip, 80), 200)
-                sock.close(); true
-            } catch (_: Exception) {
-                try { InetAddress.getByName(ip).isReachable(300) } catch (_: Exception) { false }
-            }
-        }
+        return tcpQuickScan(targets, 200)
     }
 
-    /**
+    fun tcpQuickScan(ips: List<String>, timeoutMs: Int = 200): List<String> {
+        val live = Collections.synchronizedList(mutableListOf<String>())
+        val pool = Executors.newFixedThreadPool(200)
+        val latch = CountDownLatch(ips.size)
+        for (ip in ips) {
+            pool.execute {
+                try {
+                    val sock = Socket()
+                    sock.connect(InetSocketAddress(ip, 80), timeoutMs)
+                    sock.close()
+                    live.add(ip)
+                } catch (_: Exception) { }
+                latch.countDown()
+            }
+        }
+        pool.shutdown()
+        try { latch.await(30, TimeUnit.SECONDS) } catch (_: Exception) { }
+        return live.toList().sorted()
+    }
 
     /**
      * Discover live hosts from a list of target IPs.
@@ -225,28 +284,15 @@ object NetworkUtils {
         if (subnets.size <= 1) {
             // Single subnet: fast ARP scan
             return arpScan(subnets.first() + ".")
-        } else if (subnets.size <= 256) {
-            // Multi-subnet: wide parallel scan
-            val parts = subnets.first().split(".")
-            val basePrefix = parts.take(2).joinToString(".")
-            val thirdRange = subnets.mapNotNull { it.split(".").getOrNull(2)?.toIntOrNull() }
-            if (basePrefix.isNotEmpty() && thirdRange.isNotEmpty()) {
-                val min3 = thirdRange.minOrNull() ?: 0
-                val max3 = thirdRange.maxOrNull() ?: 255
-                return filterLiveHostsWide(basePrefix, min3..max3).toSet()
-            }
+        } else if (subnets.size <= 256 && ips.size <= MAX_WIDE_IPS) {
+            // Multi-subnet: wide parallel scan via TCP
+            return tcpQuickScan(ips, 300).toSet()
         }
-        // Fallback: TCP quick-check on port 80 for all targets
-        return ips.filter { ip ->
-            try {
-                val sock = Socket()
-                sock.connect(InetSocketAddress(ip, 80), 100)
-                sock.close(); true
-            } catch (_: Exception) { false }
-        }.toSet()
+        // Too many IPs → return all (skip pre-filter)
+        return ips.toSet()
     }
 
-
+    /**
      * Fast wide scan for large IP ranges like 192.168.x.x (65024 IPs).
      */
     fun filterLiveHostsWide(prefix: String, thirdRange: IntRange = 0..255): List<String> {

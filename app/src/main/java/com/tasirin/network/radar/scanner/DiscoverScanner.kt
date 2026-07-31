@@ -17,41 +17,50 @@ class DiscoverScanner {
             return@channelFlow
         }
 
-        // ARP pre-scan like v1.0
+        val subnets = ips.map { it.substringBeforeLast(".") }.distinct()
+        val isWide = subnets.size > 4 || ips.size > NetworkUtils.MAX_WIDE_IPS
+
         var scanIps = ips.toList()
-        val localIp = NetworkUtils.getLocalIp()
-        val isLocal = localIp != null && ips.any { it.startsWith(localIp.substringBeforeLast(".")) }
-        if (ips.size > 1) {
+        if (!isWide && ips.size > 1) {
             send(ScanEvent.Progress("Discovering live hosts...", 0, ips.size))
             val live = NetworkUtils.discoverLiveHosts(ips)
-            if (live.isNotEmpty()) { scanIps = ips.filter { it in live }; if (scanIps.isEmpty()) scanIps = ips.take(10) }
+            if (live.isNotEmpty()) {
+                scanIps = ips.filter { it in live }
+                if (scanIps.isEmpty()) scanIps = ips.take(10)
+            }
+        } else if (isWide) {
+            send(ScanEvent.Progress("Wide scan: ${ips.size} IPs in ${subnets.size} subnets", 0, ips.size))
         }
 
         val total = scanIps.size
         val arpTable = NetworkUtils.readArpTable()
+        val hostConcurrency = if (isWide) 20 else 1
 
-        for ((idx, ip) in scanIps.withIndex()) {
-            send(ScanEvent.Progress(ip, idx, total))
+        scanIps.chunked(hostConcurrency).forEach { batch ->
+            coroutineScope {
+                batch.map { ip ->
+                    async(Dispatchers.IO) {
+                        val alive = PingUtil.ping(ip, 500) != null
+                        if (!alive) return@async null
 
-            // Quick ping check
-            val alive = PingUtil.ping(ip, 500) != null
-            if (!alive) continue
+                        val mac = arpTable[ip]
+                        val vendor = NetworkUtils.lookupMacVendor(mac)
+                        val hostname = try {
+                            val hn = java.net.InetAddress.getByName(ip).hostName
+                            if (hn != ip) hn else null
+                        } catch (_: Exception) { null }
 
-            val mac = arpTable[ip]
-            val vendor = NetworkUtils.lookupMacVendor(mac)
-            val hostname = try {
-                val hn = java.net.InetAddress.getByName(ip).hostName
-                if (hn != ip) hn else null
-            } catch (_: Exception) { null }
-
-            // Parallel scan all discover ports on this host
-            val services = scanDiscoverPorts(ip)
-
-            if (services.isNotEmpty()) {
-                send(ScanEvent.HostFound(HostInfo(
-                    ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
-                    isAlive = true, openPorts = services
-                )))
+                        val services = scanDiscoverPorts(ip)
+                        if (services.isNotEmpty()) {
+                            HostInfo(ip = ip, hostname = hostname, macAddress = mac, macVendor = vendor,
+                                isAlive = true, openPorts = services)
+                        } else null
+                    }
+                }.forEachIndexed { idx, deferred ->
+                    val host = deferred.await()
+                    send(ScanEvent.Progress(host?.ip ?: "", idx, total))
+                    if (host != null) send(ScanEvent.HostFound(host))
+                }
             }
         }
 

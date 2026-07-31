@@ -67,14 +67,20 @@ fun HostCard(
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
-                // IP clickable opens http://ip/
+                // IP clickable opens http://ip/ or http://ip:port/ if port available
                 Text(
                     text = host.ip,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable {
-                        try { uriHandler.openUri("http://${host.ip}/") } catch (_: Exception) {}
+                        val firstPort = host.openPorts.firstOrNull()
+                        val url = if (firstPort != null) {
+                            "http://${host.ip}:${firstPort.port}/"
+                        } else {
+                            "http://${host.ip}/"
+                        }
+                        try { uriHandler.openUri(url) } catch (_: Exception) {}
                     }
                 )
                 if (host.latencyMs != null) {
@@ -175,7 +181,8 @@ fun PortChip(ip: String, port: PortInfo, onLongPress: (() -> Unit)? = null) {
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1
             )
             if (port.service != null) {
                 Spacer(Modifier.width(3.dp))
