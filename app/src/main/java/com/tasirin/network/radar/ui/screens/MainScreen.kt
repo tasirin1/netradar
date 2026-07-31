@@ -338,7 +338,8 @@ fun MainScreen(
                             isSelected = host.ip in state.selectedHosts,
                             selectionMode = state.selectedHosts.isNotEmpty(),
                             onToggleSelect = { onToggleHostSelect?.invoke(host.ip) },
-                            onRescanHost = if (state.isScanning) null else { onRescanHost?.invoke(host.ip) }
+                            onRescanHost = if (state.isScanning || onRescanHost == null) null
+                            else ({ onRescanHost(host.ip) })
                         )
                         Spacer(Modifier.height(6.dp))
                     }

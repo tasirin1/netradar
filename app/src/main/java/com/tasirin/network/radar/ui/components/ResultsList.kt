@@ -20,9 +20,9 @@ import com.tasirin.network.radar.model.HostInfo
 import com.tasirin.network.radar.model.PortDescriptions
 import com.tasirin.network.radar.model.PortInfo
 import com.tasirin.network.radar.model.UrlDiscovery
+import com.tasirin.network.radar.model.deviceKinds
 import com.tasirin.network.radar.ui.theme.*
 
-@Composable
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HostCard(
