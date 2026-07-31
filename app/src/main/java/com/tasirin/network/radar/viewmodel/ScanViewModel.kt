@@ -144,7 +144,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         is ScanEvent.Progress -> {
                             val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
                             val pctText = if (event.total > 0) " (${event.current}/${event.total})" else ""
-                            _state.update { it.copy(progress = "Scanning ${event.ip}$pctText", progressPercent = pct) }
+                            _state.update { it.copy(progress = "${event.ip}$pctText", progressPercent = pct) }
                         }
                         is ScanEvent.HostFound -> {
                             val isNew = !_hosts.containsKey(event.host.ip)

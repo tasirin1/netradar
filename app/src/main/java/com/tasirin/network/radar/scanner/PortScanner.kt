@@ -29,6 +29,8 @@ class PortScanner {
         val hostConcurrency = if (isWide) 30 else 10
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
+        var found = 0
+        val startMs = System.currentTimeMillis()
 
         emit(ScanEvent.Progress("Port scan ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
 
@@ -36,14 +38,13 @@ class PortScanner {
             ScanPause.checkPause()
             val ips = NetworkUtils.expandSubnetHosts(subnet)
 
-            // Live-host filter per subnet biar cepat (ARP lokal / TCP remote)
             // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
             // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
             val scanIps = ips
 
-            val results = withContext(Dispatchers.IO) {
-                scanIps.chunked(hostConcurrency).map { chunk ->
-                    chunk.map { ip ->
+            scanIps.chunked(hostConcurrency).forEach { chunk ->
+                coroutineScope {
+                    val deferreds = chunk.map { ip ->
                         async {
                             val hostname = try {
                                 kotlinx.coroutines.withTimeout(300) {
@@ -55,19 +56,21 @@ class PortScanner {
                             val vendor = NetworkUtils.lookupMacVendor(mac)
                             val openPorts = scanHostPorts(ip, ports)
 
-                            if (openPorts.isNotEmpty()) {
+                            ip to if (openPorts.isNotEmpty()) {
                                 HostInfo(ip = ip, hostname = hostname, macAddress = mac,
                                     macVendor = vendor, isAlive = true, openPorts = openPorts)
                             } else null
                         }
-                    }.awaitAll()
-                }.flatten()
-            }
-
-            results.forEach { host ->
-                completed++
-                emit(ScanEvent.Progress(host?.ip ?: subnet, completed.toInt(), total.toInt()))
-                if (host != null) emit(ScanEvent.HostFound(host))
+                    }
+                    deferreds.forEach { deferred ->
+                        val (ip, host) = deferred.await()
+                        completed++
+                        if (host != null) found++
+                        val elapsed = (System.currentTimeMillis() - startMs) / 1000
+                        emit(ScanEvent.Progress("$ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
+                        if (host != null) emit(ScanEvent.HostFound(host))
+                    }
+                }
             }
         }
 

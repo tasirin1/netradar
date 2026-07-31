@@ -28,6 +28,8 @@ class RouterScanner {
         val hostConcurrency = if (isWide) 20 else 5
         val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
+        var found = 0
+        val startMs = System.currentTimeMillis()
 
         emit(ScanEvent.Progress("Router scan ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
 
@@ -38,9 +40,9 @@ class RouterScanner {
             // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
             val scanIps = ips
 
-            val results = withContext(Dispatchers.IO) {
-                scanIps.chunked(hostConcurrency).map { chunk ->
-                    chunk.map { ip ->
+            scanIps.chunked(hostConcurrency).forEach { chunk ->
+                coroutineScope {
+                    val deferreds = chunk.map { ip ->
                         async {
                             val mac = arpTable[ip]
                             val vendor = NetworkUtils.lookupMacVendor(mac)
@@ -50,19 +52,21 @@ class RouterScanner {
                                 }.let { if (it != ip) it else null }
                             } catch (_: Exception) { null }
                             val foundServices = scanRouterPorts(ip)
-                            if (foundServices.isNotEmpty()) {
+                            ip to if (foundServices.isNotEmpty()) {
                                 HostInfo(ip = ip, hostname = hostname, macAddress = mac,
                                     macVendor = vendor, isAlive = true, openPorts = foundServices)
                             } else null
                         }
-                    }.awaitAll()
-                }.flatten()
-            }
-
-            results.forEach { host ->
-                completed++
-                emit(ScanEvent.Progress(host?.ip ?: subnet, completed.toInt(), total.toInt()))
-                if (host != null) emit(ScanEvent.HostFound(host))
+                    }
+                    deferreds.forEach { deferred ->
+                        val (ip, host) = deferred.await()
+                        completed++
+                        if (host != null) found++
+                        val elapsed = (System.currentTimeMillis() - startMs) / 1000
+                        emit(ScanEvent.Progress("$ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
+                        if (host != null) emit(ScanEvent.HostFound(host))
+                    }
+                }
             }
         }
 

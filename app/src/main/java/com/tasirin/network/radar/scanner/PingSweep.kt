@@ -19,6 +19,8 @@ class PingSweep {
         val isWide = subnets.size > 4
         val batchSize = if (isWide) 50 else 10
         var completed = 0L
+        var found = 0
+        val startMs = System.currentTimeMillis()
         val arpTable = NetworkUtils.readArpTable()
 
         emit(ScanEvent.Progress("Scanning ${subnets.size} subnet(s), ${total} IP(s)...", 0, total.toInt()))
@@ -27,9 +29,9 @@ class PingSweep {
             ScanPause.checkPause()
             val ips = NetworkUtils.expandSubnetHosts(subnet)
 
-            val results = withContext(Dispatchers.IO) {
-                ips.chunked(batchSize).map { chunk ->
-                    chunk.map { ip ->
+            ips.chunked(batchSize).forEach { chunk ->
+                coroutineScope {
+                    val deferreds = chunk.map { ip ->
                         async {
                             val latency = PingUtil.ping(ip)
                             if (latency != null) {
@@ -40,18 +42,20 @@ class PingSweep {
                                         java.net.InetAddress.getByName(ip).hostName
                                     }.let { if (it != ip) it else null }
                                 } catch (_: Exception) { null }
-                                HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+                                ip to HostInfo(ip = ip, hostname = hostname, macAddress = mac,
                                     macVendor = vendor, latencyMs = latency, isAlive = true)
-                            } else null
+                            } else ip to null
                         }
-                    }.awaitAll()
-                }.flatten()
-            }
-
-            results.forEach { host ->
-                completed++
-                emit(ScanEvent.Progress(host?.ip ?: subnet, completed.toInt(), total.toInt()))
-                if (host != null) emit(ScanEvent.HostFound(host))
+                    }
+                    deferreds.forEach { deferred ->
+                        val (ip, host) = deferred.await()
+                        completed++
+                        if (host != null) found++
+                        val elapsed = (System.currentTimeMillis() - startMs) / 1000
+                        emit(ScanEvent.Progress("$ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
+                        if (host != null) emit(ScanEvent.HostFound(host))
+                    }
+                }
             }
         }
 
