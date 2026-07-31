@@ -27,12 +27,13 @@ fun HostResultsList(
     hosts: List<HostInfo>,
     modifier: Modifier = Modifier,
     onCopyIp: ((String) -> Unit)? = null,
-    onWol: ((String, String) -> Unit)? = null
+    onWol: ((String, String) -> Unit)? = null,
+    onDeleteHost: ((String) -> Unit)? = null
 ) {
     if (hosts.isEmpty()) return
     Column(modifier = modifier) {
         hosts.forEach { host ->
-            HostCard(host = host, onCopyIp = onCopyIp, onWol = onWol)
+            HostCard(host = host, onCopyIp = onCopyIp, onWol = onWol, onDeleteHost = onDeleteHost)
             Spacer(Modifier.height(6.dp))
         }
     }
@@ -43,13 +44,20 @@ fun HostResultsList(
 fun HostCard(
     host: HostInfo,
     onCopyIp: ((String) -> Unit)? = null,
-    onWol: ((String, String) -> Unit)? = null
+    onWol: ((String, String) -> Unit)? = null,
+    onDeleteHost: ((String) -> Unit)? = null
 ) {
     val uriHandler = LocalUriHandler.current
     var showPortInfo by remember { mutableStateOf<PortInfo?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {},
+                onLongClick = { if (onDeleteHost != null) showDeleteConfirm = true }
+            ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -145,6 +153,22 @@ fun HostCard(
 
     showPortInfo?.let { port ->
         PortInfoDialog(port = port) { showPortInfo = null }
+    }
+
+    if (showDeleteConfirm && onDeleteHost != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            icon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Hapus Host", fontWeight = FontWeight.Bold) },
+            text = { Text("Hapus ${host.ip} dari daftar hasil?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteHost(host.ip)
+                    showDeleteConfirm = false
+                }) { Text("Hapus", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Batal") } }
+        )
     }
 }
 

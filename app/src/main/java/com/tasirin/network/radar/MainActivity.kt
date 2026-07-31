@@ -44,9 +44,10 @@ class MainActivity : AppCompatActivity() {
                         onToggleTheme = { viewModel.toggleDarkTheme() },
                         onCopyIp = { ip -> viewModel.copyToClipboard("IP", ip) },
                         onCopyAll = {
-                            val text = viewModel.copyAllText(state.scanResult)
-                            viewModel.copyToClipboard("Scan Results", text)
+                            viewModel.copyToClipboard("Scan Results", viewModel.copyAllText())
                         },
+                        onDeleteHost = { ip -> viewModel.deleteHost(ip) },
+                        onClearResults = { viewModel.clearResults() },
                         onWol = { ip, mac -> viewModel.wakeOnLan(ip, mac) },
                         onSortMode = { mode -> viewModel.setSortMode(mode) },
                         onAbout = { viewModel.toggleAbout() },

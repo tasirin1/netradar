@@ -31,6 +31,8 @@ fun MainScreen(
     onToggleTheme: () -> Unit,
     onCopyIp: ((String) -> Unit)? = null,
     onCopyAll: (() -> Unit)? = null,
+    onDeleteHost: ((String) -> Unit)? = null,
+    onClearResults: (() -> Unit)? = null,
     onWol: ((String, String) -> Unit)? = null,
     onSortMode: ((SortMode) -> Unit)? = null,
     onAbout: (() -> Unit)? = null,
@@ -144,7 +146,8 @@ fun MainScreen(
                 isPaused = state.isPaused,
                 onPauseResume = onPauseResume,
                 hasResults = state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty(),
-                onCopyAll = onCopyAll
+                onCopyAll = onCopyAll,
+                onClear = onClearResults
             )
             Spacer(Modifier.height(4.dp))
 
@@ -187,7 +190,8 @@ fun MainScreen(
                         color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(4.dp))
-                HostResultsList(hosts = state.hosts, onCopyIp = onCopyIp, onWol = onWol)
+                HostResultsList(hosts = state.hosts, onCopyIp = onCopyIp, onWol = onWol,
+                    onDeleteHost = onDeleteHost)
             }
 
             // ─── Results - URLs ───
@@ -361,6 +365,8 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         Spacer(Modifier.height(4.dp))
                         HelpBullet("Use Custom Ports for specific ports")
                         HelpBullet("Long-press on port chip for port info")
+                        HelpBullet("Long-press a host card to delete it")
+                        HelpBullet("Results persist until you delete them")
                         HelpBullet("WoL button ⚡ wakes sleeping devices")
                         HelpBullet("Monitor mode pings every 1.5s")
                     }

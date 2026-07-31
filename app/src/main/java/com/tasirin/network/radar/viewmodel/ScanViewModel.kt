@@ -10,6 +10,7 @@ import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.PingUtil
+import com.tasirin.network.radar.util.ResultsStore
 import com.tasirin.network.radar.util.WakeOnLan
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -45,12 +46,26 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(ScanUiState())
     val state: StateFlow<ScanUiState> = _state.asStateFlow()
 
-    private val _hosts = mutableListOf<HostInfo>()
-    private val _urls = mutableListOf<UrlDiscovery>()
+    private val _hosts = linkedMapOf<String, HostInfo>()
+    private val _urls = linkedMapOf<String, UrlDiscovery>()
     private var _startTime = 0L
     private var monitorJob: Job? = null
+    private var lastPersistAt = 0L
 
-    init { refreshNetworkInfo() }
+    init {
+        refreshNetworkInfo()
+        // Muat hasil dari sesi sebelumnya agar tidak hilang saat app ditutup
+        val (hosts, urls) = ResultsStore.load(getApplication())
+        hosts.forEach { _hosts[it.ip] = it }
+        urls.forEach { _urls[it.url] = it }
+        _state.update {
+            it.copy(
+                hosts = _hosts.values.toList(),
+                discoveredUrls = _urls.values.toList(),
+                summary = if (_hosts.isEmpty()) "Ready" else "Riwayat: ${_hosts.size} host(s), ${_urls.size} URL(s)"
+            )
+        }
+    }
 
     fun refreshNetworkInfo() {
         val localIp = NetworkUtils.getLocalIp() ?: ""
@@ -89,11 +104,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
         if (type == ScanType.MONITOR) { startMonitor(target); return }
 
-        _hosts.clear(); _urls.clear()
         _startTime = System.currentTimeMillis()
         _state.update {
-            it.copy(isScanning = true, isPaused = false, scanType = type, error = null, hosts = emptyList(),
-                discoveredUrls = emptyList(), summary = "${type.label} starting...",
+            it.copy(isScanning = true, isPaused = false, scanType = type, error = null,
+                summary = "${type.label} starting...",
                 summaryColor = 0xFF00695C, isSummaryOk = true, progress = "", progressPercent = 0f,
                 hostSummary = "", scanResult = null)
         }
@@ -108,17 +122,23 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             _state.update { it.copy(progress = "Scanning ${event.ip}$pctText", progressPercent = pct) }
                         }
                         is ScanEvent.HostFound -> {
-                            _hosts.add(event.host)
+                            _hosts[event.host.ip] = event.host
                             if (_hosts.size <= 500) applySort()
-                            else _state.update { it.copy(hosts = _hosts.toList()) }
+                            else _state.update { it.copy(hosts = _hosts.values.toList()) }
+                            persistResults()
                         }
-                        is ScanEvent.UrlFound -> { _urls.add(event.url); _state.update { it.copy(discoveredUrls = _urls.toList()) } }
+                        is ScanEvent.UrlFound -> {
+                            _urls[event.url.url] = event.url
+                            _state.update { it.copy(discoveredUrls = _urls.values.toList()) }
+                            persistResults()
+                        }
                         is ScanEvent.Error -> { _state.update { it.copy(error = event.message) } }
                         is ScanEvent.Complete -> {
                             val duration = System.currentTimeMillis() - _startTime
                             applySort()
-                            val result = event.result.copy(hosts = _hosts.toList(),
-                                discoveredUrls = _urls.toList(),
+                            persistResults(force = true)
+                            val result = event.result.copy(hosts = _hosts.values.toList(),
+                                discoveredUrls = _urls.values.toList(),
                                 summary = ScanSummary(durationMs = duration))
                             val summaryText = buildSummary(result)
                             val ok = _hosts.isNotEmpty() || _urls.isNotEmpty()
@@ -161,6 +181,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun stopScan() {
         scannerManager.stop()
         monitorJob?.cancel(); monitorJob = null
+        persistResults(force = true)
         _state.update { it.copy(isScanning = false, isPaused = false, summary = "Stopped",
             summaryColor = 0xFFC62828, isSummaryOk = false, monitor = PingMonitorState()) }
     }
@@ -191,10 +212,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private fun applySort() {
         val mode = _state.value.sortMode
         val sorted = when (mode) {
-            SortMode.IP -> _hosts.sortedBy { it.ip }
-            SortMode.PORTS -> _hosts.sortedByDescending { it.openPorts.size }
-            SortMode.LATENCY -> _hosts.sortedBy { it.latencyMs ?: Long.MAX_VALUE }
-            SortMode.HOSTNAME -> _hosts.sortedBy { it.hostname ?: it.ip }
+            SortMode.IP -> _hosts.values.sortedBy { it.ip }
+            SortMode.PORTS -> _hosts.values.sortedByDescending { it.openPorts.size }
+            SortMode.LATENCY -> _hosts.values.sortedBy { it.latencyMs ?: Long.MAX_VALUE }
+            SortMode.HOSTNAME -> _hosts.values.sortedBy { it.hostname ?: it.ip }
         }
         _state.update { it.copy(hosts = sorted) }
     }
@@ -208,13 +229,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) { _state.update { it.copy(error = "Failed to copy") } }
     }
 
-    fun copyAllText(scanResult: ScanResult?): String {
-        val result = scanResult ?: return ""
+    fun copyAllText(): String {
         val sb = StringBuilder()
-        sb.appendLine("NetRadar Scan - ${result.type.label}")
-        sb.appendLine("Target: ${result.target}")
+        sb.appendLine("NetRadar Scan Results")
+        sb.appendLine("Target: ${_state.value.target.ifBlank { "-" }}")
+        sb.appendLine("Hosts: ${_hosts.size}  URLs: ${_urls.size}")
         sb.appendLine("---")
-        for (host in result.hosts) {
+        for (host in _hosts.values) {
             sb.append(host.ip)
             host.hostname?.let { if (it != host.ip) sb.append(" ($it)") }
             host.macAddress?.let { sb.append(" $it") }
@@ -222,10 +243,30 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             sb.appendLine()
             for (p in host.openPorts) sb.appendLine("  ${host.ip}:${p.port}  ${p.service ?: ""}")
         }
-        for (url in result.discoveredUrls) sb.appendLine("  ${url.url}  [${url.statusCode}] ${url.title ?: ""}")
+        for (url in _urls.values) sb.appendLine("  ${url.url}  [${url.statusCode}] ${url.title ?: ""}")
         sb.appendLine("---")
-        sb.appendLine(buildSummary(result))
+        val hosts = _hosts.values.toList()
+        val urls = _urls.values.toList()
+        sb.appendLine(buildSummary(ScanResult(_state.value.scanType ?: ScanType.PORT_SCAN, _state.value.target, hosts = hosts, discoveredUrls = urls)))
         return sb.toString()
+    }
+
+    fun deleteHost(ip: String) {
+        _hosts.remove(ip)
+        _state.update {
+            it.copy(hosts = _hosts.values.toList(), summary = "Removed $ip — ${_hosts.size} host(s) tersisa",
+                summaryColor = 0xFFC62828, isSummaryOk = false)
+        }
+        persistResults(force = true)
+    }
+
+    fun clearResults() {
+        _hosts.clear(); _urls.clear()
+        _state.update {
+            it.copy(hosts = emptyList(), discoveredUrls = emptyList(), hostSummary = "", scanResult = null,
+                summary = "Results cleared", summaryColor = 0xFF00695C, isSummaryOk = true)
+        }
+        persistResults(force = true)
     }
 
     fun wakeOnLan(ip: String, mac: String) {
@@ -270,5 +311,20 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         return parts.joinToString("  ")
     }
 
-    override fun onCleared() { super.onCleared(); scannerManager.stop(); monitorJob?.cancel() }
+    private fun persistResults(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastPersistAt < 2_000) return  // throttle: max tiap 2 detik saat scan
+        lastPersistAt = now
+        val hosts = _hosts.values.toList()
+        val urls = _urls.values.toList()
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) { ResultsStore.save(app, hosts, urls) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        scannerManager.stop()
+        monitorJob?.cancel()
+        ResultsStore.save(getApplication(), _hosts.values.toList(), _urls.values.toList())
+    }
 }
