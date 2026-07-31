@@ -1,9 +1,17 @@
 package com.tasirin.network.radar.viewmodel
 
+import android.Manifest
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tasirin.network.radar.model.*
@@ -28,6 +36,8 @@ data class ScanUiState(
     val hosts: List<HostInfo> = emptyList(),
     val discoveredUrls: List<UrlDiscovery> = emptyList(),
     val selectedHosts: Set<String> = emptySet(),
+    val searchQuery: String = "",
+    val deviceFilter: DeviceFilter = DeviceFilter.ALL,
     val summary: String = "Ready",
     val summaryColor: Long = 0xFF00695C,
     val isSummaryOk: Boolean = true,
@@ -45,6 +55,7 @@ data class ScanUiState(
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     private val scannerManager = ScannerManager()
+    private val portScanner = com.tasirin.network.radar.scanner.PortScanner()
     private val _state = MutableStateFlow(ScanUiState())
     val state: StateFlow<ScanUiState> = _state.asStateFlow()
 
@@ -53,6 +64,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var _startTime = 0L
     private var monitorJob: Job? = null
     private var lastPersistAt = 0L
+    private var _lastDeleted: List<HostInfo> = emptyList()
+    private var lastNotifyAt = 0L
+    private var notifyCount = 0
+
+    private companion object {
+        const val CHANNEL_NEW_DEVICE = "new_device"
+        const val MAX_NOTIFY_PER_SCAN = 20
+    }
 
     init {
         refreshNetworkInfo()
@@ -89,6 +108,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun setTarget(target: String) { _state.update { it.copy(target = target) } }
     fun setCustomPorts(ports: String) { _state.update { it.copy(customPorts = ports) } }
     fun setPortProfile(profile: PortProfile) { _state.update { it.copy(selectedProfile = profile) } }
+    fun setSearchQuery(query: String) { _state.update { it.copy(searchQuery = query) } }
+    fun setDeviceFilter(filter: DeviceFilter) { _state.update { it.copy(deviceFilter = filter) } }
     fun toggleCustomPorts() { _state.update { it.copy(showCustomPorts = !it.showCustomPorts) } }
     fun toggleAbout() { _state.update { it.copy(showAbout = !it.showAbout) } }
 
@@ -108,6 +129,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         if (type == ScanType.MONITOR) { startMonitor(target); return }
 
         _startTime = System.currentTimeMillis()
+        lastNotifyAt = 0L; notifyCount = 0; _lastDeleted = emptyList()
         _state.update {
             it.copy(isScanning = true, isPaused = false, scanType = type, error = null,
                 summary = "${type.label} starting...",
@@ -125,9 +147,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             _state.update { it.copy(progress = "Scanning ${event.ip}$pctText", progressPercent = pct) }
                         }
                         is ScanEvent.HostFound -> {
-                            _hosts[event.host.ip] = event.host
+                            val isNew = !_hosts.containsKey(event.host.ip)
+                            val host = if (isNew) event.host.copy(isNew = true) else event.host
+                            _hosts[host.ip] = host
                             if (_hosts.size <= 500) applySort()
                             else _state.update { it.copy(hosts = _hosts.values.toList()) }
+                            if (isNew && type != ScanType.TRACE) notifyNewDevice(host)
                             persistResults()
                         }
                         is ScanEvent.UrlFound -> {
@@ -272,6 +297,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteSelectedHosts() {
         val toDelete = _state.value.selectedHosts
         if (toDelete.isEmpty()) return
+        _lastDeleted = toDelete.mapNotNull { _hosts[it] }
         toDelete.forEach { _hosts.remove(it) }
         _state.update {
             it.copy(hosts = _hosts.values.toList(), selectedHosts = emptySet(),
@@ -281,11 +307,48 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         persistResults(force = true)
     }
 
+    fun undoDelete() {
+        if (_lastDeleted.isEmpty()) return
+        val restored = _lastDeleted.filter { !_hosts.containsKey(it.ip) }
+        _lastDeleted = emptyList()
+        if (restored.isEmpty()) return
+        restored.forEach { _hosts[it.ip] = it }
+        _state.update {
+            it.copy(hosts = _hosts.values.toList(), summary = "Undo: ${restored.size} host(s) dikembalikan",
+                summaryColor = 0xFF00695C, isSummaryOk = true)
+        }
+        persistResults(force = true)
+    }
+
+    fun rescanHost(ip: String) {
+        if (_state.value.isScanning) return
+        _state.update { it.copy(summary = "Scan ulang $ip...", summaryColor = 0xFF00695C, isSummaryOk = true) }
+        viewModelScope.launch {
+            try {
+                val host = withContext(Dispatchers.IO) { portScanner.scanHost(ip) }
+                val ports = host?.openPorts?.size ?: 0
+                if (host != null) _hosts[ip] = host
+                _state.update {
+                    it.copy(hosts = _hosts.values.toList(),
+                        summary = if (ports > 0) "Rescan $ip: $ports port terbuka"
+                        else "Rescan $ip: tidak ada port terbuka",
+                        summaryColor = 0xFF2E7D32, isSummaryOk = true)
+                }
+                persistResults(force = true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _state.update { it.copy(error = "Rescan $ip gagal") }
+            }
+        }
+    }
+
     fun clearResults() {
-        _hosts.clear(); _urls.clear()
+        _hosts.clear(); _urls.clear(); _lastDeleted = emptyList()
         _state.update {
             it.copy(hosts = emptyList(), discoveredUrls = emptyList(), hostSummary = "", scanResult = null,
-                selectedHosts = emptySet(), summary = "Results cleared", summaryColor = 0xFF00695C, isSummaryOk = true)
+                selectedHosts = emptySet(), searchQuery = "", deviceFilter = DeviceFilter.ALL,
+                summary = "Results cleared", summaryColor = 0xFF00695C, isSummaryOk = true)
         }
         persistResults(force = true)
     }
@@ -316,20 +379,43 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildHostSummary(result: ScanResult): String {
-        val cameras = result.hosts.count { h -> h.openPorts.any { p ->
-            p.service?.contains("Camera", true) == true || p.service?.contains("Hikvision", true) == true ||
-            p.service?.contains("Dahua", true) == true || p.service?.contains("ONVIF", true) == true ||
-            p.service?.contains("RTSP", true) == true } }
-        val routers = result.hosts.count { h -> h.openPorts.any { p ->
-            p.service?.contains("Router", true) == true || p.service?.contains("MikroTik", true) == true ||
-            p.service?.contains("Winbox", true) == true || p.service?.contains("TR-069", true) == true ||
-            p.service?.contains("UPnP", true) == true } }
-        val shares = result.hosts.count { h -> h.openPorts.any { p -> p.port in listOf(445, 139, 2049, 21, 111, 135) } }
+        val cameras = result.hosts.count { DeviceKind.CAMERA in it.deviceKinds() }
+        val routers = result.hosts.count { DeviceKind.ROUTER in it.deviceKinds() }
+        val shares = result.hosts.count { DeviceKind.SHARE in it.deviceKinds() }
         val parts = mutableListOf<String>()
         if (cameras > 0) parts.add("📷 $cameras")
         if (routers > 0) parts.add("🌐 $routers")
         if (shares > 0) parts.add("📁 $shares")
         return parts.joinToString("  ")
+    }
+
+    /** Notifikasi perangkat baru, di-throttle (maks 20/scan, min 2 detik antar notif). */
+    private fun notifyNewDevice(host: HostInfo) {
+        val now = System.currentTimeMillis()
+        if (now - lastNotifyAt < 2_000 || notifyCount >= MAX_NOTIFY_PER_SCAN) return
+        lastNotifyAt = now; notifyCount++
+        try {
+            val ctx = getApplication<Application>()
+            if (ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) return
+            val nm = NotificationManagerCompat.from(ctx)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel(CHANNEL_NEW_DEVICE, "Perangkat Baru", NotificationManager.IMPORTANCE_DEFAULT)
+                )
+            }
+            val detail = buildString {
+                host.hostname?.takeIf { it != host.ip }?.let { append(it) }
+                host.macVendor?.let { if (isNotEmpty()) append(" · "); append(it) }
+            }
+            val notification = NotificationCompat.Builder(ctx, CHANNEL_NEW_DEVICE)
+                .setSmallIcon(android.R.drawable.stat_notify_more)
+                .setContentTitle("Perangkat baru: ${host.ip}")
+                .setContentText(detail.ifBlank { "Host baru terdeteksi di jaringan" })
+                .setAutoCancel(true)
+                .build()
+            nm.notify(host.ip.hashCode(), notification)
+        } catch (_: Exception) { }
     }
 
     private fun persistResults(force: Boolean = false) {

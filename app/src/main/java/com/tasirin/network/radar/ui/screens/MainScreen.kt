@@ -2,8 +2,8 @@ package com.tasirin.network.radar.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -15,10 +15,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tasirin.network.radar.BuildConfig
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.ui.components.*
 import com.tasirin.network.radar.ui.theme.*
 import com.tasirin.network.radar.viewmodel.ScanUiState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +35,7 @@ fun MainScreen(
     onCopyAll: (() -> Unit)? = null,
     onToggleHostSelect: ((String) -> Unit)? = null,
     onDeleteSelected: (() -> Unit)? = null,
+    onUndoDelete: (() -> Unit)? = null,
     onSelectAllHosts: (() -> Unit)? = null,
     onClearSelection: (() -> Unit)? = null,
     onClearResults: (() -> Unit)? = null,
@@ -43,11 +46,33 @@ fun MainScreen(
     onToggleCustomPorts: (() -> Unit)? = null,
     selectedProfile: PortProfile = PortProfile.DEFAULT,
     onSelectProfile: ((PortProfile) -> Unit)? = null,
+    onSearchChange: ((String) -> Unit)? = null,
+    onDeviceFilter: ((DeviceFilter) -> Unit)? = null,
+    onRescanHost: ((String) -> Unit)? = null,
     onSelectInterface: ((String) -> Unit)? = null
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     // About dialog
     if (state.showAbout) {
         AboutDialog(onDismiss = { onAbout?.invoke() })
+    }
+
+    val filteredHosts = remember(state.hosts, state.searchQuery, state.deviceFilter) {
+        val q = state.searchQuery.trim()
+        state.hosts.filter { host ->
+            val okQuery = q.isEmpty() || host.ip.contains(q, true) ||
+                host.hostname?.contains(q, true) == true ||
+                host.macAddress?.contains(q, true) == true
+            val okFilter = when (state.deviceFilter) {
+                DeviceFilter.ALL -> true
+                DeviceFilter.CAMERA -> DeviceKind.CAMERA in host.deviceKinds()
+                DeviceFilter.ROUTER -> DeviceKind.ROUTER in host.deviceKinds()
+                DeviceFilter.SHARE -> DeviceKind.SHARE in host.deviceKinds()
+            }
+            okQuery && okFilter
+        }
     }
 
     Scaffold(
@@ -80,195 +105,288 @@ fun MainScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 12.dp)
-                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp),
+            contentPadding = PaddingValues(bottom = 12.dp)
         ) {
-            Spacer(Modifier.height(8.dp))
+            item { Spacer(Modifier.height(8.dp)) }
 
             // ─── Network Info ───
             if (state.networkInfo.localIp.isNotEmpty()) {
-                NetworkInfoBar(
-                    localIp = state.networkInfo.localIp,
-                    gateway = state.networkInfo.gateway,
-                    subnet = state.networkInfo.subnet,
-                    interfaces = state.networkInfo.availableInterfaces,
-                    selectedInterface = state.networkInfo.selectedInterface,
-                    onSelectInterface = onSelectInterface
-                )
-                Spacer(Modifier.height(6.dp))
+                item {
+                    NetworkInfoBar(
+                        localIp = state.networkInfo.localIp,
+                        gateway = state.networkInfo.gateway,
+                        subnet = state.networkInfo.subnet,
+                        interfaces = state.networkInfo.availableInterfaces,
+                        selectedInterface = state.networkInfo.selectedInterface,
+                        onSelectInterface = onSelectInterface
+                    )
+                }
+                item { Spacer(Modifier.height(6.dp)) }
             }
 
             // ─── Target Input ───
-            TargetInput(
-                value = state.target,
-                onValueChange = onTargetChange,
-                hint = "Target IP, URL, or CIDR"
-            )
+            item { TargetInput(value = state.target, onValueChange = onTargetChange, hint = "Target IP, URL, or CIDR") }
 
             // ─── Custom Ports Toggle ───
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(
-                    onClick = { onToggleCustomPorts?.invoke() },
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-                ) {
-                    Icon(
-                        if (state.showCustomPorts) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        null, Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Custom Ports", fontSize = 11.sp)
-                }
-            }
+            item {
+                Column {
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = { onToggleCustomPorts?.invoke() },
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                if (state.showCustomPorts) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                null, Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Custom Ports", fontSize = 11.sp)
+                        }
+                    }
 
-            // Preset Port Profile
-            if (onSelectProfile != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    PortProfile.entries.forEach { profile ->
-                        FilterChip(
-                            selected = state.selectedProfile == profile,
-                            onClick = { onSelectProfile(profile) },
-                            label = { Text(profile.label, fontSize = 10.sp) },
-                            modifier = Modifier.height(28.dp)
+                    // Preset Port Profile
+                    if (onSelectProfile != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            PortProfile.entries.forEach { profile ->
+                                FilterChip(
+                                    selected = state.selectedProfile == profile,
+                                    onClick = { onSelectProfile(profile) },
+                                    label = { Text(profile.label, fontSize = 10.sp) },
+                                    modifier = Modifier.height(28.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    AnimatedVisibility(visible = state.showCustomPorts) {
+                        OutlinedTextField(
+                            value = state.customPorts,
+                            onValueChange = { onCustomPorts?.invoke(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("80,443,8080 or 1-1000 or 22,80,443,3000-4000", fontSize = 11.sp) },
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                         )
                     }
                 }
             }
 
-            AnimatedVisibility(visible = state.showCustomPorts) {
-                OutlinedTextField(
-                    value = state.customPorts,
-                    onValueChange = { onCustomPorts?.invoke(it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("80,443,8080 or 1-1000 or 22,80,443,3000-4000", fontSize = 11.sp) },
-                    singleLine = true,
-                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            item { Spacer(Modifier.height(6.dp)) }
+
+            // ─── Scan Buttons ───
+            item { ScanButtonRow(isScanning = state.isScanning, onScan = onScan) }
+            item { Spacer(Modifier.height(4.dp)) }
+
+            // ─── Pause + Stop + Copy All + Clear ───
+            item {
+                ActionButtons(
+                    isScanning = state.isScanning,
+                    onStop = onStop,
+                    isPaused = state.isPaused,
+                    onPauseResume = onPauseResume,
+                    hasResults = state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty(),
+                    onCopyAll = onCopyAll,
+                    onClear = onClearResults
+                )
+            }
+            item { Spacer(Modifier.height(4.dp)) }
+
+            // ─── Status Bar ───
+            item {
+                StatusBar(
+                    text = state.summary,
+                    isOk = state.isSummaryOk,
+                    isScanning = state.isScanning,
+                    progress = state.progress,
+                    progressPercent = state.progressPercent
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
-
-            // ─── Scan Buttons ───
-            ScanButtonRow(isScanning = state.isScanning, onScan = onScan)
-            Spacer(Modifier.height(4.dp))
-
-            // ─── Pause + Stop + Copy All ───
-            ActionButtons(
-                isScanning = state.isScanning,
-                onStop = onStop,
-                isPaused = state.isPaused,
-                onPauseResume = onPauseResume,
-                hasResults = state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty(),
-                onCopyAll = onCopyAll,
-                onClear = onClearResults
-            )
-            Spacer(Modifier.height(4.dp))
-
-            // ─── Status Bar ───
-            StatusBar(
-                text = state.summary,
-                isOk = state.isSummaryOk,
-                isScanning = state.isScanning,
-                progress = state.progress,
-                progressPercent = state.progressPercent
-            )
-
             if (state.copyFeedback != null) {
-                Spacer(Modifier.height(4.dp))
-                Text(state.copyFeedback, fontSize = 11.sp, color = AccentGreen, fontWeight = FontWeight.Bold)
+                item {
+                    Column {
+                        Spacer(Modifier.height(4.dp))
+                        Text(state.copyFeedback, fontSize = 11.sp, color = AccentGreen, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             if (state.hostSummary.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(state.hostSummary, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                item {
+                    Column {
+                        Spacer(Modifier.height(4.dp))
+                        Text(state.hostSummary, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             // ─── Sort ───
             if (state.hosts.isNotEmpty() && onSortMode != null) {
-                Spacer(Modifier.height(4.dp))
-                SortBar(currentSort = state.sortMode, onSortMode = onSortMode)
+                item {
+                    Column {
+                        Spacer(Modifier.height(4.dp))
+                        SortBar(currentSort = state.sortMode, onSortMode = onSortMode)
+                    }
+                }
             }
-            Spacer(Modifier.height(6.dp))
+            item { Spacer(Modifier.height(6.dp)) }
 
             // ─── Monitor ───
             if (state.scanType == ScanType.MONITOR && state.monitor.isRunning) {
-                MonitorDisplay(state.monitor)
-                Spacer(Modifier.height(6.dp))
+                item { MonitorDisplay(state.monitor) }
+                item { Spacer(Modifier.height(6.dp)) }
             }
 
             // ─── Selection bar ───
             if (state.selectedHosts.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("${state.selectedHosts.size} dipilih", fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { onSelectAllHosts?.invoke() },
-                        contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Semua", fontSize = 12.sp) }
-                    Button(
-                        onClick = { onDeleteSelected?.invoke() },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) { Text("Hapus (${state.selectedHosts.size})", fontSize = 12.sp) }
-                    TextButton(onClick = { onClearSelection?.invoke() },
-                        contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Batal", fontSize = 12.sp) }
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("${state.selectedHosts.size} dipilih", fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { onSelectAllHosts?.invoke() },
+                            contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Semua", fontSize = 12.sp) }
+                        Button(
+                            onClick = {
+                                val n = state.selectedHosts.size
+                                onDeleteSelected?.invoke()
+                                scope.launch {
+                                    val res = snackbarHostState.showSnackbar(
+                                        message = "Hapus $n host",
+                                        actionLabel = "Undo",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (res == SnackbarResult.ActionPerformed) onUndoDelete?.invoke()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) { Text("Hapus (${state.selectedHosts.size})", fontSize = 12.sp) }
+                        TextButton(onClick = { onClearSelection?.invoke() },
+                            contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Batal", fontSize = 12.sp) }
+                    }
                 }
             }
 
             // ─── Results - Hosts ───
             if (state.hosts.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text("Hosts (${state.hosts.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                item {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                if (filteredHosts.size == state.hosts.size) "Hosts (${state.hosts.size})"
+                                else "Hosts (${filteredHosts.size}/${state.hosts.size})",
+                                fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = state.searchQuery,
+                            onValueChange = { onSearchChange?.invoke(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Cari IP / hostname / MAC", fontSize = 11.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
+                            trailingIcon = if (state.searchQuery.isNotEmpty()) {
+                                {
+                                    IconButton(onClick = { onSearchChange?.invoke("") }, modifier = Modifier.size(28.dp)) {
+                                        Icon(Icons.Default.Close, null, Modifier.size(14.dp))
+                                    }
+                                }
+                            } else null,
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            DeviceFilter.entries.forEach { f ->
+                                FilterChip(
+                                    selected = state.deviceFilter == f,
+                                    onClick = { onDeviceFilter?.invoke(f) },
+                                    label = { Text(f.label, fontSize = 10.sp) },
+                                    modifier = Modifier.height(28.dp)
+                                )
+                            }
+                        }
+                    }
                 }
-                Spacer(Modifier.height(4.dp))
-                HostResultsList(
-                    hosts = state.hosts,
-                    onCopyIp = onCopyIp,
-                    onWol = onWol,
-                    selectedHosts = state.selectedHosts,
-                    onToggleSelect = onToggleHostSelect
-                )
-            }
+                item { Spacer(Modifier.height(4.dp)) }
 
-            // ─── Results - URLs ───
-            if (state.discoveredUrls.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Text("URLs (${state.discoveredUrls.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface)
-                Spacer(Modifier.height(4.dp))
-                UrlResultsList(urls = state.discoveredUrls)
-            }
-
-            if (state.hosts.isEmpty() && state.discoveredUrls.isEmpty() && !state.isScanning && state.scanResult != null) {
-                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.SearchOff, null, Modifier.size(32.dp), tint = TextSecondary)
-                        Spacer(Modifier.height(8.dp))
-                        Text("No results found", color = TextSecondary, fontSize = 14.sp)
+                if (filteredHosts.isEmpty()) {
+                    item {
+                        Text("Tidak ada host yang cocok", color = TextSecondary, fontSize = 12.sp,
+                            modifier = Modifier.padding(vertical = 8.dp))
+                    }
+                } else {
+                    items(filteredHosts, key = { it.ip }) { host ->
+                        HostCard(
+                            host = host,
+                            onCopyIp = onCopyIp,
+                            onWol = onWol,
+                            isSelected = host.ip in state.selectedHosts,
+                            selectionMode = state.selectedHosts.isNotEmpty(),
+                            onToggleSelect = { onToggleHostSelect?.invoke(host.ip) },
+                            onRescanHost = if (state.isScanning) null else { onRescanHost?.invoke(host.ip) }
+                        )
+                        Spacer(Modifier.height(6.dp))
                     }
                 }
             }
 
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.height(8.dp))
-            Text("NetRadar v2.0  |  Julius Rudi Tasirin",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp,
-                modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            Spacer(Modifier.height(8.dp))
+            // ─── Results - URLs ───
+            if (state.discoveredUrls.isNotEmpty()) {
+                item {
+                    Column {
+                        Spacer(Modifier.height(4.dp))
+                        Text("URLs (${state.discoveredUrls.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface)
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
+                items(state.discoveredUrls, key = { it.url }) { url ->
+                    UrlCard(url)
+                    Spacer(Modifier.height(4.dp))
+                }
+            }
+
+            // ─── Empty state ───
+            if (state.hosts.isEmpty() && state.discoveredUrls.isEmpty() && !state.isScanning && state.scanResult != null) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.SearchOff, null, Modifier.size(32.dp), tint = TextSecondary)
+                            Spacer(Modifier.height(8.dp))
+                            Text("No results found", color = TextSecondary, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column {
+                    Spacer(Modifier.height(8.dp))
+                    Text("NetRadar v${BuildConfig.VERSION_NAME}  |  Julius Rudi Tasirin",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp,
+                        modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                }
+            }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NetworkInfoBar(
     localIp: String, gateway: String, subnet: String,
@@ -288,18 +406,11 @@ fun NetworkInfoBar(
         }
         if (interfaces.size > 1) {
             Spacer(Modifier.height(2.dp))
-            Surface(
+            TextButton(
                 onClick = { showInterfacePicker = true },
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.small
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)) {
-                    Icon(Icons.Default.SettingsEthernet, null, Modifier.size(12.dp), tint = AccentGreen)
-                    Spacer(Modifier.width(4.dp))
-                    Text(selectedInterface.ifEmpty { interfaces.firstOrNull()?.name ?: "Auto" },
-                        fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
-                    Icon(Icons.Default.ArrowDropDown, null, Modifier.size(12.dp), tint = TextSecondary)
-                }
+                Text("Interface: ${selectedInterface.ifBlank { "Auto" }}", fontSize = 10.sp)
             }
         }
     }
@@ -307,48 +418,41 @@ fun NetworkInfoBar(
     if (showInterfacePicker) {
         AlertDialog(
             onDismissRequest = { showInterfacePicker = false },
-            title = { Text("Network Interface", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            title = { Text("Select Interface", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
-                    interfaces.forEach { iface ->
-                        Surface(
+                    interfaces.forEach { ni ->
+                        TextButton(
                             onClick = {
-                                onSelectInterface?.invoke(iface.name)
+                                onSelectInterface?.invoke(ni.name)
                                 showInterfacePicker = false
                             },
-                            color = if (iface.name == (selectedInterface.ifEmpty { interfaces.firstOrNull()?.name }))
-                                MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                            shape = MaterialTheme.shapes.small
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth().padding(12.dp)
-                            ) {
-                                Icon(Icons.Default.SettingsEthernet, null, Modifier.size(16.dp), tint = AccentGreen)
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(iface.name, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                    Text(iface.ip, fontSize = 11.sp, color = TextSecondary, fontFamily = FontFamily.Monospace)
-                                }
-                                if (iface.isActive) {
-                                    Spacer(Modifier.weight(1f))
-                                    Text("ACTIVE", fontSize = 9.sp, color = StatusGreen, fontWeight = FontWeight.Bold)
-                                }
-                            }
+                            Text(
+                                "${ni.name} — ${ni.ip}${if (ni.isActive) " (active)" else ""}",
+                                fontSize = 11.sp
+                            )
                         }
-                        Spacer(Modifier.height(4.dp))
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showInterfacePicker = false }) { Text("Cancel") } }
+            confirmButton = { TextButton(onClick = { showInterfacePicker = false }) { Text("Close") } }
         )
     }
 }
 
 @Composable
 fun NetworkChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+        ) {
             Icon(icon, null, Modifier.size(12.dp), tint = AccentGreen)
             Spacer(Modifier.width(4.dp))
             Text(text, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
@@ -356,31 +460,24 @@ fun NetworkChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: Str
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("NetRadar", fontWeight = FontWeight.Bold)
-            }
-        },
+        title = { Text("NetRadar v${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold) },
         text = {
             Column {
                 TabRow(selectedTabIndex = tab) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("About", fontSize = 12.sp) })
-                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Ports", fontSize = 12.sp) })
-                    Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Help", fontSize = 12.sp) })
+                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("About", fontSize = 11.sp) })
+                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Ports", fontSize = 11.sp) })
+                    Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Help", fontSize = 11.sp) })
                 }
                 Spacer(Modifier.height(8.dp))
                 when (tab) {
                     0 -> {
-                        Text("Network Radar Scanner", fontSize = 13.sp, color = TextSecondary)
-                        Spacer(Modifier.height(4.dp))
-                        Text("Version 2.0", fontSize = 12.sp)
+                        Text("Network Radar Scanner", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Spacer(Modifier.height(4.dp))
                         Text("Created by Julius Rudi Tasirin", fontSize = 12.sp)
                         Spacer(Modifier.height(8.dp))
@@ -415,6 +512,8 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         HelpBullet("Traceroute shows each hop (needs ping -t)")
                         HelpBullet("Long-press host to select, then delete many at once")
                         HelpBullet("Results persist until you delete them")
+                        HelpBullet("Refresh icon re-scans a single host")
+                        HelpBullet("NEW badge = device first seen this scan")
                         HelpBullet("WoL button ⚡ wakes sleeping devices")
                         HelpBullet("Monitor mode pings every 1.5s")
                     }

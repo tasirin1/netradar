@@ -23,31 +23,6 @@ import com.tasirin.network.radar.model.UrlDiscovery
 import com.tasirin.network.radar.ui.theme.*
 
 @Composable
-fun HostResultsList(
-    hosts: List<HostInfo>,
-    modifier: Modifier = Modifier,
-    onCopyIp: ((String) -> Unit)? = null,
-    onWol: ((String, String) -> Unit)? = null,
-    selectedHosts: Set<String> = emptySet(),
-    onToggleSelect: ((String) -> Unit)? = null
-) {
-    if (hosts.isEmpty()) return
-    val selectionMode = selectedHosts.isNotEmpty()
-    Column(modifier = modifier) {
-        hosts.forEach { host ->
-            HostCard(
-                host = host,
-                onCopyIp = onCopyIp,
-                onWol = onWol,
-                isSelected = host.ip in selectedHosts,
-                selectionMode = selectionMode,
-                onToggleSelect = onToggleSelect?.let { { it(host.ip) } }
-            )
-            Spacer(Modifier.height(6.dp))
-        }
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HostCard(
@@ -56,10 +31,12 @@ fun HostCard(
     onWol: ((String, String) -> Unit)? = null,
     isSelected: Boolean = false,
     selectionMode: Boolean = false,
-    onToggleSelect: (() -> Unit)? = null
+    onToggleSelect: (() -> Unit)? = null,
+    onRescanHost: (() -> Unit)? = null
 ) {
     val uriHandler = LocalUriHandler.current
     var showPortInfo by remember { mutableStateOf<PortInfo?>(null) }
+    val kinds = remember(host) { host.deviceKinds() }
 
     Card(
         modifier = Modifier
@@ -100,6 +77,14 @@ fun HostCard(
                         try { uriHandler.openUri(url) } catch (_: Exception) {}
                     }
                 )
+                if (host.isNew) {
+                    Spacer(Modifier.width(6.dp))
+                    Text("NEW", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AccentGreen)
+                }
+                if (kinds.isNotEmpty()) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(kinds.joinToString("") { it.icon }, fontSize = 12.sp)
+                }
                 if (host.latencyMs != null) {
                     Spacer(Modifier.width(6.dp))
                     Text(
@@ -124,6 +109,11 @@ fun HostCard(
                 if (host.macAddress != null && onWol != null) {
                     IconButton(onClick = { onWol(host.ip, host.macAddress) }, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.PowerSettingsNew, null, Modifier.size(14.dp), tint = AccentGreen)
+                    }
+                }
+                if (onRescanHost != null) {
+                    IconButton(onClick = { onRescanHost() }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Refresh, null, Modifier.size(14.dp), tint = TextSecondary)
                     }
                 }
             }

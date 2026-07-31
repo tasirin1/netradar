@@ -13,7 +13,8 @@ data class HostInfo(
     val macVendor: String? = null,
     val latencyMs: Long? = null,
     val isAlive: Boolean = true,
-    val openPorts: List<PortInfo> = emptyList()
+    val openPorts: List<PortInfo> = emptyList(),
+    val isNew: Boolean = false
 )
 
 data class NetworkInfo(
@@ -46,6 +47,31 @@ enum class SortMode(val label: String) {
     PORTS("Ports"),
     LATENCY("Latency"),
     HOSTNAME("Hostname")
+}
+
+/** Jenis perangkat yang terdeteksi dari service/port yang terbuka. */
+enum class DeviceKind(val icon: String) {
+    CAMERA("📷"), ROUTER("🌐"), SHARE("📁")
+}
+
+/** Filter tampilan hasil host. */
+enum class DeviceFilter(val label: String) {
+    ALL("Semua"),
+    CAMERA("📷 CCTV"),
+    ROUTER("🌐 Router"),
+    SHARE("📁 Share")
+}
+
+fun HostInfo.deviceKinds(): Set<DeviceKind> = buildSet {
+    if (openPorts.any { p ->
+            p.service?.contains("Camera", true) == true || p.service?.contains("Hikvision", true) == true ||
+            p.service?.contains("Dahua", true) == true || p.service?.contains("ONVIF", true) == true ||
+            p.service?.contains("RTSP", true) == true }) add(DeviceKind.CAMERA)
+    if (openPorts.any { p ->
+            p.service?.contains("Router", true) == true || p.service?.contains("MikroTik", true) == true ||
+            p.service?.contains("Winbox", true) == true || p.service?.contains("TR-069", true) == true ||
+            p.service?.contains("UPnP", true) == true }) add(DeviceKind.ROUTER)
+    if (openPorts.any { p -> p.port in listOf(445, 139, 2049, 21, 111, 135) }) add(DeviceKind.SHARE)
 }
 
 data class ScanResult(

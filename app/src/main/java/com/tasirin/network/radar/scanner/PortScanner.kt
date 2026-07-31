@@ -73,6 +73,18 @@ class PortScanner {
         emit(ScanEvent.Complete(ScanResult(type = ScanType.PORT_SCAN, target = target)))
     }
 
+    /** Scan satu host saja (dipakai untuk rescan per-host). */
+    suspend fun scanHost(ip: String, ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts): HostInfo? {
+        val hostname = try {
+            withTimeout(300) { InetAddress.getByName(ip).hostName }.let { if (it != ip) it else null }
+        } catch (_: Exception) { null }
+        val mac = NetworkUtils.readArpTable()[ip]
+        val vendor = NetworkUtils.lookupMacVendor(mac)
+        val openPorts = scanHostPorts(ip, ports)
+        return if (openPorts.isNotEmpty()) HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+            macVendor = vendor, isAlive = true, openPorts = openPorts) else null
+    }
+
     private suspend fun scanHostPorts(ip: String, ports: IntArray): List<PortInfo> = withContext(Dispatchers.IO) {
         coroutineScope {
             ports.map { port ->

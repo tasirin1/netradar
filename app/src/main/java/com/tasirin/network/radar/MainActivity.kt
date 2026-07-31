@@ -1,5 +1,8 @@
 package com.tasirin.network.radar
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
@@ -21,6 +24,13 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Izin notifikasi (Android 13+)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+        }
 
         setContent {
             val viewModel: ScanViewModel = viewModel()
@@ -58,6 +68,7 @@ class MainActivity : AppCompatActivity() {
                         },
                         onToggleHostSelect = { ip -> viewModel.toggleHostSelection(ip) },
                         onDeleteSelected = { viewModel.deleteSelectedHosts() },
+                        onUndoDelete = { viewModel.undoDelete() },
                         onSelectAllHosts = { viewModel.selectAllHosts() },
                         onClearSelection = { viewModel.clearSelection() },
                         onClearResults = { viewModel.clearResults() },
@@ -68,6 +79,9 @@ class MainActivity : AppCompatActivity() {
                         onToggleCustomPorts = { viewModel.toggleCustomPorts() },
                         selectedProfile = state.selectedProfile,
                         onSelectProfile = { profile -> viewModel.setPortProfile(profile) },
+                        onSearchChange = { q -> viewModel.setSearchQuery(q) },
+                        onDeviceFilter = { f -> viewModel.setDeviceFilter(f) },
+                        onRescanHost = { ip -> viewModel.rescanHost(ip) },
                         onSelectInterface = { name -> viewModel.selectInterface(name) }
                     )
                 }
