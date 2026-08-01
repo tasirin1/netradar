@@ -24,6 +24,7 @@ import com.tasirin.network.radar.util.PingUtil
 import com.tasirin.network.radar.util.ResultsStore
 import com.tasirin.network.radar.util.UptimeStore
 import com.tasirin.network.radar.util.WakeOnLan
+import com.tasirin.network.radar.widget.NetRadarWidget
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -536,12 +537,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val urls = _urls.values.toList()
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) { ResultsStore.save(app, hosts, urls) }
+        NetRadarWidget.pushUpdate(app, hosts.size, _favorites.size)
     }
 
     fun toggleFavorite(ip: String) {
         if (!_favorites.add(ip)) _favorites.remove(ip)
         FavoritesStore.save(getApplication(), _favorites)
         _state.update { it.copy(favoriteIps = _favorites.toSet()) }
+        NetRadarWidget.pushUpdate(getApplication(), _hosts.size, _favorites.size)
     }
 
     private fun recordUptime(ip: String, online: Boolean) {

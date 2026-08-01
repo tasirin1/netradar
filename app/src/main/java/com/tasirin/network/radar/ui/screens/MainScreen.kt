@@ -1,8 +1,12 @@
 package com.tasirin.network.radar.ui.screens
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -11,9 +15,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,6 +32,9 @@ import com.tasirin.network.radar.ui.components.*
 import com.tasirin.network.radar.ui.theme.*
 import com.tasirin.network.radar.viewmodel.ScanUiState
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,6 +72,8 @@ fun MainScreen(
     var showClearConfirm by remember { mutableStateOf(false) }
     var detailHost by remember { mutableStateOf<HostInfo?>(null) }
     var showDiffDialog by remember { mutableStateOf(false) }
+    var showMapDialog by remember { mutableStateOf(false) }
+    var showMatrixDialog by remember { mutableStateOf(false) }
 
     // About dialog
     if (state.showAbout) {
@@ -100,6 +114,21 @@ fun MainScreen(
         ScanDiffDialog(
             diff = state.diff ?: ScanDiff(),
             onDismiss = { showDiffDialog = false }
+        )
+    }
+
+    if (showMapDialog) {
+        NetworkMapDialog(
+            hosts = state.hosts,
+            gateway = state.networkInfo.gateway,
+            onDismiss = { showMapDialog = false }
+        )
+    }
+
+    if (showMatrixDialog) {
+        PortMatrixDialog(
+            hosts = state.hosts,
+            onDismiss = { showMatrixDialog = false }
         )
     }
 
@@ -339,6 +368,14 @@ fun MainScreen(
                                 fontWeight = FontWeight.Bold, fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f)
                             )
+                            TextButton(
+                                onClick = { showMapDialog = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) { Text("🗺 Peta", fontSize = 11.sp) }
+                            TextButton(
+                                onClick = { showMatrixDialog = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) { Text("▦ Matriks", fontSize = 11.sp) }
                         }
                         Spacer(Modifier.height(4.dp))
                         OutlinedTextField(
@@ -737,4 +774,101 @@ private fun DiffSection(title: String, hosts: List<HostInfo>) {
         )
     }
     Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun NetworkMapDialog(hosts: List<HostInfo>, gateway: String, onDismiss: () -> Unit) {
+    val nodes = hosts.take(60)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Peta jaringan", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                val textMeasurer = rememberTextMeasurer()
+                Canvas(modifier = Modifier.fillMaxWidth().height(280.dp)) {
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    val radius = minOf(size.width, size.height) / 2f - 30.dp.toPx()
+                    drawCircle(color = MaterialTheme.colorScheme.primary, radius = 10.dp.toPx(), center = Offset(cx, cy))
+                    val centerLabel = textMeasurer.measure(
+                        AnnotatedString(gateway.ifBlank { "Gateway" }),
+                        TextStyle(fontSize = 9.sp, color = Color.DarkGray)
+                    )
+                    drawText(centerLabel, topLeft = Offset(cx - centerLabel.size.width / 2f, cy + 13.dp.toPx()))
+                    if (nodes.isEmpty()) return@Canvas
+                    nodes.forEachIndexed { i, host ->
+                        val angle = 2.0 * PI * i / nodes.size
+                        val x = (cx + radius * cos(angle).toFloat()).coerceIn(0f, size.width)
+                        val y = (cy + radius * sin(angle).toFloat()).coerceIn(0f, size.height)
+                        val nodePos = Offset(x, y)
+                        drawLine(
+                            start = Offset(cx, cy),
+                            end = nodePos,
+                            color = hostColor(host).copy(alpha = 0.55f),
+                            strokeWidth = (1 + host.openPorts.size.coerceAtMost(4)).dp.toPx()
+                        )
+                        drawCircle(color = hostColor(host), radius = 5.dp.toPx(), center = nodePos)
+                        val label = textMeasurer.measure(
+                            AnnotatedString(host.ip.substringAfterLast('.')),
+                            TextStyle(fontSize = 8.sp, color = Color.Gray)
+                        )
+                        drawText(label, topLeft = Offset(x - label.size.width / 2f, y + 6.dp.toPx()))
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("● Camera", fontSize = 10.sp, color = Color(0xFFE53935))
+                    Text("● Router", fontSize = 10.sp, color = Color(0xFF1E88E5))
+                    Text("● Share", fontSize = 10.sp, color = Color(0xFFFB8C00))
+                    Text("● Lainnya", fontSize = 10.sp, color = Color(0xFF43A047))
+                }
+                Text("Pusat = gateway · tebal garis = jumlah port", fontSize = 9.sp, color = TextSecondary)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+private fun hostColor(host: HostInfo): Color = when {
+    DeviceKind.CAMERA in host.deviceKinds() -> Color(0xFFE53935)
+    DeviceKind.ROUTER in host.deviceKinds() -> Color(0xFF1E88E5)
+    DeviceKind.SHARE in host.deviceKinds() -> Color(0xFFFB8C00)
+    else -> Color(0xFF43A047)
+}
+
+@Composable
+private fun PortMatrixDialog(hosts: List<HostInfo>, onDismiss: () -> Unit) {
+    val rows = hosts.take(50)
+    val ports = PortRangeParser.defaultPorts.take(16)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Matriks port × host", fontWeight = FontWeight.Bold) },
+        text = {
+            Box(Modifier.horizontalScroll(rememberScrollState())) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("IP", Modifier.width(92.dp), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        ports.forEach { p ->
+                            Text("$p", Modifier.width(24.dp), fontSize = 8.sp, color = TextSecondary)
+                        }
+                    }
+                    rows.forEach { host ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(host.ip, Modifier.width(92.dp), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                            ports.forEach { p ->
+                                val open = host.openPorts.any { it.port == p }
+                                Box(
+                                    Modifier.padding(1.dp).size(22.dp).background(
+                                        if (open) StatusGreen.copy(alpha = 0.75f) else Color(0x1F000000),
+                                        RoundedCornerShape(3.dp)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
 }
