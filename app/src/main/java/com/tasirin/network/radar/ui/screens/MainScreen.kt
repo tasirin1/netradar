@@ -50,10 +50,29 @@ fun MainScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var showClearConfirm by remember { mutableStateOf(false) }
 
     // About dialog
     if (state.showAbout) {
         AboutDialog(onDismiss = { onAbout?.invoke() })
+    }
+
+    // Konfirmasi hapus semua hasil
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("Hapus semua hasil?") },
+            text = { Text("Semua host dan URL hasil scan akan dihapus permanen.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearConfirm = false
+                    onClearResults?.invoke()
+                }) { Text("Hapus", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("Batal") }
+            }
+        )
     }
 
     val filteredHosts = remember(state.hosts, state.searchQuery, state.deviceFilter) {
@@ -177,7 +196,7 @@ fun MainScreen(
                     onPauseResume = onPauseResume,
                     hasResults = state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty(),
                     onCopyAll = onCopyAll,
-                    onClear = onClearResults
+                    onClear = { showClearConfirm = true }
                 )
             }
             item { Spacer(Modifier.height(4.dp)) }

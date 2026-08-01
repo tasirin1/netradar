@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
@@ -15,6 +16,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tasirin.network.radar.model.*
+import com.tasirin.network.radar.ScanService
 import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.PingUtil
@@ -65,6 +67,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var _lastDeleted: List<HostInfo> = emptyList()
     private var lastNotifyAt = 0L
     private var notifyCount = 0
+    private var scanGeneration = 0L
+    private var lastScanNotifAt = 0L
 
     private companion object {
         const val CHANNEL_NEW_DEVICE = "new_device"
@@ -126,12 +130,15 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
         _startTime = System.currentTimeMillis()
         lastNotifyAt = 0L; notifyCount = 0; _lastDeleted = emptyList()
+        lastScanNotifAt = 0L
         _state.update {
             it.copy(isScanning = true, isPaused = false, scanType = type, error = null,
                 summary = "${type.label} starting...",
                 summaryColor = 0xFF00695C, isSummaryOk = true, progress = "", progressPercent = 0f,
                 hostSummary = "", scanResult = null, selectedHosts = emptySet())
         }
+        val gen = ++scanGeneration
+        startScanService()
 
         viewModelScope.launch {
             try {
@@ -141,6 +148,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
                             val pctText = if (event.total > 0) " (${event.current}/${event.total})" else ""
                             _state.update { it.copy(progress = "${event.ip}$pctText", progressPercent = pct) }
+                            updateScanNotification(event)
                         }
                         is ScanEvent.HostFound -> {
                             val isNew = !_hosts.containsKey(event.host.ip)
@@ -170,11 +178,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                                 progress = "", progressPercent = 1f, summary = summaryText,
                                 summaryColor = if (ok) 0xFF2E7D32 else 0xFFC62828, isSummaryOk = ok,
                                 hostSummary = buildHostSummary(result), scanResult = result) }
+                            if (gen == scanGeneration) stopScanService()
                         }
                         else -> {}
                     }
                 }
             } catch (e: CancellationException) {
+                if (gen == scanGeneration) stopScanService()
                 _state.update { it.copy(isScanning = false, summary = "Cancelled", summaryColor = 0xFFC62828) }
             }
         }
@@ -194,6 +204,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun stopScan() {
         scannerManager.stop()
         monitorJob?.cancel(); monitorJob = null
+        stopScanService()
         persistResults(force = true)
         _state.update { it.copy(isScanning = false, isPaused = false, summary = "Stopped",
             summaryColor = 0xFFC62828, isSummaryOk = false, monitor = PingMonitorState(), selectedHosts = emptySet()) }
@@ -382,7 +393,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         lastNotifyAt = now; notifyCount++
         try {
             val ctx = getApplication<Application>()
-            if (ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED) return
             val nm = NotificationManagerCompat.from(ctx)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -404,6 +416,54 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) { }
     }
 
+    /** Mulai foreground service penjaga proses selama scan berjalan. */
+    private fun startScanService() {
+        try {
+            val ctx = getApplication<Application>()
+            val intent = Intent(ctx, ScanService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(intent)
+            else ctx.startService(intent)
+        } catch (_: Exception) { }
+    }
+
+    /** Hentikan foreground service + hapus notifikasi progress. */
+    private fun stopScanService() {
+        try {
+            val ctx = getApplication<Application>()
+            ctx.stopService(Intent(ctx, ScanService::class.java))
+            NotificationManagerCompat.from(ctx).cancel(ScanService.NOTIFICATION_ID)
+        } catch (_: Exception) { }
+    }
+
+    /** Perbarui notifikasi progress scan (throttle 1 detik). */
+    private fun updateScanNotification(event: ScanEvent.Progress) {
+        val now = System.currentTimeMillis()
+        if (now - lastScanNotifAt < 1_000) return
+        lastScanNotifAt = now
+        try {
+            val ctx = getApplication<Application>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) return
+            val nm = NotificationManagerCompat.from(ctx)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel(ScanService.CHANNEL_ID, "Scan Berjalan", NotificationManager.IMPORTANCE_LOW)
+                )
+            }
+            val pct = if (event.total > 0) event.current * 100 / event.total else 0
+            val notification = NotificationCompat.Builder(ctx, ScanService.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_notify_more)
+                .setContentTitle("NetRadar — scan berjalan")
+                .setContentText(event.ip)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+                .setProgress(100, pct, pct == 0)
+                .build()
+            nm.notify(ScanService.NOTIFICATION_ID, notification)
+        } catch (_: Exception) { }
+    }
+
     private fun persistResults(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && now - lastPersistAt < 2_000) return  // throttle: max tiap 2 detik saat scan
@@ -418,6 +478,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         scannerManager.stop()
         monitorJob?.cancel()
+        stopScanService()
         ResultsStore.save(getApplication(), _hosts.values.toList(), _urls.values.toList())
     }
 }
