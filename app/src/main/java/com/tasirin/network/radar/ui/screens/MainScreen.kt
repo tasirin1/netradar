@@ -1,6 +1,5 @@
 package com.tasirin.network.radar.ui.screens
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,10 +41,6 @@ fun MainScreen(
     onWol: ((String, String) -> Unit)? = null,
     onSortMode: ((SortMode) -> Unit)? = null,
     onAbout: (() -> Unit)? = null,
-    onCustomPorts: ((String) -> Unit)? = null,
-    onToggleCustomPorts: (() -> Unit)? = null,
-    selectedProfile: PortProfile = PortProfile.DEFAULT,
-    onSelectProfile: ((PortProfile) -> Unit)? = null,
     scanSpeed: ScanSpeed = ScanSpeed.SEDANG,
     onSelectScanSpeed: ((ScanSpeed) -> Unit)? = null,
     onSearchChange: ((String) -> Unit)? = null,
@@ -137,41 +132,12 @@ fun MainScreen(
             // ─── Target Input ───
             item { TargetInput(value = state.target, onValueChange = onTargetChange, hint = "Target IP, URL, or CIDR") }
 
-            // ─── Custom Ports Toggle ───
+            // ─── Level Sensitivitas Scan ───
             item {
                 Column {
                     Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
-                            onClick = { onToggleCustomPorts?.invoke() },
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Icon(
-                                if (state.showCustomPorts) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                null, Modifier.size(14.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Custom Ports", fontSize = 11.sp)
-                        }
-                    }
-
-                    // Preset Port Profile
-                    if (onSelectProfile != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            PortProfile.entries.forEach { profile ->
-                                FilterChip(
-                                    selected = state.selectedProfile == profile,
-                                    onClick = { onSelectProfile(profile) },
-                                    label = { Text(profile.label, fontSize = 10.sp) },
-                                    modifier = Modifier.height(28.dp)
-                                )
-                            }
-                        }
-                    }
-
                     // Level sensitivitas scan: host paralel + timeout koneksi
                     if (onSelectScanSpeed != null) {
-                        Spacer(Modifier.height(6.dp))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -187,21 +153,10 @@ fun MainScreen(
                             }
                         }
                         Text(
-                            "Makin kiri = makin teliti tapi lambat · makin kanan = makin cepat tapi bisa ke-skip",
+                            "Makin kiri = lebih teliti: lebih banyak port & lambat · makin kanan = cepat tapi port lebih sedikit & bisa ke-skip",
                             fontSize = 9.sp,
                             color = TextSecondary,
                             modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-
-                    AnimatedVisibility(visible = state.showCustomPorts) {
-                        OutlinedTextField(
-                            value = state.customPorts,
-                            onValueChange = { onCustomPorts?.invoke(it) },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("80,443,8080 or 1-1000 or 22,80,443,3000-4000", fontSize = 11.sp) },
-                            singleLine = true,
-                            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                         )
                     }
                 }
@@ -514,7 +469,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         Text("Build: Kotlin + Jetpack Compose", fontSize = 10.sp, color = TextSecondary)
                     }
                     1 -> {
-                        Text("Default Ports (50)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Common Ports (${PortRangeParser.defaultPorts.size})", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Spacer(Modifier.height(4.dp))
                         val portList = PortRangeParser.defaultPorts.toList().chunked(10)
                         portList.forEach { row ->
@@ -522,7 +477,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                             Spacer(Modifier.height(2.dp))
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("Custom: 80,443 or 1-1000 or 22,80,3000-4000", fontSize = 11.sp, color = AccentGreen)
+                        Text("Level rendah (kiri) → makin banyak port discan", fontSize = 11.sp, color = AccentGreen)
                     }
                     2 -> {
                         Text("How to Use:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -534,8 +489,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         Spacer(Modifier.height(6.dp))
                         Text("Tips:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Spacer(Modifier.height(4.dp))
-                        HelpBullet("Preset ports: Web / CCTV / IoT / DB")
-                        HelpBullet("Use Custom Ports for specific ports")
+                        HelpBullet("Speed level: kiri = teliti + banyak port, kanan = cepat + sedikit port")
                         HelpBullet("Long-press on port chip for port info")
                         HelpBullet("Traceroute shows each hop (needs ping -t)")
                         HelpBullet("Long-press host to select, then delete many at once")

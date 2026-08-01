@@ -25,10 +25,7 @@ import kotlinx.coroutines.flow.*
 
 data class ScanUiState(
     val target: String = "",
-    val customPorts: String = "",
-    val selectedProfile: PortProfile = PortProfile.DEFAULT,
     val scanSpeed: ScanSpeed = ScanSpeed.SEDANG,
-    val showCustomPorts: Boolean = false,
     val isScanning: Boolean = false,
     val isPaused: Boolean = false,
     val scanType: ScanType? = null,
@@ -107,12 +104,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setTarget(target: String) { _state.update { it.copy(target = target) } }
-    fun setCustomPorts(ports: String) { _state.update { it.copy(customPorts = ports) } }
-    fun setPortProfile(profile: PortProfile) { _state.update { it.copy(selectedProfile = profile) } }
     fun setScanSpeed(speed: ScanSpeed) { _state.update { it.copy(scanSpeed = speed) } }
     fun setSearchQuery(query: String) { _state.update { it.copy(searchQuery = query) } }
     fun setDeviceFilter(filter: DeviceFilter) { _state.update { it.copy(deviceFilter = filter) } }
-    fun toggleCustomPorts() { _state.update { it.copy(showCustomPorts = !it.showCustomPorts) } }
     fun toggleAbout() { _state.update { it.copy(showAbout = !it.showAbout) } }
 
     fun startScan(type: ScanType) {
@@ -195,16 +189,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun resumeScan() {
         scannerManager.resume()
         _state.update { it.copy(isPaused = false, summary = "Resuming...", summaryColor = 0xFF00695C, isSummaryOk = true) }
-    }
-
-    fun useCustomPortsForScan() {
-        val profile = _state.value.selectedProfile
-        val custom = _state.value.customPorts
-        com.tasirin.network.radar.scanner.PortScanner.customPortsOverride = when {
-            profile != PortProfile.DEFAULT -> profile.ports
-            custom.isNotBlank() -> PortRangeParser.parse(custom)
-            else -> null
-        }
     }
 
     fun stopScan() {

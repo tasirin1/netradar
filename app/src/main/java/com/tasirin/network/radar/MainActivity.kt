@@ -53,8 +53,6 @@ class MainActivity : AppCompatActivity() {
                         state = state,
                         onTargetChange = { viewModel.setTarget(it) },
                         onScan = { type ->
-                            // Apply custom ports before scanning
-                            viewModel.useCustomPortsForScan()
                             viewModel.startScan(type)
                         },
                         onStop = { viewModel.stopScan() },
@@ -75,10 +73,6 @@ class MainActivity : AppCompatActivity() {
                         onWol = { ip, mac -> viewModel.wakeOnLan(ip, mac) },
                         onSortMode = { mode -> viewModel.setSortMode(mode) },
                         onAbout = { viewModel.toggleAbout() },
-                        onCustomPorts = { ports -> viewModel.setCustomPorts(ports) },
-                        onToggleCustomPorts = { viewModel.toggleCustomPorts() },
-                        selectedProfile = state.selectedProfile,
-                        onSelectProfile = { profile -> viewModel.setPortProfile(profile) },
                         scanSpeed = state.scanSpeed,
                         onSelectScanSpeed = { speed -> viewModel.setScanSpeed(speed) },
                         onSearchChange = { q -> viewModel.setSearchQuery(q) },

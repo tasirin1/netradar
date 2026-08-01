@@ -20,7 +20,6 @@ class ScannerManager {
     fun scan(
         type: ScanType,
         target: String,
-        customPorts: IntArray? = null,
         speed: ScanSpeed = ScanSpeed.SEDANG
     ): Flow<ScanEvent> = channelFlow {
         currentJob?.cancel()
@@ -30,10 +29,7 @@ class ScannerManager {
         val scanJob = launch(Dispatchers.IO) {
             try {
                 val scannerFlow = when (type) {
-                    ScanType.PORT_SCAN -> {
-                        if (customPorts != null) portScanner.scan(target, customPorts, speed)
-                        else portScanner.scan(target, speed = speed)
-                    }
+                    ScanType.PORT_SCAN -> portScanner.scan(target, speed)
                     ScanType.CAMERA -> cameraScanner.scan(target, speed)
                     ScanType.ROUTER -> routerScanner.scan(target, speed)
                     ScanType.URL_PATH -> urlPathScanner.scan(target)

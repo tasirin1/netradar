@@ -13,15 +13,8 @@ import java.util.concurrent.Semaphore
 
 class PortScanner {
 
-    companion object {
-        @Volatile
-        var customPortsOverride: IntArray? = null
-    }
-
-
     fun scan(
         target: String,
-        ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts,
         speed: ScanSpeed = ScanSpeed.SEDANG
     ): Flow<ScanEvent> = flow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
@@ -30,6 +23,7 @@ class PortScanner {
             return@flow
         }
 
+        val ports = PortRangeParser.defaultPorts.take(speed.portCount)
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
         val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
@@ -72,9 +66,9 @@ class PortScanner {
     /** Scan satu host saja (dipakai untuk rescan per-host). */
     suspend fun scanHost(
         ip: String,
-        ports: IntArray = customPortsOverride ?: PortRangeParser.defaultPorts,
         speed: ScanSpeed = ScanSpeed.SEDANG
     ): HostInfo? {
+        val ports = PortRangeParser.defaultPorts.take(speed.portCount)
         val hostname = try {
             withTimeout(300) { InetAddress.getByName(ip).hostName }.let { if (it != ip) it else null }
         } catch (_: Exception) { null }
