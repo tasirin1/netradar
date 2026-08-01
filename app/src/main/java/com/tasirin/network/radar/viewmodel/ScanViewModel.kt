@@ -576,12 +576,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private fun computeDiff() {
         val current = _foundThisScan
         val previous = _previousScanHosts ?: emptyMap()
-        val added = current.filterKeys { it !in previous }.map { _hosts[it] ?: HostInfo(it) }
-        val removed = previous.filterKeys { it !in current }.mapNotNull { _hosts[it.key] }
+        val added = current.filterKeys { it !in previous }.keys.map { _hosts[it] ?: HostInfo(it) }
+        val removed = previous.filterKeys { it !in current }.keys.mapNotNull { _hosts[it] }
         val changed = current.filterKeys { ip ->
             val prev = previous[ip]
             prev != null && prev.toSet() != current[ip]!!.toSet()
-        }.map { _hosts[it.key] ?: HostInfo(it.key) }
+        }.keys.map { _hosts[it] ?: HostInfo(it) }
         _previousScanHosts = current
         _state.update { it.copy(diff = ScanDiff(added, removed, changed)) }
     }
