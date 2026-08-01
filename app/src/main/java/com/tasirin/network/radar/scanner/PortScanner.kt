@@ -107,7 +107,7 @@ class PortScanner {
         var truncated = false
 
         // Chunk kecil membatasi socket serentak (hindari "too many open files" / force close)
-        (1..total).chunked(DEEP_SCAN_CONCURRENCY).forEach { chunk ->
+        for (chunk in (1..total).chunked(DEEP_SCAN_CONCURRENCY)) {
             coroutineScope {
                 val found = chunk.map { port ->
                     async {
