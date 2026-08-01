@@ -1106,14 +1106,14 @@ private fun NetworkMapDialog(
                                 val cy = h / 2f
                                 val radius = minOf(w, h) / 2f - 30.dp.toPx()
                                 val hitR = 24.dp.toPx()
-                                val idx = nodes.indexOfFirst { i ->
+                                val idx = nodes.indices.firstOrNull { i ->
                                     val angle = 2.0 * PI * i / nodes.size
                                     val x = (cx + radius * cos(angle).toFloat()).coerceIn(0f, w)
                                     val y = (cy + radius * sin(angle).toFloat()).coerceIn(0f, h)
                                     val dx = tap.x - x
                                     val dy = tap.y - y
                                     dx * dx + dy * dy <= hitR * hitR
-                                }
+                                } ?: -1
                                 if (idx >= 0) onHostClick(nodes[idx])
                             }
                         }
