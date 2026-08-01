@@ -186,6 +186,12 @@ fun MainScreen(
                                 )
                             }
                         }
+                        Text(
+                            "Makin kiri = makin teliti tapi lambat · makin kanan = makin cepat tapi bisa ke-skip",
+                            fontSize = 9.sp,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
 
                     AnimatedVisibility(visible = state.showCustomPorts) {
