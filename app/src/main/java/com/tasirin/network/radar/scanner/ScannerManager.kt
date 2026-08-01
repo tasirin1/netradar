@@ -12,6 +12,7 @@ class ScannerManager {
     private val urlPathScanner = UrlPathScanner()
     private val discoverScanner = DiscoverScanner()
     private val pingSweep = PingSweep()
+    private val udpScanner = UdpScanner()
     private val tracerouteScanner = TracerouteScanner()
 
     @Volatile
@@ -35,6 +36,7 @@ class ScannerManager {
                     ScanType.URL_PATH -> urlPathScanner.scan(target)
                     ScanType.DISCOVER -> discoverScanner.scan(target, speed)
                     ScanType.PING -> pingSweep.scan(target, speed)
+                    ScanType.UDP -> udpScanner.scan(target, speed)
                     ScanType.TRACE -> tracerouteScanner.scan(target)
                     ScanType.MONITOR -> emptyFlow()
                 }

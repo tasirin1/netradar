@@ -16,7 +16,8 @@ data class HostInfo(
     val osGuess: String? = null,
     val isAlive: Boolean = true,
     val openPorts: List<PortInfo> = emptyList(),
-    val isNew: Boolean = false
+    val isNew: Boolean = false,
+    val ipConflict: Boolean = false
 )
 
 data class NetworkInfo(
@@ -40,6 +41,7 @@ enum class ScanType(val label: String) {
     URL_PATH("URL Path"),
     DISCOVER("Discover"),
     PING("Ping Sweep"),
+    UDP("UDP"),
     TRACE("Traceroute"),
     MONITOR("Monitor")
 }

@@ -44,6 +44,7 @@ fun ScanButtonRow(
         ScanType.URL_PATH to "URL Path",
         ScanType.DISCOVER to "Discover",
         ScanType.PING to "Ping Sweep",
+        ScanType.UDP to "UDP",
         ScanType.TRACE to "Trace",
         ScanType.MONITOR to "Monitor"
     )

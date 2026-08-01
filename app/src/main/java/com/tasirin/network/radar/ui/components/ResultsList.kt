@@ -100,6 +100,13 @@ fun HostCard(
                     Spacer(Modifier.width(6.dp))
                     Text(kinds.joinToString("") { it.icon }, fontSize = 12.sp)
                 }
+                if (host.ipConflict) {
+                    Spacer(Modifier.width(6.dp))
+                    Surface(shape = MaterialTheme.shapes.small, color = StatusOrange.copy(alpha = 0.15f)) {
+                        Text("⚠ Konflik", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = StatusOrange,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                    }
+                }
                 if (host.osGuess != null) {
                     Spacer(Modifier.width(6.dp))
                     Text(host.osGuess, fontSize = 9.sp, fontWeight = FontWeight.Bold,

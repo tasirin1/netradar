@@ -44,6 +44,7 @@ object ResultsStore {
         host.macVendor?.let { put("vendor", it) }
         host.latencyMs?.let { put("latency", it) }
         put("alive", host.isAlive)
+        if (host.ipConflict) put("conflict", true)
         val ports = JSONArray()
         host.openPorts.forEach { p ->
             ports.put(JSONObject().apply {
@@ -86,6 +87,7 @@ object ResultsStore {
                     macVendor = o.optString("vendor").ifEmpty { null },
                     latencyMs = if (o.has("latency")) o.optLong("latency") else null,
                     isAlive = o.optBoolean("alive", true),
+                    ipConflict = o.optBoolean("conflict", false),
                     openPorts = ports
                 ))
             }

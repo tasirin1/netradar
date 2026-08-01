@@ -17,6 +17,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.ScanService
+import com.tasirin.network.radar.scanner.ScanLoop
 import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.FavoritesStore
 import com.tasirin.network.radar.util.NetworkUtils
@@ -182,8 +183,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             _foundThisScan[event.host.ip] = event.host.openPorts.map { it.port }
                             val existing = _hosts[event.host.ip]
                             val isNew = existing == null
+                            val conflict = existing != null && existing.macAddress != null &&
+                                event.host.macAddress != null &&
+                                !existing.macAddress.equals(event.host.macAddress, ignoreCase = true)
                             val host = if (existing != null) {
-                                event.host.copy(isNew = false, label = existing.label ?: event.host.label)
+                                event.host.copy(isNew = false, label = existing.label ?: event.host.label,
+                                    ipConflict = conflict || existing.ipConflict)
                             } else event.host.copy(isNew = true)
                             _hosts[host.ip] = host
                             if (_hosts.size <= 500) applySort()
@@ -321,7 +326,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             SortMode.NAMA -> _hosts.values.sortedBy { it.label ?: it.hostname ?: it.ip }
             SortMode.UPTIME -> _hosts.values.sortedByDescending { uptimeOnlinePct(it.ip) }
         }
-        _state.update { it.copy(hosts = sorted) }
+        // Favorit selalu di-pin di atas; urutan internal tetap stabil
+        val pinned = sorted.sortedBy { it.ip !in _favorites }
+        _state.update { it.copy(hosts = pinned) }
     }
 
     /** Persentase online dari riwayat ketersediaan (untuk sortir Uptime). */
@@ -357,6 +364,23 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private fun recordPing(ip: String, latencyMs: Long) {
         _pingHistory = PingStore.record(getApplication(), _pingHistory, ip, latencyMs)
         _state.update { it.copy(pingHistory = _pingHistory) }
+    }
+
+    /** Cari nama host via reverse DNS (PTR) untuk host yang hostname-nya kosong. */
+    fun resolveHostname(ip: String) {
+        viewModelScope.launch {
+            _state.update { it.copy(summary = "Reverse DNS $ip...", summaryColor = 0xFF00695C, isSummaryOk = true) }
+            val name = withContext(Dispatchers.IO) { ScanLoop.hostname(ip) }
+            val host = _hosts[ip] ?: return@launch
+            _hosts[ip] = host.copy(hostname = name ?: host.hostname)
+            _state.update {
+                it.copy(hosts = _hosts.values.toList(),
+                    summary = if (name != null) "Hostname $ip → $name" else "Hostname $ip tidak ditemukan",
+                    summaryColor = if (name != null) 0xFF2E7D32 else 0xFFC62828,
+                    isSummaryOk = name != null)
+            }
+            persistResults(force = true)
+        }
     }
 
     fun copyToClipboard(label: String, text: String) {
@@ -441,7 +465,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 val ports = host?.openPorts?.size ?: 0
                 recordUptime(ip, host != null)
                 host?.latencyMs?.let { recordPing(ip, it) }
-                if (host != null) _hosts[ip] = host.copy(label = _hosts[ip]?.label)
+                if (host != null) {
+                    val existing = _hosts[ip]
+                    val conflict = existing?.macAddress != null && host.macAddress != null &&
+                        !existing.macAddress.equals(host.macAddress, ignoreCase = true)
+                    _hosts[ip] = host.copy(label = existing?.label,
+                        ipConflict = conflict || existing?.ipConflict == true)
+                }
                 _state.update {
                     it.copy(hosts = _hosts.values.toList(),
                         summary = if (ports > 0) "Rescan $ip: $ports port terbuka"
@@ -600,14 +630,15 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val urls = _urls.values.toList()
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) { ResultsStore.save(app, hosts, urls) }
-        NetRadarWidget.pushUpdate(app, hosts.size, _favorites.size)
+        NetRadarWidget.pushUpdate(app)
     }
 
     fun toggleFavorite(ip: String) {
         if (!_favorites.add(ip)) _favorites.remove(ip)
         FavoritesStore.save(getApplication(), _favorites)
         _state.update { it.copy(favoriteIps = _favorites.toSet()) }
-        NetRadarWidget.pushUpdate(getApplication(), _hosts.size, _favorites.size)
+        applySort()
+        NetRadarWidget.pushUpdate(getApplication())
     }
 
     /** Deep scan semua port (1..65535) satu host, berjalan di background. */
@@ -631,7 +662,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     openPorts = ports,
                     isAlive = true,
                     label = existing?.label,
-                    isNew = false
+                    isNew = false,
+                    ipConflict = existing?.ipConflict == true
                 )
                 _hosts[ip] = host
                 if (_hosts.size <= 500) applySort()
@@ -661,7 +693,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _hosts[ip] = host.copy(label = clean)
         _state.update { it.copy(hosts = _hosts.values.toList()) }
         persistResults(force = true)
-        NetRadarWidget.pushUpdate(getApplication(), _hosts.size, _favorites.size)
+        NetRadarWidget.pushUpdate(getApplication())
     }
 
     private fun recordUptime(ip: String, online: Boolean) {

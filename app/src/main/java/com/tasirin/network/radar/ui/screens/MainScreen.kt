@@ -2,6 +2,7 @@ package com.tasirin.network.radar.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -71,6 +73,7 @@ fun MainScreen(
     onToggleFavorite: ((String) -> Unit)? = null,
     onDeepScan: ((String) -> Unit)? = null,
     onPingHost: ((String) -> Unit)? = null,
+    onResolveHostname: ((String) -> Unit)? = null,
     onSetHostLabel: ((String, String?) -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -114,6 +117,7 @@ fun MainScreen(
             onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
             onSetLabel = { label -> onSetHostLabel?.invoke(host.ip, label) },
             onDeepScan = { onDeepScan?.invoke(host.ip) },
+            onResolveHostname = { onResolveHostname?.invoke(host.ip) },
             onDismiss = { detailHost = null }
         )
     }
@@ -130,6 +134,10 @@ fun MainScreen(
         NetworkMapDialog(
             hosts = state.hosts,
             gateway = state.networkInfo.gateway,
+            onHostClick = { host ->
+                showMapDialog = false
+                detailHost = host
+            },
             onDismiss = { showMapDialog = false }
         )
     }
@@ -234,6 +242,7 @@ fun MainScreen(
                             else state.hosts.count { state.uptime[it.ip]?.lastOrNull()?.online == true },
                             newCount = state.hosts.count { it.isNew },
                             portCount = state.hosts.sumOf { it.openPorts.size },
+                            conflictCount = state.hosts.count { it.ipConflict },
                             urlCount = state.discoveredUrls.size
                         )
                     }
@@ -669,6 +678,7 @@ private fun NetworkSummaryBar(
     onlineCount: Int,
     newCount: Int,
     portCount: Int,
+    conflictCount: Int,
     urlCount: Int
 ) {
     Surface(
@@ -687,6 +697,7 @@ private fun NetworkSummaryBar(
             SummaryChip("Online: $onlineCount", if (onlineCount > 0) StatusGreen else StatusRed)
             if (newCount > 0) SummaryChip("Baru: $newCount", AccentGreen)
             if (portCount > 0) SummaryChip("Port: $portCount", StatusBlue)
+            if (conflictCount > 0) SummaryChip("⚠ Konflik: $conflictCount", StatusOrange)
             if (urlCount > 0) SummaryChip("URL: $urlCount", TextSecondary)
         }
     }
@@ -852,6 +863,7 @@ private fun HostDetailDialog(
     onToggleFavorite: () -> Unit,
     onSetLabel: ((String?) -> Unit)? = null,
     onDeepScan: (() -> Unit)? = null,
+    onResolveHostname: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -893,6 +905,25 @@ private fun HostDetailDialog(
                 host.osGuess?.let { DetailLine("OS", it) }
                 host.latencyMs?.let { DetailLine("Latency", "${it}ms") }
                 DetailLine("Port terbuka", host.openPorts.size.toString())
+                if (onResolveHostname != null) {
+                    TextButton(
+                        onClick = onResolveHostname,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, null, Modifier.size(12.dp), tint = TextSecondary)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Cari nama DNS (reverse lookup)", fontSize = 11.sp, color = TextSecondary)
+                    }
+                }
+                if (host.ipConflict) {
+                    Spacer(Modifier.height(4.dp))
+                    Surface(shape = MaterialTheme.shapes.small, color = StatusOrange.copy(alpha = 0.15f)) {
+                        Text("⚠ Kemungkinan konflik IP — MAC berbeda dari deteksi sebelumnya",
+                            fontSize = 11.sp,
+                            color = StatusOrange,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 TextButton(onClick = onToggleFavorite) {
                     Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder, null, Modifier.size(16.dp),
@@ -1049,7 +1080,12 @@ private fun DiffSection(title: String, hosts: List<HostInfo>) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun NetworkMapDialog(hosts: List<HostInfo>, gateway: String, onDismiss: () -> Unit) {
+private fun NetworkMapDialog(
+    hosts: List<HostInfo>,
+    gateway: String,
+    onHostClick: (HostInfo) -> Unit = {},
+    onDismiss: () -> Unit
+) {
     val nodes = hosts.take(60)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1058,7 +1094,30 @@ private fun NetworkMapDialog(hosts: List<HostInfo>, gateway: String, onDismiss: 
             Column {
                 val textMeasurer = rememberTextMeasurer()
                 val primaryColor = MaterialTheme.colorScheme.primary
-                Canvas(modifier = Modifier.fillMaxWidth().height(280.dp)) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .pointerInput(nodes) {
+                            detectTapGestures { tap ->
+                                val w = size.width.toFloat()
+                                val h = size.height.toFloat()
+                                val cx = w / 2f
+                                val cy = h / 2f
+                                val radius = minOf(w, h) / 2f - 30.dp.toPx()
+                                val hitR = 24.dp.toPx()
+                                val idx = nodes.indexOfFirst { i ->
+                                    val angle = 2.0 * PI * i / nodes.size
+                                    val x = (cx + radius * cos(angle).toFloat()).coerceIn(0f, w)
+                                    val y = (cy + radius * sin(angle).toFloat()).coerceIn(0f, h)
+                                    val dx = tap.x - x
+                                    val dy = tap.y - y
+                                    dx * dx + dy * dy <= hitR * hitR
+                                }
+                                if (idx >= 0) onHostClick(nodes[idx])
+                            }
+                        }
+                ) {
                     val cx = size.width / 2f
                     val cy = size.height / 2f
                     val radius = minOf(size.width, size.height) / 2f - 30.dp.toPx()
@@ -1100,7 +1159,8 @@ private fun NetworkMapDialog(hosts: List<HostInfo>, gateway: String, onDismiss: 
                     Text("● HP", fontSize = 10.sp, color = Color(0xFF5E35B1))
                     Text("● Lainnya", fontSize = 10.sp, color = Color(0xFF43A047))
                 }
-                Text("Pusat = gateway · tebal garis = jumlah port", fontSize = 9.sp, color = TextSecondary)
+                Text("Pusat = gateway · tebal garis = jumlah port · ketuk node untuk detail",
+                    fontSize = 9.sp, color = TextSecondary)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }

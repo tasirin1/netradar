@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
                         onToggleFavorite = { ip -> viewModel.toggleFavorite(ip) },
                         onDeepScan = { ip -> viewModel.deepScanHost(ip) },
                         onPingHost = { ip -> viewModel.pingHost(ip) },
+                        onResolveHostname = { ip -> viewModel.resolveHostname(ip) },
                         onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) }
                     )
                 }
