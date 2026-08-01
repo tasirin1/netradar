@@ -78,7 +78,8 @@ class MainActivity : AppCompatActivity() {
                         onSearchChange = { q -> viewModel.setSearchQuery(q) },
                         onDeviceFilter = { f -> viewModel.setDeviceFilter(f) },
                         onRescanHost = { ip -> viewModel.rescanHost(ip) },
-                        onSelectInterface = { name -> viewModel.selectInterface(name) }
+                        onSelectInterface = { name -> viewModel.selectInterface(name) },
+                        onToggleFavorite = { ip -> viewModel.toggleFavorite(ip) }
                     )
                 }
             }

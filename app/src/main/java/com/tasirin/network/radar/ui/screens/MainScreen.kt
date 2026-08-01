@@ -1,6 +1,8 @@
 package com.tasirin.network.radar.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -9,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -20,6 +23,9 @@ import com.tasirin.network.radar.ui.components.*
 import com.tasirin.network.radar.ui.theme.*
 import com.tasirin.network.radar.viewmodel.ScanUiState
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -46,11 +52,14 @@ fun MainScreen(
     onSearchChange: ((String) -> Unit)? = null,
     onDeviceFilter: ((DeviceFilter) -> Unit)? = null,
     onRescanHost: ((String) -> Unit)? = null,
-    onSelectInterface: ((String) -> Unit)? = null
+    onSelectInterface: ((String) -> Unit)? = null,
+    onToggleFavorite: ((String) -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showClearConfirm by remember { mutableStateOf(false) }
+    var detailHost by remember { mutableStateOf<HostInfo?>(null) }
+    var showDiffDialog by remember { mutableStateOf(false) }
 
     // About dialog
     if (state.showAbout) {
@@ -72,6 +81,25 @@ fun MainScreen(
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) { Text("Batal") }
             }
+        )
+    }
+
+    // Detail host: OS, favorit, riwayat ketersediaan
+    detailHost?.let { host ->
+        HostDetailDialog(
+            host = host,
+            isFavorite = host.ip in state.favoriteIps,
+            uptime = state.uptime[host.ip] ?: emptyList(),
+            onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
+            onDismiss = { detailHost = null }
+        )
+    }
+
+    // Perubahan antar scan
+    if (showDiffDialog) {
+        ScanDiffDialog(
+            diff = state.diff ?: ScanDiff(),
+            onDismiss = { showDiffDialog = false }
         )
     }
 
@@ -230,6 +258,25 @@ fun MainScreen(
                 }
             }
 
+            // ─── Diff antar scan ───
+            if (!state.isScanning && state.diff != null) {
+                val d = state.diff!!
+                if (d.added.isNotEmpty() || d.removed.isNotEmpty() || d.changed.isNotEmpty()) {
+                    item {
+                        OutlinedButton(
+                            onClick = { showDiffDialog = true },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            contentPadding = PaddingValues(vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.CompareArrows, null, Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Perubahan: +${d.added.size} baru · -${d.removed.size} hilang · ~${d.changed.size} berubah",
+                                fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+
             // ─── Sort ───
             if (state.hosts.isNotEmpty() && onSortMode != null) {
                 item {
@@ -336,6 +383,9 @@ fun MainScreen(
                             host = host,
                             onCopyIp = onCopyIp,
                             onWol = onWol,
+                            isFavorite = host.ip in state.favoriteIps,
+                            onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
+                            onShowDetail = { detailHost = host },
                             isSelected = host.ip in state.selectedHosts,
                             selectionMode = state.selectedHosts.isNotEmpty(),
                             onToggleSelect = { onToggleHostSelect?.invoke(host.ip) },
@@ -550,8 +600,9 @@ fun SortBar(currentSort: SortMode, onSortMode: (SortMode) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun MonitorDisplay(monitor: PingMonitorState) {
+fun MonitorDisplay(monitor: MonitorState) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -561,26 +612,129 @@ fun MonitorDisplay(monitor: PingMonitorState) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.WifiTethering, null, Modifier.size(16.dp), tint = AccentGreen)
                 Spacer(Modifier.width(6.dp))
-                Text("Monitoring ${monitor.ip}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Monitoring ${monitor.statuses.size} perangkat", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Spacer(Modifier.weight(1f))
-                Text("${monitor.history.size} pings", fontSize = 10.sp, color = TextSecondary)
+                Text("${monitor.pings} siklus", fontSize = 10.sp, color = TextSecondary)
             }
             Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                val recent = monitor.history.takeLast(20)
-                recent.forEach { result ->
-                    Surface(
-                        modifier = Modifier.size(8.dp),
-                        shape = MaterialTheme.shapes.extraSmall,
-                        color = if (result.isAlive) StatusGreen else StatusRed
-                    ) {}
+            val online = monitor.statuses.values.count { it }
+            Text("$online/${monitor.statuses.size} online",
+                fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                color = if (online > 0) StatusGreen else StatusRed)
+            Spacer(Modifier.height(6.dp))
+            if (monitor.statuses.isEmpty()) {
+                Text("Waiting...", fontSize = 11.sp, color = TextSecondary)
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    monitor.statuses.forEach { (ip, ok) ->
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = if (ok) StatusGreen.copy(alpha = 0.18f) else StatusRed.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                ip,
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = if (ok) StatusGreen else StatusRed,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
                 }
-                if (recent.isEmpty()) Text("Waiting...", fontSize = 11.sp, color = TextSecondary)
-            }
-            if (monitor.lastLatency != null) {
-                Spacer(Modifier.height(4.dp))
-                Text("Last: ${monitor.lastLatency}ms", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
             }
         }
     }
+}
+
+@Composable
+private fun HostDetailDialog(
+    host: HostInfo,
+    isFavorite: Boolean,
+    uptime: List<UptimeEvent>,
+    onToggleFavorite: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(host.ip, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                host.hostname?.takeIf { it != host.ip }?.let {
+                    DetailLine("Hostname", it)
+                }
+                host.macAddress?.let {
+                    DetailLine("MAC", it + (host.macVendor?.let { v -> " ($v)" } ?: ""))
+                }
+                host.osGuess?.let { DetailLine("OS", it) }
+                host.latencyMs?.let { DetailLine("Latency", "${it}ms") }
+                DetailLine("Port terbuka", host.openPorts.size.toString())
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = onToggleFavorite) {
+                    Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder, null, Modifier.size(16.dp),
+                        tint = if (isFavorite) Color(0xFFFFB300) else TextSecondary)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (isFavorite) "Hapus dari perangkat penting" else "Jadikan perangkat penting", fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Riwayat ketersediaan", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Spacer(Modifier.height(4.dp))
+                if (uptime.isEmpty()) {
+                    Text("Belum ada riwayat", fontSize = 11.sp, color = TextSecondary)
+                } else {
+                    val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
+                    uptime.takeLast(10).reversed().forEach { e ->
+                        Text(
+                            "${fmt.format(Date(e.ts))} — ${if (e.online) "online" else "offline"}",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (e.online) StatusGreen else StatusRed
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+@Composable
+private fun DetailLine(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+        Text("$label: ", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(value, fontSize = 12.sp, color = TextSecondary)
+    }
+}
+
+@Composable
+private fun ScanDiffDialog(diff: ScanDiff, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Perubahan antar scan") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                DiffSection("Baru (+${diff.added.size})", diff.added)
+                DiffSection("Hilang (-${diff.removed.size})", diff.removed)
+                DiffSection("Berubah (~${diff.changed.size})", diff.changed)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+@Composable
+private fun DiffSection(title: String, hosts: List<HostInfo>) {
+    if (hosts.isEmpty()) return
+    Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    hosts.forEach { host ->
+        val ports = host.openPorts.take(8).joinToString(",") { it.port.toString() }
+        Text(
+            "${host.ip}${if (ports.isNotEmpty()) " [$ports]" else ""}",
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            color = TextSecondary,
+            modifier = Modifier.padding(start = 8.dp, top = 2.dp)
+        )
+    }
+    Spacer(Modifier.height(6.dp))
 }

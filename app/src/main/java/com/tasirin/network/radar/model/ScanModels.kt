@@ -12,6 +12,7 @@ data class HostInfo(
     val macAddress: String? = null,
     val macVendor: String? = null,
     val latencyMs: Long? = null,
+    val osGuess: String? = null,
     val isAlive: Boolean = true,
     val openPorts: List<PortInfo> = emptyList(),
     val isNew: Boolean = false
@@ -93,16 +94,24 @@ data class ScanSummary(
     val durationMs: Long = 0
 )
 
-data class PingMonitorState(
-    val ip: String = "",
+/** Status monitor semua host: ip -> online/offline. */
+data class MonitorState(
     val isRunning: Boolean = false,
-    val lastLatency: Long? = null,
-    val history: List<PingResult> = emptyList()
+    val statuses: Map<String, Boolean> = emptyMap(),
+    val pings: Int = 0
 )
 
-data class PingResult(
-    val latencyMs: Long?,
-    val isAlive: Boolean
+/** Satu titik riwayat ketersediaan perangkat. */
+data class UptimeEvent(
+    val ts: Long,
+    val online: Boolean
+)
+
+/** Hasil perbandingan antara scan sebelumnya dan scan terakhir. */
+data class ScanDiff(
+    val added: List<HostInfo> = emptyList(),
+    val removed: List<HostInfo> = emptyList(),
+    val changed: List<HostInfo> = emptyList()
 )
 
 sealed class ScanEvent {

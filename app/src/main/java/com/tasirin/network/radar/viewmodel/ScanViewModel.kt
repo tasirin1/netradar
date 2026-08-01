@@ -18,9 +18,11 @@ import androidx.lifecycle.viewModelScope
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.ScanService
 import com.tasirin.network.radar.scanner.ScannerManager
+import com.tasirin.network.radar.util.FavoritesStore
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.PingUtil
 import com.tasirin.network.radar.util.ResultsStore
+import com.tasirin.network.radar.util.UptimeStore
 import com.tasirin.network.radar.util.WakeOnLan
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -48,8 +50,11 @@ data class ScanUiState(
     val showAbout: Boolean = false,
     val networkInfo: NetworkInfo = NetworkInfo(),
     val sortMode: SortMode = SortMode.IP,
-    val monitor: PingMonitorState = PingMonitorState(),
-    val copyFeedback: String? = null
+    val monitor: MonitorState = MonitorState(),
+    val copyFeedback: String? = null,
+    val favoriteIps: Set<String> = emptySet(),
+    val uptime: Map<String, List<UptimeEvent>> = emptyMap(),
+    val diff: ScanDiff? = null
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -69,9 +74,15 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var notifyCount = 0
     private var scanGeneration = 0L
     private var lastScanNotifAt = 0L
+    private var lastFavoriteAlertAt = 0L
+    private var _favorites = mutableSetOf<String>()
+    private var _uptime = emptyMap<String, List<UptimeEvent>>()
+    private var _foundThisScan = linkedMapOf<String, List<Int>>()
+    private var _previousScanHosts: Map<String, List<Int>>? = null
 
     private companion object {
         const val CHANNEL_NEW_DEVICE = "new_device"
+        const val CHANNEL_IMPORTANT = "important_device"
         const val MAX_NOTIFY_PER_SCAN = 20
     }
 
@@ -81,10 +92,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val (hosts, urls) = ResultsStore.load(getApplication())
         hosts.forEach { _hosts[it.ip] = it }
         urls.forEach { _urls[it.url] = it }
+        _favorites = FavoritesStore.load(getApplication()).toMutableSet()
+        _uptime = UptimeStore.load(getApplication())
         _state.update {
             it.copy(
                 hosts = _hosts.values.toList(),
                 discoveredUrls = _urls.values.toList(),
+                favoriteIps = _favorites.toSet(),
+                uptime = _uptime,
                 summary = if (_hosts.isEmpty()) "Ready" else "Riwayat: ${_hosts.size} host(s), ${_urls.size} URL(s)"
             )
         }
@@ -131,11 +146,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _startTime = System.currentTimeMillis()
         lastNotifyAt = 0L; notifyCount = 0; _lastDeleted = emptyList()
         lastScanNotifAt = 0L
+        _foundThisScan = linkedMapOf()
         _state.update {
             it.copy(isScanning = true, isPaused = false, scanType = type, error = null,
                 summary = "${type.label} starting...",
                 summaryColor = 0xFF00695C, isSummaryOk = true, progress = "", progressPercent = 0f,
-                hostSummary = "", scanResult = null, selectedHosts = emptySet())
+                hostSummary = "", scanResult = null, selectedHosts = emptySet(), diff = null)
         }
         val gen = ++scanGeneration
         startScanService()
@@ -147,16 +163,19 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         is ScanEvent.Progress -> {
                             val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
                             val pctText = if (event.total > 0) " (${event.current}/${event.total})" else ""
-                            _state.update { it.copy(progress = "${event.ip}$pctText", progressPercent = pct) }
+                            val eta = estimateEta(event.current, event.total)
+                            _state.update { it.copy(progress = "${event.ip}$pctText$eta", progressPercent = pct) }
                             updateScanNotification(event)
                         }
                         is ScanEvent.HostFound -> {
+                            _foundThisScan[event.host.ip] = event.host.openPorts.map { it.port }
                             val isNew = !_hosts.containsKey(event.host.ip)
                             val host = if (isNew) event.host.copy(isNew = true) else event.host
                             _hosts[host.ip] = host
                             if (_hosts.size <= 500) applySort()
                             else _state.update { it.copy(hosts = _hosts.values.toList()) }
                             if (isNew && type != ScanType.TRACE) notifyNewDevice(host)
+                            recordUptime(event.host.ip, true)
                             persistResults()
                         }
                         is ScanEvent.UrlFound -> {
@@ -167,15 +186,21 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         is ScanEvent.Error -> { _state.update { it.copy(error = event.message) } }
                         is ScanEvent.Complete -> {
                             val duration = System.currentTimeMillis() - _startTime
+                            computeDiff()
                             applySort()
                             persistResults(force = true)
                             val result = event.result.copy(hosts = _hosts.values.toList(),
                                 discoveredUrls = _urls.values.toList(),
                                 summary = ScanSummary(durationMs = duration))
                             val summaryText = buildSummary(result)
+                            val diffText = _state.value.diff?.let { d ->
+                                if (d.added.isNotEmpty() || d.removed.isNotEmpty() || d.changed.isNotEmpty())
+                                    " · +${d.added.size} baru -${d.removed.size} hilang ~${d.changed.size} berubah" else null
+                            }
+                            val finalSummary = if (diffText != null) "$summaryText$diffText" else summaryText
                             val ok = _hosts.isNotEmpty() || _urls.isNotEmpty()
                             _state.update { it.copy(isScanning = false, isPaused = false, scanType = null,
-                                progress = "", progressPercent = 1f, summary = summaryText,
+                                progress = "", progressPercent = 1f, summary = finalSummary,
                                 summaryColor = if (ok) 0xFF2E7D32 else 0xFFC62828, isSummaryOk = ok,
                                 hostSummary = buildHostSummary(result), scanResult = result) }
                             if (gen == scanGeneration) stopScanService()
@@ -207,24 +232,62 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         stopScanService()
         persistResults(force = true)
         _state.update { it.copy(isScanning = false, isPaused = false, summary = "Stopped",
-            summaryColor = 0xFFC62828, isSummaryOk = false, monitor = PingMonitorState(), selectedHosts = emptySet()) }
+            summaryColor = 0xFFC62828, isSummaryOk = false, monitor = MonitorState(), selectedHosts = emptySet()) }
     }
 
     private fun startMonitor(target: String) {
+        val hosts = _hosts.values.toList().sortedBy { it.ip }
+        if (hosts.isEmpty()) {
+            startSingleMonitor(target)
+            return
+        }
+        val ips = hosts.map { it.ip }
+        _state.update { it.copy(isScanning = true, scanType = ScanType.MONITOR, error = null,
+            summary = "Monitoring ${ips.size} perangkat...", summaryColor = 0xFF00695C, isSummaryOk = true,
+            monitor = MonitorState(isRunning = true)) }
+        monitorJob?.cancel()
+        monitorJob = viewModelScope.launch {
+            var pings = 0
+            while (isActive) {
+                val statuses = ips.chunked(8).flatMap { chunk ->
+                    chunk.map { ip -> async { ip to (PingUtil.pingProbe(ip) != null) } }.map { it.await() }
+                }.toMap()
+                pings++
+                statuses.forEach { (ip, online) ->
+                    recordUptime(ip, online)
+                    if (!online && ip in _favorites &&
+                        System.currentTimeMillis() - lastFavoriteAlertAt > 30_000) {
+                        lastFavoriteAlertAt = System.currentTimeMillis()
+                        notifyImportantOffline(ip)
+                    }
+                }
+                val onlineCount = statuses.values.count { it }
+                _state.update {
+                    it.copy(monitor = MonitorState(isRunning = true, statuses = statuses, pings = pings),
+                        summary = "Monitor: $onlineCount/${statuses.size} online",
+                        summaryColor = if (onlineCount > 0) 0xFF2E7D32 else 0xFFC62828,
+                        isSummaryOk = onlineCount > 0)
+                }
+                delay(3000)
+            }
+        }
+    }
+
+    private fun startSingleMonitor(target: String) {
         val ip = NetworkUtils.resolveDomain(target) ?: target
         _state.update { it.copy(isScanning = true, scanType = ScanType.MONITOR, error = null,
             summary = "Monitoring $ip...", summaryColor = 0xFF00695C, isSummaryOk = true,
-            monitor = PingMonitorState(ip = ip, isRunning = true, history = emptyList())) }
+            monitor = MonitorState(isRunning = true)) }
         monitorJob?.cancel()
         monitorJob = viewModelScope.launch {
             while (isActive) {
-                val latency = PingUtil.ping(ip)
-                val result = PingResult(latency, latency != null)
+                val probe = PingUtil.pingProbe(ip)
+                val online = probe != null
+                recordUptime(ip, online)
                 _state.update {
-                    val history = (it.monitor.history + result).takeLast(50)
-                    it.copy(monitor = it.monitor.copy(lastLatency = latency, history = history),
-                        summary = if (latency != null) "ping ${ip} — ${latency}ms" else "ping ${ip} — ✗",
-                        summaryColor = if (latency != null) 0xFF2E7D32 else 0xFFC62828, isSummaryOk = latency != null)
+                    it.copy(monitor = MonitorState(isRunning = true, statuses = mapOf(ip to online)),
+                        summary = if (online) "ping $ip — ${probe!!.latencyMs}ms" else "ping $ip — ✗",
+                        summaryColor = if (online) 0xFF2E7D32 else 0xFFC62828, isSummaryOk = online)
                 }
                 delay(1500)
             }
@@ -324,6 +387,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val host = withContext(Dispatchers.IO) { portScanner.scanHost(ip, speed = _state.value.scanSpeed) }
                 val ports = host?.openPorts?.size ?: 0
+                recordUptime(ip, host != null)
                 if (host != null) _hosts[ip] = host
                 _state.update {
                     it.copy(hosts = _hosts.values.toList(),
@@ -472,6 +536,64 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val urls = _urls.values.toList()
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) { ResultsStore.save(app, hosts, urls) }
+    }
+
+    fun toggleFavorite(ip: String) {
+        if (!_favorites.add(ip)) _favorites.remove(ip)
+        FavoritesStore.save(getApplication(), _favorites)
+        _state.update { it.copy(favoriteIps = _favorites.toSet()) }
+    }
+
+    private fun recordUptime(ip: String, online: Boolean) {
+        _uptime = UptimeStore.record(getApplication(), _uptime, ip, online)
+        _state.update { it.copy(uptime = _uptime) }
+    }
+
+    /** Notifikasi saat perangkat penting (favorit) offline. */
+    private fun notifyImportantOffline(ip: String) {
+        try {
+            val ctx = getApplication<Application>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) return
+            val nm = NotificationManagerCompat.from(ctx)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel(CHANNEL_IMPORTANT, "Perangkat Penting", NotificationManager.IMPORTANCE_HIGH)
+                )
+            }
+            val notification = NotificationCompat.Builder(ctx, CHANNEL_IMPORTANT)
+                .setSmallIcon(android.R.drawable.stat_notify_more)
+                .setContentTitle("⚠ Perangkat penting offline: $ip")
+                .setContentText("Perangkat favorit tidak merespons ping.")
+                .setAutoCancel(true)
+                .build()
+            nm.notify(ip.hashCode() + 9999, notification)
+        } catch (_: Exception) { }
+    }
+
+    /** Bandingkan host yang ditemukan scan ini vs scan sebelumnya. */
+    private fun computeDiff() {
+        val current = _foundThisScan
+        val previous = _previousScanHosts ?: emptyMap()
+        val added = current.filterKeys { it !in previous }.map { _hosts[it] ?: HostInfo(it) }
+        val removed = previous.filterKeys { it !in current }.mapNotNull { _hosts[it.key] }
+        val changed = current.filterKeys { ip ->
+            val prev = previous[ip]
+            prev != null && prev.toSet() != current[ip]!!.toSet()
+        }.map { _hosts[it.key] ?: HostInfo(it.key) }
+        _previousScanHosts = current
+        _state.update { it.copy(diff = ScanDiff(added, removed, changed)) }
+    }
+
+    private fun estimateEta(current: Int, total: Int): String {
+        if (total <= 0 || current <= 0) return ""
+        val elapsed = System.currentTimeMillis() - _startTime
+        val remainMs = (total - current).toDouble() * elapsed / current
+        val remainSec = (remainMs / 1000).toInt()
+        val m = remainSec / 60
+        val s = remainSec % 60
+        return " · sisa ±${m}m ${s}s"
     }
 
     override fun onCleared() {

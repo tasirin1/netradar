@@ -35,7 +35,9 @@ class PingSweep {
             emit(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
 
             ScanLoop.scanIps(ips, batchSize, scanOne = { ip ->
-                PingUtil.ping(ip)?.let { ScanLoop.hostInfo(ip, arpTable, latencyMs = it) }
+                PingUtil.pingProbe(ip)?.let { probe ->
+                    ScanLoop.hostInfo(ip, arpTable, latencyMs = probe.latencyMs, ttl = probe.ttl)
+                }
             }) { ip, host ->
                 completed++
                 if (host != null) { found++; emit(ScanEvent.HostFound(host)) }

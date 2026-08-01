@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -29,7 +30,10 @@ fun HostCard(
     host: HostInfo,
     onCopyIp: ((String) -> Unit)? = null,
     onWol: ((String, String) -> Unit)? = null,
+    onToggleFavorite: (() -> Unit)? = null,
+    onShowDetail: (() -> Unit)? = null,
     isSelected: Boolean = false,
+    isFavorite: Boolean = false,
     selectionMode: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
     onRescanHost: (() -> Unit)? = null
@@ -85,6 +89,11 @@ fun HostCard(
                     Spacer(Modifier.width(6.dp))
                     Text(kinds.joinToString("") { it.icon }, fontSize = 12.sp)
                 }
+                if (host.osGuess != null) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(host.osGuess, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary)
+                }
                 if (host.latencyMs != null) {
                     Spacer(Modifier.width(6.dp))
                     Text(
@@ -101,6 +110,15 @@ fun HostCard(
                     Icon(Icons.Default.CheckCircle, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                 }
                 Spacer(Modifier.weight(1f))
+                if (onToggleFavorite != null) {
+                    IconButton(onClick = onToggleFavorite, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            null, Modifier.size(14.dp),
+                            tint = if (isFavorite) Color(0xFFFFB300) else TextSecondary
+                        )
+                    }
+                }
                 if (onCopyIp != null) {
                     IconButton(onClick = { onCopyIp(host.ip) }, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.ContentCopy, null, Modifier.size(14.dp), tint = TextSecondary)
@@ -114,6 +132,11 @@ fun HostCard(
                 if (onRescanHost != null) {
                     IconButton(onClick = { onRescanHost() }, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Refresh, null, Modifier.size(14.dp), tint = TextSecondary)
+                    }
+                }
+                if (onShowDetail != null) {
+                    IconButton(onClick = onShowDetail, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = TextSecondary)
                     }
                 }
             }

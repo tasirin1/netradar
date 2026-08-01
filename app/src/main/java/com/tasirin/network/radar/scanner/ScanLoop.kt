@@ -3,6 +3,7 @@ package com.tasirin.network.radar.scanner
 import com.tasirin.network.radar.model.HostInfo
 import com.tasirin.network.radar.model.PortInfo
 import com.tasirin.network.radar.util.NetworkUtils
+import com.tasirin.network.radar.util.OsDetector
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
@@ -25,6 +26,7 @@ object ScanLoop {
         arpTable: Map<String, String>,
         isAlive: Boolean = true,
         latencyMs: Long? = null,
+        ttl: Int? = null,
         openPorts: List<PortInfo> = emptyList()
     ): HostInfo {
         val mac = arpTable[ip]
@@ -34,6 +36,7 @@ object ScanLoop {
             macAddress = mac,
             macVendor = NetworkUtils.lookupMacVendor(mac),
             latencyMs = latencyMs,
+            osGuess = OsDetector.guess(ttl, openPorts.map { it.port }),
             isAlive = isAlive,
             openPorts = openPorts
         )
