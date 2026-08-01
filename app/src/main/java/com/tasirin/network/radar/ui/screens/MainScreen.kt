@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -65,7 +66,9 @@ fun MainScreen(
     onDeviceFilter: ((DeviceFilter) -> Unit)? = null,
     onRescanHost: ((String) -> Unit)? = null,
     onSelectInterface: ((String) -> Unit)? = null,
-    onToggleFavorite: ((String) -> Unit)? = null
+    onToggleFavorite: ((String) -> Unit)? = null,
+    onDeepScan: ((String) -> Unit)? = null,
+    onSetHostLabel: ((String, String?) -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -105,6 +108,7 @@ fun MainScreen(
             isFavorite = host.ip in state.favoriteIps,
             uptime = state.uptime[host.ip] ?: emptyList(),
             onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
+            onSetLabel = { label -> onSetHostLabel?.invoke(host.ip, label) },
             onDismiss = { detailHost = null }
         )
     }
@@ -274,6 +278,21 @@ fun MainScreen(
                 )
             }
 
+            // ─── Deep scan progress ───
+            if (state.deepScanning != null) {
+                item {
+                    Column(Modifier.padding(top = 4.dp)) {
+                        Text("Deep scan ${state.deepScanning}... ${state.deepScanProgress}%",
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold)
+                        LinearProgressIndicator(
+                            progress = state.deepScanProgress / 100f,
+                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                        )
+                    }
+                }
+            }
+
             if (state.copyFeedback != null) {
                 item {
                     Column {
@@ -428,6 +447,9 @@ fun MainScreen(
                             isFavorite = host.ip in state.favoriteIps,
                             onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
                             onShowDetail = { detailHost = host },
+                            onDeepScan = if (state.deepScanning != null || onDeepScan == null) null
+                            else ({ onDeepScan(host.ip) }),
+                            isDeepScanning = state.deepScanning == host.ip,
                             isSelected = host.ip in state.selectedHosts,
                             selectionMode = state.selectedHosts.isNotEmpty(),
                             onToggleSelect = { onToggleHostSelect?.invoke(host.ip) },
@@ -695,13 +717,31 @@ private fun HostDetailDialog(
     isFavorite: Boolean,
     uptime: List<UptimeEvent>,
     onToggleFavorite: () -> Unit,
+    onSetLabel: ((String?) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
+    var labelText by remember(host.ip) { mutableStateOf(host.label ?: "") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(host.ip, fontWeight = FontWeight.Bold) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = labelText,
+                        onValueChange = { labelText = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("Nama perangkat", fontSize = 12.sp) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Button(
+                        onClick = { onSetLabel?.invoke(labelText) },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                    ) { Text("Simpan", fontSize = 12.sp) }
+                }
+                Spacer(Modifier.height(6.dp))
                 host.hostname?.takeIf { it != host.ip }?.let {
                     DetailLine("Hostname", it)
                 }
@@ -724,8 +764,17 @@ private fun HostDetailDialog(
                 if (uptime.isEmpty()) {
                     Text("Belum ada riwayat", fontSize = 11.sp, color = TextSecondary)
                 } else {
+                    UptimeChart(uptime)
+                    Spacer(Modifier.height(4.dp))
+                    val dayAgo = System.currentTimeMillis() - 24 * 3600 * 1000
+                    val day = uptime.filter { it.ts >= dayAgo }
+                    if (day.isNotEmpty()) {
+                        val onlinePct = day.count { it.online } * 100 / day.size
+                        Text("24 jam terakhir: $onlinePct% online", fontSize = 11.sp, color = TextSecondary)
+                        Spacer(Modifier.height(4.dp))
+                    }
                     val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
-                    uptime.takeLast(10).reversed().forEach { e ->
+                    uptime.takeLast(5).reversed().forEach { e ->
                         Text(
                             "${fmt.format(Date(e.ts))} — ${if (e.online) "online" else "offline"}",
                             fontSize = 11.sp,
@@ -738,6 +787,23 @@ private fun HostDetailDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
     )
+}
+
+@Composable
+private fun UptimeChart(events: List<UptimeEvent>) {
+    if (events.isEmpty()) return
+    val recent = events.takeLast(60)
+    Canvas(modifier = Modifier.fillMaxWidth().height(56.dp)) {
+        val gap = 2.dp.toPx()
+        val barW = ((size.width - gap * (recent.size - 1)) / recent.size).coerceAtLeast(1f)
+        recent.forEachIndexed { i, e ->
+            drawRect(
+                color = if (e.online) StatusGreen else StatusRed,
+                topLeft = Offset(i * (barW + gap), 0f),
+                size = Size(barW, size.height)
+            )
+        }
+    }
 }
 
 @Composable

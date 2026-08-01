@@ -79,7 +79,9 @@ class MainActivity : AppCompatActivity() {
                         onDeviceFilter = { f -> viewModel.setDeviceFilter(f) },
                         onRescanHost = { ip -> viewModel.rescanHost(ip) },
                         onSelectInterface = { name -> viewModel.selectInterface(name) },
-                        onToggleFavorite = { ip -> viewModel.toggleFavorite(ip) }
+                        onToggleFavorite = { ip -> viewModel.toggleFavorite(ip) },
+                        onDeepScan = { ip -> viewModel.deepScanHost(ip) },
+                        onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) }
                     )
                 }
             }

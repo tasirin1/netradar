@@ -32,8 +32,10 @@ fun HostCard(
     onWol: ((String, String) -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
     onShowDetail: (() -> Unit)? = null,
+    onDeepScan: (() -> Unit)? = null,
     isSelected: Boolean = false,
     isFavorite: Boolean = false,
+    isDeepScanning: Boolean = false,
     selectionMode: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
     onRescanHost: (() -> Unit)? = null
@@ -139,6 +141,21 @@ fun HostCard(
                         Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = TextSecondary)
                     }
                 }
+                if (onDeepScan != null) {
+                    IconButton(onClick = onDeepScan, enabled = !isDeepScanning, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.ZoomIn, null, Modifier.size(14.dp), tint = TextSecondary)
+                    }
+                }
+            }
+
+            if (host.label != null) {
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Label, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.width(4.dp))
+                    Text(host.label, fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary,
+                        fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
 
             // ─── MAC & Hostname ───
@@ -178,6 +195,16 @@ fun HostCard(
                             onLongPress = { showPortInfo = port })
                     }
                 }
+            }
+            if (isDeepScanning) {
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(4.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Spacer(Modifier.height(2.dp))
+                Text("Deep scan berjalan...", fontSize = 10.sp, color = TextSecondary)
             }
         }
     }

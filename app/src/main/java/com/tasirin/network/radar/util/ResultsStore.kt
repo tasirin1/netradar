@@ -39,6 +39,7 @@ object ResultsStore {
     private fun hostToJson(host: HostInfo): JSONObject = JSONObject().apply {
         put("ip", host.ip)
         host.hostname?.let { put("hostname", it) }
+        host.label?.let { put("label", it) }
         host.macAddress?.let { put("mac", it) }
         host.macVendor?.let { put("vendor", it) }
         host.latencyMs?.let { put("latency", it) }
@@ -80,6 +81,7 @@ object ResultsStore {
                 add(HostInfo(
                     ip = ip,
                     hostname = o.optString("hostname").ifEmpty { null },
+                    label = o.optString("label").ifEmpty { null },
                     macAddress = o.optString("mac").ifEmpty { null },
                     macVendor = o.optString("vendor").ifEmpty { null },
                     latencyMs = if (o.has("latency")) o.optLong("latency") else null,

@@ -80,6 +80,56 @@ class PortScanner {
             macVendor = vendor, isAlive = true, openPorts = openPorts) else null
     }
 
+    /**
+     * Deep scan satu host: coba semua port 1..65535 (connect-only, tanpa banner).
+     * Hasil dikembalikan urut; callback [onProgress] dipanggil per progress 2%.
+     */
+    suspend fun deepScan(
+        ip: String,
+        speed: ScanSpeed = ScanSpeed.SEDANG,
+        onProgress: (Int) -> Unit = {}
+    ): List<PortInfo> = withContext(Dispatchers.IO) {
+        val open = mutableListOf<PortInfo>()
+        val total = 65535
+        var done = 0
+        var lastReported = -1
+        (1..total).chunked(256).forEach { chunk ->
+            coroutineScope {
+                val found = chunk.map { port ->
+                    async {
+                        tryConnect(ip, port, speed.timeoutMs)?.let { sock ->
+                            try {
+                                PortInfo(port = port, service = detectService(port, null))
+                            } finally {
+                                try { sock.close() } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                }.mapNotNull { it.await() }
+                open.addAll(found)
+            }
+            done += chunk.size
+            val pct = done * 100 / total
+            if (pct - lastReported >= 2) {
+                lastReported = pct
+                onProgress(pct)
+            }
+        }
+        open.sortedBy { it.port }
+    }
+
+    /** Connect sekali saja (tanpa retry) untuk deep scan. */
+    private fun tryConnect(ip: String, port: Int, timeoutMs: Int): Socket? {
+        val sock = Socket()
+        return try {
+            sock.connect(InetSocketAddress(ip, port), timeoutMs)
+            sock
+        } catch (_: Exception) {
+            try { sock.close() } catch (_: Exception) {}
+            null
+        }
+    }
+
     private suspend fun scanHostPorts(ip: String, ports: IntArray, timeoutMs: Int, permits: Semaphore): List<PortInfo> =
         withContext(Dispatchers.IO) {
             coroutineScope {

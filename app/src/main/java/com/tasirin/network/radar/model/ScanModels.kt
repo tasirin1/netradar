@@ -9,6 +9,7 @@ data class PortInfo(
 data class HostInfo(
     val ip: String,
     val hostname: String? = null,
+    val label: String? = null,
     val macAddress: String? = null,
     val macVendor: String? = null,
     val latencyMs: Long? = null,

@@ -30,9 +30,11 @@ object ScanLoop {
         openPorts: List<PortInfo> = emptyList()
     ): HostInfo {
         val mac = arpTable[ip]
+        val hostname = hostname(ip)
         return HostInfo(
             ip = ip,
-            hostname = hostname(ip),
+            hostname = hostname,
+            label = hostname?.takeIf { it != ip } ?: NetworkUtils.lookupMacVendor(mac),
             macAddress = mac,
             macVendor = NetworkUtils.lookupMacVendor(mac),
             latencyMs = latencyMs,
