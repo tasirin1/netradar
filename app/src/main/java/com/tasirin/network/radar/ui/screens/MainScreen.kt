@@ -781,6 +781,7 @@ private fun DiffSection(title: String, hosts: List<HostInfo>) {
     Spacer(Modifier.height(6.dp))
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NetworkMapDialog(hosts: List<HostInfo>, gateway: String, onDismiss: () -> Unit) {
     val nodes = hosts.take(60)
