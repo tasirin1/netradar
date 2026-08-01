@@ -34,6 +34,7 @@ fun HostCard(
     onShowDetail: (() -> Unit)? = null,
     onDeepScan: (() -> Unit)? = null,
     onPingHost: (() -> Unit)? = null,
+    isDeepScanBusy: Boolean = false,
     isSelected: Boolean = false,
     isFavorite: Boolean = false,
     isDeepScanning: Boolean = false,
@@ -161,11 +162,6 @@ fun HostCard(
                         Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = TextSecondary)
                     }
                 }
-                if (onDeepScan != null) {
-                    IconButton(onClick = onDeepScan, enabled = !isDeepScanning, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.ZoomIn, null, Modifier.size(14.dp), tint = TextSecondary)
-                    }
-                }
             }
 
             if (host.label != null) {
@@ -216,15 +212,29 @@ fun HostCard(
                     }
                 }
             }
-            if (isDeepScanning) {
+            if (onDeepScan != null) {
                 Spacer(Modifier.height(6.dp))
+                OutlinedButton(
+                    onClick = onDeepScan,
+                    enabled = !isDeepScanning && !isDeepScanBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.ZoomIn, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (isDeepScanning) "Deep scan berjalan..." else "Deep scan semua port (1–65535)",
+                        fontSize = 11.sp
+                    )
+                }
+            }
+            if (isDeepScanning) {
+                Spacer(Modifier.height(4.dp))
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(4.dp),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
-                Spacer(Modifier.height(2.dp))
-                Text("Deep scan berjalan...", fontSize = 10.sp, color = TextSecondary)
             }
         }
     }

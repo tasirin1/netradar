@@ -113,6 +113,7 @@ fun MainScreen(
             pingHistory = state.pingHistory[host.ip] ?: emptyList(),
             onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
             onSetLabel = { label -> onSetHostLabel?.invoke(host.ip, label) },
+            onDeepScan = { onDeepScan?.invoke(host.ip) },
             onDismiss = { detailHost = null }
         )
     }
@@ -508,12 +509,12 @@ fun MainScreen(
                             host = host,
                             onCopyIp = onCopyIp,
                             onWol = onWol,
-                            isFavorite = host.ip in state.favoriteIps,
-                            onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
-                            onShowDetail = { detailHost = host },
-                            onDeepScan = if (state.deepScanning != null || onDeepScan == null) null
-                            else ({ onDeepScan(host.ip) }),
-                            isDeepScanning = state.deepScanning == host.ip,
+            isFavorite = host.ip in state.favoriteIps,
+            onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
+            onShowDetail = { detailHost = host },
+            onDeepScan = if (onDeepScan == null) null else ({ onDeepScan(host.ip) }),
+            isDeepScanBusy = state.deepScanning != null,
+            isDeepScanning = state.deepScanning == host.ip,
                             isSelected = host.ip in state.selectedHosts,
                             selectionMode = state.selectedHosts.isNotEmpty(),
                             onToggleSelect = { onToggleHostSelect?.invoke(host.ip) },
@@ -850,6 +851,7 @@ private fun HostDetailDialog(
     pingHistory: List<PingEvent> = emptyList(),
     onToggleFavorite: () -> Unit,
     onSetLabel: ((String?) -> Unit)? = null,
+    onDeepScan: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -906,6 +908,18 @@ private fun HostDetailDialog(
                     Icon(Icons.Default.OpenInBrowser, null, Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Buka di browser", fontSize = 12.sp)
+                }
+                if (onDeepScan != null) {
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = onDeepScan,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.ZoomIn, null, Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Deep scan semua port (1–65535)", fontSize = 12.sp)
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text("Riwayat ketersediaan", fontWeight = FontWeight.Bold, fontSize = 12.sp)
