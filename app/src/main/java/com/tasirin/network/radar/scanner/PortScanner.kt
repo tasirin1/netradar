@@ -12,6 +12,12 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.Semaphore
 
+/** Hasil deep scan: daftar port terbuka + penanda kalau dibatasi. */
+data class DeepScanResult(
+    val ports: List<PortInfo>,
+    val truncated: Boolean = false
+)
+
 class PortScanner {
 
     fun scan(
@@ -90,16 +96,22 @@ class PortScanner {
         ip: String,
         speed: ScanSpeed = ScanSpeed.SEDANG,
         onProgress: (Int) -> Unit = {}
-    ): List<PortInfo> = withContext(Dispatchers.IO) {
+    ): DeepScanResult = withContext(Dispatchers.IO) {
+        val addr = try { InetAddress.getByName(ip) } catch (_: Exception) { null }
+        if (addr == null) return@withContext DeepScanResult(emptyList())
+
         val open = mutableListOf<PortInfo>()
         val total = 65535
         var done = 0
         var lastReported = -1
-        (1..total).chunked(256).forEach { chunk ->
+        var truncated = false
+
+        // Chunk kecil membatasi socket serentak (hindari "too many open files" / force close)
+        (1..total).chunked(DEEP_SCAN_CONCURRENCY).forEach { chunk ->
             coroutineScope {
                 val found = chunk.map { port ->
                     async {
-                        tryConnect(ip, port, speed.timeoutMs)?.let { sock ->
+                        tryConnect(addr, port, speed.timeoutMs)?.let { sock ->
                             try {
                                 PortInfo(port = port, service = detectService(port, null))
                             } finally {
@@ -116,15 +128,20 @@ class PortScanner {
                 lastReported = pct
                 onProgress(pct)
             }
+            // Host yang membalas SYN-ACK semua port (firewall aneh) → hentikan agar UI/penyimpanan aman
+            if (open.size >= DEEP_SCAN_MAX_RESULTS) {
+                truncated = true
+                break
+            }
         }
-        open.sortedBy { it.port }
+        DeepScanResult(open.sortedBy { it.port }, truncated)
     }
 
     /** Connect sekali saja (tanpa retry) untuk deep scan. */
-    private fun tryConnect(ip: String, port: Int, timeoutMs: Int): Socket? {
+    private fun tryConnect(addr: InetAddress, port: Int, timeoutMs: Int): Socket? {
         val sock = Socket()
         return try {
-            sock.connect(InetSocketAddress(ip, port), timeoutMs)
+            sock.connect(InetSocketAddress(addr, port), timeoutMs)
             sock
         } catch (_: Exception) {
             try { sock.close() } catch (_: Exception) {}
@@ -223,5 +240,10 @@ class PortScanner {
             9000 -> "HTTP-Dev"; 81 -> "HTTP-Alt"; 444 -> "HTTPS-Alt"
             else -> PortDescriptions.get(port)
         }
+    }
+
+    private companion object {
+        const val DEEP_SCAN_CONCURRENCY = 64
+        const val DEEP_SCAN_MAX_RESULTS = 4000
     }
 }

@@ -905,6 +905,37 @@ private fun HostDetailDialog(
                 host.osGuess?.let { DetailLine("OS", it) }
                 host.latencyMs?.let { DetailLine("Latency", "${it}ms") }
                 DetailLine("Port terbuka", host.openPorts.size.toString())
+                if (host.openPorts.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Daftar port (${host.openPorts.size})", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        host.openPorts.take(100).forEach { p ->
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                tonalElevation = 1.dp
+                            ) {
+                                Text(
+                                    "${p.port}${p.service?.let { " $it" } ?: ""}",
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    if (host.openPorts.size > 100) {
+                        Spacer(Modifier.height(2.dp))
+                        Text("… +${host.openPorts.size - 100} port lainnya",
+                            fontSize = 9.sp, color = TextSecondary)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
                 if (onResolveHostname != null) {
                     TextButton(
                         onClick = onResolveHostname,

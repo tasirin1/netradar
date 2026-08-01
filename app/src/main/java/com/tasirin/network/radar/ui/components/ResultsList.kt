@@ -208,15 +208,21 @@ fun HostCard(
                 Spacer(Modifier.height(4.dp))
 
                 // Show ports as wrapped row of clickable chips
+                val shownPorts = host.openPorts.take(MAX_PORT_CHIPS)
                 @OptIn(ExperimentalLayoutApi::class)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    host.openPorts.forEach { port ->
+                    shownPorts.forEach { port ->
                         PortChip(ip = host.ip, port = port, selectionMode = selectionMode,
                             onLongPress = { showPortInfo = port })
                     }
+                }
+                if (host.openPorts.size > shownPorts.size) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("… +${host.openPorts.size - shownPorts.size} port lainnya — lihat detail (ℹ️)",
+                        fontSize = 9.sp, color = TextSecondary)
                 }
             }
             if (onDeepScan != null) {
@@ -300,6 +306,8 @@ fun PortChip(ip: String, port: PortInfo, selectionMode: Boolean = false, onLongP
 }
 
 val WEB_PORTS = setOf(80, 443, 8080, 8443, 8000, 8888, 3000, 81, 5000, 8081)
+
+private const val MAX_PORT_CHIPS = 120
 
 @Composable
 fun PortInfoDialog(port: PortInfo, onDismiss: () -> Unit) {

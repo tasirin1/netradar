@@ -652,11 +652,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _deepScanJob?.cancel()
         _deepScanJob = viewModelScope.launch {
             try {
-                val ports = withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     portScanner.deepScan(ip, speed) { pct ->
                         _state.update { it.copy(deepScanProgress = pct) }
                     }
                 }
+                val ports = result.ports
                 val existing = _hosts[ip]
                 val host = (existing ?: HostInfo(ip)).copy(
                     openPorts = ports,
@@ -672,7 +673,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 persistResults(force = true)
                 _state.update {
                     it.copy(deepScanning = null, deepScanProgress = 0,
-                        summary = "Deep scan $ip selesai: ${ports.size} port terbuka",
+                        summary = "Deep scan $ip selesai: ${ports.size} port terbuka" +
+                            if (result.truncated) " (dibatasi 4000, host merespons semua port)" else "",
                         summaryColor = 0xFF2E7D32, isSummaryOk = true)
                 }
             } catch (e: CancellationException) {
