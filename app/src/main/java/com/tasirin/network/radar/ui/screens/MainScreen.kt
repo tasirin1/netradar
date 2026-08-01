@@ -212,9 +212,10 @@ fun MainScreen(
         ) {
             item { Spacer(Modifier.height(8.dp)) }
 
-            // ─── Network Info ───
-            if (state.networkInfo.localIp.isNotEmpty()) {
-                item {
+            // ─── Jaringan ───
+            item { SectionHeader("Jaringan") }
+            item {
+                Column {
                     NetworkInfoBar(
                         localIp = state.networkInfo.localIp,
                         gateway = state.networkInfo.gateway,
@@ -223,40 +224,49 @@ fun MainScreen(
                         selectedInterface = state.networkInfo.selectedInterface,
                         onSelectInterface = onSelectInterface
                     )
+                    if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        NetworkSummaryBar(
+                            hostCount = state.hosts.size,
+                            onlineCount = if (state.monitor.isRunning && state.monitor.statuses.isNotEmpty())
+                                state.monitor.statuses.values.count { it }
+                            else state.hosts.count { state.uptime[it.ip]?.lastOrNull()?.online == true },
+                            newCount = state.hosts.count { it.isNew },
+                            portCount = state.hosts.sumOf { it.openPorts.size },
+                            urlCount = state.discoveredUrls.size
+                        )
+                    }
                 }
-                item { Spacer(Modifier.height(6.dp)) }
             }
 
-            // ─── Ringkasan jaringan realtime ───
-            if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
-                item {
-                    NetworkSummaryBar(
-                        hostCount = state.hosts.size,
-                        onlineCount = if (state.monitor.isRunning && state.monitor.statuses.isNotEmpty())
-                            state.monitor.statuses.values.count { it }
-                        else state.hosts.count { state.uptime[it.ip]?.lastOrNull()?.online == true },
-                        newCount = state.hosts.count { it.isNew },
-                        portCount = state.hosts.sumOf { it.openPorts.size },
-                        urlCount = state.discoveredUrls.size
-                    )
-                }
-                item { Spacer(Modifier.height(6.dp)) }
-            }
-
-            // ─── Target Input ───
-            item { TargetInput(value = state.target, onValueChange = onTargetChange, hint = "Target IP, URL, or CIDR") }
-
-            // ─── Level Sensitivitas Scan ───
+            // ─── Pemindaian ───
             item {
                 Column {
-                    Spacer(Modifier.height(4.dp))
-                    // Level sensitivitas scan: host paralel + timeout koneksi
+                    Spacer(Modifier.height(12.dp))
+                    SectionHeader("Pemindaian")
+                }
+            }
+            item { TargetInput(value = state.target, onValueChange = onTargetChange, hint = "Target IP, URL, or CIDR") }
+            item { Spacer(Modifier.height(6.dp)) }
+            item {
+                Column {
                     if (onSelectScanSpeed != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Speed, null, Modifier.size(14.dp), tint = TextSecondary)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Sensitivitas", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "${state.scanSpeed.hostLocal} host · ${state.scanSpeed.timeoutMs}ms · ${state.scanSpeed.portCount} port",
+                                fontSize = 9.sp,
+                                color = TextSecondary
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text("Speed", fontSize = 11.sp, color = TextSecondary)
                             ScanSpeed.entries.forEach { speed ->
                                 FilterChip(
                                     selected = state.scanSpeed == speed,
@@ -267,7 +277,7 @@ fun MainScreen(
                             }
                         }
                         Text(
-                            "Makin kiri = lebih teliti: lebih banyak port & lambat · makin kanan = cepat tapi port lebih sedikit & bisa ke-skip",
+                            "Kiri = lebih teliti (banyak port, lambat) · Kanan = lebih cepat",
                             fontSize = 9.sp,
                             color = TextSecondary,
                             modifier = Modifier.padding(top = 4.dp)
@@ -296,44 +306,35 @@ fun MainScreen(
             }
             item { Spacer(Modifier.height(4.dp)) }
 
-            // ─── Status Bar ───
+            // ─── Status ───
             item {
-                StatusBar(
-                    text = state.summary,
-                    isOk = state.isSummaryOk,
-                    isScanning = state.isScanning,
-                    progress = state.progress,
-                    progressPercent = state.progressPercent
-                )
-            }
-
-            // ─── Deep scan progress ───
-            if (state.deepScanning != null) {
-                item {
-                    Column(Modifier.padding(top = 4.dp)) {
-                        Text("Deep scan ${state.deepScanning}... ${state.deepScanProgress}%",
-                            fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold)
-                        LinearProgressIndicator(
-                            progress = state.deepScanProgress / 100f,
-                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
-                        )
+                Column {
+                    Spacer(Modifier.height(12.dp))
+                    SectionHeader("Status")
+                    Spacer(Modifier.height(2.dp))
+                    StatusBar(
+                        text = state.summary,
+                        isOk = state.isSummaryOk,
+                        isScanning = state.isScanning,
+                        progress = state.progress,
+                        progressPercent = state.progressPercent
+                    )
+                    if (state.deepScanning != null) {
+                        Column(Modifier.padding(top = 4.dp)) {
+                            Text("Deep scan ${state.deepScanning}... ${state.deepScanProgress}%",
+                                fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold)
+                            LinearProgressIndicator(
+                                progress = state.deepScanProgress / 100f,
+                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                            )
+                        }
                     }
-                }
-            }
-
-            if (state.copyFeedback != null) {
-                item {
-                    Column {
+                    if (state.copyFeedback != null) {
                         Spacer(Modifier.height(4.dp))
                         Text(state.copyFeedback, fontSize = 11.sp, color = AccentGreen, fontWeight = FontWeight.Bold)
                     }
-                }
-            }
-
-            if (state.hostSummary.isNotBlank()) {
-                item {
-                    Column {
+                    if (state.hostSummary.isNotBlank()) {
                         Spacer(Modifier.height(4.dp))
                         Text(state.hostSummary, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
@@ -345,30 +346,41 @@ fun MainScreen(
                 val d = state.diff!!
                 if (d.added.isNotEmpty() || d.removed.isNotEmpty() || d.changed.isNotEmpty()) {
                     item {
-                        OutlinedButton(
-                            onClick = { showDiffDialog = true },
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                            contentPadding = PaddingValues(vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.CompareArrows, null, Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Perubahan: +${d.added.size} baru · -${d.removed.size} hilang · ~${d.changed.size} berubah",
-                                fontSize = 11.sp)
+                        Column {
+                            Spacer(Modifier.height(6.dp))
+                            OutlinedButton(
+                                onClick = { showDiffDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.CompareArrows, null, Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Perubahan: +${d.added.size} baru · -${d.removed.size} hilang · ~${d.changed.size} berubah",
+                                    fontSize = 11.sp)
+                            }
                         }
                     }
                 }
             }
 
-            // ─── Sort ───
+            // ─── Hasil ───
+            if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
+                item {
+                    Column {
+                        Spacer(Modifier.height(12.dp))
+                        SectionHeader("Hasil")
+                    }
+                }
+            }
             if (state.hosts.isNotEmpty() && onSortMode != null) {
                 item {
                     Column {
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(6.dp))
                         SortBar(currentSort = state.sortMode, onSortMode = onSortMode)
                     }
                 }
             }
-            item { Spacer(Modifier.height(6.dp)) }
+            if (state.hosts.isNotEmpty()) item { Spacer(Modifier.height(6.dp)) }
 
             // ─── Monitor ───
             if (state.scanType == ScanType.MONITOR && state.monitor.isRunning) {
@@ -431,47 +443,59 @@ fun MainScreen(
                             ) { Text("▦ Matriks", fontSize = 11.sp) }
                         }
                         Spacer(Modifier.height(4.dp))
-                        OutlinedTextField(
-                            value = state.searchQuery,
-                            onValueChange = { onSearchChange?.invoke(it) },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Cari IP / nama / MAC / port / service", fontSize = 11.sp) },
-                            leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
-                            trailingIcon = if (state.searchQuery.isNotEmpty()) {
-                                {
-                                    IconButton(onClick = { onSearchChange?.invoke("") }, modifier = Modifier.size(28.dp)) {
-                                        Icon(Icons.Default.Close, null, Modifier.size(14.dp))
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(10.dp)) {
+                                OutlinedTextField(
+                                    value = state.searchQuery,
+                                    onValueChange = { onSearchChange?.invoke(it) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("Cari IP / nama / MAC / port / service", fontSize = 11.sp) },
+                                    leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
+                                    trailingIcon = if (state.searchQuery.isNotEmpty()) {
+                                        {
+                                            IconButton(onClick = { onSearchChange?.invoke("") }, modifier = Modifier.size(28.dp)) {
+                                                Icon(Icons.Default.Close, null, Modifier.size(14.dp))
+                                            }
+                                        }
+                                    } else null,
+                                    singleLine = true,
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text("Jenis perangkat", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                                Spacer(Modifier.height(3.dp))
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    DeviceFilter.entries.forEach { f ->
+                                        FilterChip(
+                                            selected = state.deviceFilter == f,
+                                            onClick = { onDeviceFilter?.invoke(f) },
+                                            label = { Text(f.label, fontSize = 10.sp) },
+                                            modifier = Modifier.height(28.dp)
+                                        )
                                     }
                                 }
-                            } else null,
-                            singleLine = true,
-                            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            DeviceFilter.entries.forEach { f ->
-                                FilterChip(
-                                    selected = state.deviceFilter == f,
-                                    onClick = { onDeviceFilter?.invoke(f) },
-                                    label = { Text(f.label, fontSize = 10.sp) },
-                                    modifier = Modifier.height(28.dp)
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            HostStatusFilter.entries.forEach { f ->
-                                FilterChip(
-                                    selected = state.statusFilter == f,
-                                    onClick = { onStatusFilter?.invoke(f) },
-                                    label = { Text(f.label, fontSize = 10.sp) },
-                                    modifier = Modifier.height(28.dp)
-                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text("Status", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                                Spacer(Modifier.height(3.dp))
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    HostStatusFilter.entries.forEach { f ->
+                                        FilterChip(
+                                            selected = state.statusFilter == f,
+                                            onClick = { onStatusFilter?.invoke(f) },
+                                            label = { Text(f.label, fontSize = 10.sp) },
+                                            modifier = Modifier.height(28.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                item { Spacer(Modifier.height(4.dp)) }
+                item { Spacer(Modifier.height(6.dp)) }
 
                 if (filteredHosts.isEmpty()) {
                     item {
@@ -525,7 +549,7 @@ fun MainScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.SearchOff, null, Modifier.size(32.dp), tint = TextSecondary)
                             Spacer(Modifier.height(8.dp))
-                            Text("No results found", color = TextSecondary, fontSize = 14.sp)
+                            Text("Tidak ada hasil ditemukan", color = TextSecondary, fontSize = 14.sp)
                         }
                     }
                 }
@@ -614,6 +638,26 @@ fun NetworkChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: Str
             Spacer(Modifier.width(4.dp))
             Text(text, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
         }
+    }
+}
+
+/** Label seksi + garis pemisah untuk mengelompokkan area layar. */
+@Composable
+private fun SectionHeader(title: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            letterSpacing = 0.5.sp
+        )
+        Spacer(Modifier.width(10.dp))
+        Divider(
+            modifier = Modifier.weight(1f),
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outline
+        )
     }
 }
 

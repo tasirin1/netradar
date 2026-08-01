@@ -165,7 +165,7 @@ sealed class ScanEvent {
 /**
  * Level sensitivitas scan: mengatur host paralel, timeout koneksi, dan batas socket.
  * Sangat Stabil = paling jinak ke jaringan (paling sedikit skip, paling lambat);
- * Extreme = paling agresif (lebih cepat, risiko skip saat jaringan padat).
+ * Cepat = paling agresif (lebih cepat, risiko skip saat jaringan padat).
  * portCount = jumlah port umum yang discan: makin sensitif level, makin banyak port.
  */
 enum class ScanSpeed(
@@ -179,8 +179,7 @@ enum class ScanSpeed(
     SANGAT_STABIL("Sangat Stabil", 8, 3, 600, 64, 70),
     STABIL("Stabil", 15, 5, 400, 150, 40),
     SEDANG("Sedang", 30, 10, 200, 400, 28),
-    CEPAT("Cepat", 50, 15, 150, 500, 16),
-    EXTREME("Extreme", 80, 20, 100, 600, 10)
+    CEPAT("Cepat", 50, 15, 150, 500, 16)
 }
 
 /** Daftar port umum, diurutkan dari yang paling sering terbuka. */
