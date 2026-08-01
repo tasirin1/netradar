@@ -3,7 +3,6 @@ package com.tasirin.network.radar.scanner
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.PingUtil
-import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 class PingSweep {
@@ -18,10 +17,10 @@ class PingSweep {
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
         val batchSize = if (isWide) speed.hostWide else speed.hostLocal
+        val arpTable = NetworkUtils.readArpTable()
         var completed = 0L
         var found = 0
         val startMs = System.currentTimeMillis()
-        val arpTable = NetworkUtils.readArpTable()
 
         emit(ScanEvent.Progress(
             "Ping ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
@@ -35,33 +34,13 @@ class PingSweep {
 
             emit(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
 
-            ips.chunked(batchSize).forEach { chunk ->
-                coroutineScope {
-                    val deferreds = chunk.map { ip ->
-                        async {
-                            val latency = PingUtil.ping(ip)
-                            if (latency != null) {
-                                val mac = arpTable[ip]
-                                val vendor = NetworkUtils.lookupMacVendor(mac)
-                                val hostname = try {
-                                    kotlinx.coroutines.withTimeout(300) {
-                                        java.net.InetAddress.getByName(ip).hostName
-                                    }.let { if (it != ip) it else null }
-                                } catch (_: Exception) { null }
-                                ip to HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-                                    macVendor = vendor, latencyMs = latency, isAlive = true)
-                            } else ip to null
-                        }
-                    }
-                    deferreds.forEach { deferred ->
-                        val (ip, host) = deferred.await()
-                        completed++
-                        if (host != null) found++
-                        val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                        emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
-                        if (host != null) emit(ScanEvent.HostFound(host))
-                    }
-                }
+            ScanLoop.scanIps(ips, batchSize, scanOne = { ip ->
+                PingUtil.ping(ip)?.let { ScanLoop.hostInfo(ip, arpTable, latencyMs = it) }
+            }) { ip, host ->
+                completed++
+                if (host != null) { found++; emit(ScanEvent.HostFound(host)) }
+                val elapsed = (System.currentTimeMillis() - startMs) / 1000
+                emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
             }
         }
 

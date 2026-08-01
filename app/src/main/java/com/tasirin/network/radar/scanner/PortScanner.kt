@@ -53,37 +53,16 @@ class PortScanner {
 
             // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
             // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
-            val scanIps = ips
-
-            scanIps.chunked(hostConcurrency).forEach { chunk ->
-                coroutineScope {
-                    val deferreds = chunk.map { ip ->
-                        async {
-                            // Port scan dulu — DNS reverse lookup HANYA untuk host yang ketemu
-                            // (DNS per-IP bikin subnet lambat/macet, padahal mayoritas mati)
-                            val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
-                            if (openPorts.isEmpty()) return@async (ip to null)
-
-                            val hostname = try {
-                                kotlinx.coroutines.withTimeout(300) {
-                                    InetAddress.getByName(ip).hostName
-                                }.let { if (it != ip) it else null }
-                            } catch (_: Exception) { null }
-                            val mac = arpTable[ip]
-                            val vendor = NetworkUtils.lookupMacVendor(mac)
-                            ip to HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-                                macVendor = vendor, isAlive = true, openPorts = openPorts)
-                        }
-                    }
-                    deferreds.forEach { deferred ->
-                        val (ip, host) = deferred.await()
-                        completed++
-                        if (host != null) found++
-                        val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                        emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
-                        if (host != null) emit(ScanEvent.HostFound(host))
-                    }
-                }
+            ScanLoop.scanIps(ips, hostConcurrency, scanOne = { ip ->
+                // Port scan dulu — DNS reverse lookup HANYA untuk host yang ketemu
+                // (DNS per-IP bikin subnet lambat/macet, padahal mayoritas mati)
+                val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
+                if (openPorts.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = openPorts)
+            }) { ip, host ->
+                completed++
+                if (host != null) { found++; emit(ScanEvent.HostFound(host)) }
+                val elapsed = (System.currentTimeMillis() - startMs) / 1000
+                emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
             }
         }
 

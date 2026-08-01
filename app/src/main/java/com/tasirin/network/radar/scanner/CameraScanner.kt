@@ -47,35 +47,14 @@ class CameraScanner {
 
             // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
             // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
-            val scanIps = ips
-
-            scanIps.chunked(hostConcurrency).forEach { chunk ->
-                coroutineScope {
-                    val deferreds = chunk.map { ip ->
-                        async {
-                            val foundServices = scanCameraPorts(ip, speed.timeoutMs)
-                            if (foundServices.isEmpty()) return@async (ip to null)
-
-                            val mac = arpTable[ip]
-                            val vendor = NetworkUtils.lookupMacVendor(mac)
-                            val hostname = try {
-                                kotlinx.coroutines.withTimeout(300) {
-                                    java.net.InetAddress.getByName(ip).hostName
-                                }.let { if (it != ip) it else null }
-                            } catch (_: Exception) { null }
-                            ip to HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-                                macVendor = vendor, isAlive = true, openPorts = foundServices)
-                        }
-                    }
-                    deferreds.forEach { deferred ->
-                        val (ip, host) = deferred.await()
-                        completed++
-                        if (host != null) found++
-                        val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                        emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
-                        if (host != null) emit(ScanEvent.HostFound(host))
-                    }
-                }
+            ScanLoop.scanIps(ips, hostConcurrency, scanOne = { ip ->
+                val foundServices = scanCameraPorts(ip, speed.timeoutMs)
+                if (foundServices.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = foundServices)
+            }) { ip, host ->
+                completed++
+                if (host != null) { found++; emit(ScanEvent.HostFound(host)) }
+                val elapsed = (System.currentTimeMillis() - startMs) / 1000
+                emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
             }
         }
 

@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.*
 class DiscoverScanner {
 
     private val sharePorts = intArrayOf(21, 445, 139, 2049, 111, 135)
+    private val allPorts = (intArrayOf(80, 554, 34567, 37777, 37215, 8080, 8899, 8554) +
+        intArrayOf(8291, 7547, 5000, 23, 22, 161, 1900) + sharePorts).distinct().toList()
 
     fun scan(target: String, speed: ScanSpeed = ScanSpeed.SEDANG): Flow<ScanEvent> = channelFlow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
@@ -39,39 +41,17 @@ class DiscoverScanner {
 
             // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
             // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
-            val scanIps = ips
-
-            scanIps.chunked(hostConcurrency).forEach { chunk ->
-                coroutineScope {
-                    val deferreds = chunk.map { ip ->
-                        async {
-                            val alive = PingUtil.ping(ip, 500) != null
-                            if (!alive) return@async (ip to null)
-
-                            val mac = arpTable[ip]
-                            val vendor = NetworkUtils.lookupMacVendor(mac)
-                            val hostname = try {
-                                kotlinx.coroutines.withTimeout(300) {
-                                    java.net.InetAddress.getByName(ip).hostName
-                                }.let { if (it != ip) it else null }
-                            } catch (_: Exception) { null }
-
-                            val services = scanDiscoverPorts(ip, speed.timeoutMs)
-                            ip to if (services.isNotEmpty()) {
-                                HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-                                    macVendor = vendor, isAlive = true, openPorts = services)
-                            } else null
-                        }
-                    }
-                    deferreds.forEach { deferred ->
-                        val (ip, host) = deferred.await()
-                        completed++
-                        if (host != null) found++
-                        val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                        send(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
-                        if (host != null) send(ScanEvent.HostFound(host))
-                    }
-                }
+            ScanLoop.scanIps(ips, hostConcurrency, scanOne = { ip ->
+                val alive = PingUtil.ping(ip, 500) != null
+                if (alive) {
+                    val services = scanDiscoverPorts(ip, speed.timeoutMs)
+                    if (services.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = services)
+                } else null
+            }) { ip, host ->
+                completed++
+                if (host != null) { found++; send(ScanEvent.HostFound(host)) }
+                val elapsed = (System.currentTimeMillis() - startMs) / 1000
+                send(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
             }
         }
 
@@ -79,10 +59,6 @@ class DiscoverScanner {
     }
 
     private suspend fun scanDiscoverPorts(ip: String, timeoutMs: Int): List<PortInfo> = withContext(Dispatchers.IO) {
-        val cameraPorts = intArrayOf(80, 554, 34567, 37777, 37215, 8080, 8899, 8554)
-        val routerPorts = intArrayOf(8291, 7547, 5000, 23, 22, 161, 1900)
-        val allPorts = (cameraPorts + routerPorts + sharePorts).distinct().toList()
-
         coroutineScope {
             allPorts.map { port ->
                 async {

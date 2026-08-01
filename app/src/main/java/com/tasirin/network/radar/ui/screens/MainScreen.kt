@@ -22,7 +22,7 @@ import com.tasirin.network.radar.ui.theme.*
 import com.tasirin.network.radar.viewmodel.ScanUiState
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MainScreen(
     state: ScanUiState,
@@ -172,7 +172,11 @@ fun MainScreen(
                     // Level sensitivitas scan: host paralel + timeout koneksi
                     if (onSelectScanSpeed != null) {
                         Spacer(Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FlowRow(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             Text("Speed", fontSize = 11.sp, color = TextSecondary)
                             ScanSpeed.entries.forEach { speed ->
                                 FilterChip(

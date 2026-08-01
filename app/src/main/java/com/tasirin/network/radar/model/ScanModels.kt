@@ -115,7 +115,7 @@ sealed class ScanEvent {
 
 /**
  * Level sensitivitas scan: mengatur host paralel, timeout koneksi, dan batas socket.
- * Stabil = paling jinak ke jaringan (sedikit skip, lebih lambat);
+ * Sangat Stabil = paling jinak ke jaringan (paling sedikit skip, paling lambat);
  * Extreme = paling agresif (lebih cepat, risiko skip saat jaringan padat).
  */
 enum class ScanSpeed(
@@ -125,6 +125,7 @@ enum class ScanSpeed(
     val timeoutMs: Int,
     val socketPermits: Int
 ) {
+    SANGAT_STABIL("Sangat Stabil", 8, 3, 600, 64),
     STABIL("Stabil", 15, 5, 400, 150),
     SEDANG("Sedang", 30, 10, 200, 400),
     CEPAT("Cepat", 50, 15, 150, 500),
