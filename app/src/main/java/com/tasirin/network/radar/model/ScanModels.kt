@@ -48,7 +48,15 @@ enum class SortMode(val label: String) {
     IP("IP"),
     PORTS("Ports"),
     LATENCY("Latency"),
-    HOSTNAME("Hostname")
+    NAMA("Nama"),
+    UPTIME("Uptime")
+}
+
+/** Filter tampilan berdasarkan status terakhir (online/offline). */
+enum class HostStatusFilter(val label: String) {
+    ALL("Semua"),
+    ONLINE("Online"),
+    OFFLINE("Offline")
 }
 
 /** Jenis perangkat yang terdeteksi dari service/port yang terbuka. */
@@ -131,6 +139,12 @@ data class MonitorState(
 data class UptimeEvent(
     val ts: Long,
     val online: Boolean
+)
+
+/** Satu titik riwayat ping (latency) perangkat. */
+data class PingEvent(
+    val ts: Long,
+    val latencyMs: Long
 )
 
 /** Hasil perbandingan antara scan sebelumnya dan scan terakhir. */

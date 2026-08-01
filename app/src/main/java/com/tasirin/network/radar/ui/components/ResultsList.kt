@@ -33,6 +33,7 @@ fun HostCard(
     onToggleFavorite: (() -> Unit)? = null,
     onShowDetail: (() -> Unit)? = null,
     onDeepScan: (() -> Unit)? = null,
+    onPingHost: (() -> Unit)? = null,
     isSelected: Boolean = false,
     isFavorite: Boolean = false,
     isDeepScanning: Boolean = false,
@@ -43,6 +44,13 @@ fun HostCard(
     val uriHandler = LocalUriHandler.current
     var showPortInfo by remember { mutableStateOf<PortInfo?>(null) }
     val kinds = remember(host) { host.deviceKinds() }
+    val webUrl = remember(host) {
+        val webPort = host.openPorts.firstOrNull { it.port in WEB_PORTS } ?: host.openPorts.firstOrNull()
+        if (webPort != null) {
+            val scheme = if (webPort.port == 443 || webPort.port == 8443) "https" else "http"
+            "$scheme://${host.ip}:${webPort.port}/"
+        } else "http://${host.ip}/"
+    }
 
     Card(
         modifier = Modifier
@@ -107,6 +115,13 @@ fun HostCard(
                         else StatusRed
                     )
                 }
+                Spacer(Modifier.width(2.dp))
+                IconButton(
+                    onClick = { try { uriHandler.openUri(webUrl) } catch (_: Exception) {} },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(Icons.Default.OpenInBrowser, null, Modifier.size(14.dp), tint = TextSecondary)
+                }
                 if (isSelected) {
                     Spacer(Modifier.width(4.dp))
                     Icon(Icons.Default.CheckCircle, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
@@ -134,6 +149,11 @@ fun HostCard(
                 if (onRescanHost != null) {
                     IconButton(onClick = { onRescanHost() }, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Refresh, null, Modifier.size(14.dp), tint = TextSecondary)
+                    }
+                }
+                if (onPingHost != null) {
+                    IconButton(onClick = onPingHost, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.NetworkCheck, null, Modifier.size(14.dp), tint = TextSecondary)
                     }
                 }
                 if (onShowDetail != null) {
@@ -221,6 +241,7 @@ fun PortChip(ip: String, port: PortInfo, selectionMode: Boolean = false, onLongP
     val uriHandler = LocalUriHandler.current
     val scheme = if (port.port == 443 || port.port == 8443) "https" else "http"
     val url = "$scheme://$ip:${port.port}/"
+    val serviceName = port.service ?: PortDescriptions.get(port.port)
 
     Surface(
         modifier = Modifier
@@ -248,10 +269,10 @@ fun PortChip(ip: String, port: PortInfo, selectionMode: Boolean = false, onLongP
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1
             )
-            if (port.service != null) {
+            if (serviceName != null) {
                 Spacer(Modifier.width(3.dp))
                 Text(
-                    text = port.service!!,
+                    text = serviceName,
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1
@@ -261,6 +282,8 @@ fun PortChip(ip: String, port: PortInfo, selectionMode: Boolean = false, onLongP
     }
 }
 
+val WEB_PORTS = setOf(80, 443, 8080, 8443, 8000, 8888, 3000, 81, 5000, 8081)
+
 @Composable
 fun PortInfoDialog(port: PortInfo, onDismiss: () -> Unit) {
     val description = PortDescriptions.get(port.port)
@@ -269,7 +292,7 @@ fun PortInfoDialog(port: PortInfo, onDismiss: () -> Unit) {
         title = { Text("Port ${port.port}", fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text("Service: ${port.service ?: "Unknown"}", fontSize = 14.sp)
+                Text("Service: ${port.service ?: PortDescriptions.get(port.port) ?: "Unknown"}", fontSize = 14.sp)
                 if (description != null) {
                     Spacer(Modifier.height(8.dp))
                     Text("Info: $description", fontSize = 13.sp, color = TextSecondary)

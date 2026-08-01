@@ -21,6 +21,7 @@ import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.FavoritesStore
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.PingUtil
+import com.tasirin.network.radar.util.PingStore
 import com.tasirin.network.radar.util.ResultsStore
 import com.tasirin.network.radar.util.UptimeStore
 import com.tasirin.network.radar.util.WakeOnLan
@@ -55,6 +56,8 @@ data class ScanUiState(
     val copyFeedback: String? = null,
     val favoriteIps: Set<String> = emptySet(),
     val uptime: Map<String, List<UptimeEvent>> = emptyMap(),
+    val pingHistory: Map<String, List<PingEvent>> = emptyMap(),
+    val statusFilter: HostStatusFilter = HostStatusFilter.ALL,
     val diff: ScanDiff? = null,
     val deepScanning: String? = null,
     val deepScanProgress: Int = 0
@@ -81,6 +84,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var lastFavoriteAlertAt = 0L
     private var _favorites = mutableSetOf<String>()
     private var _uptime = emptyMap<String, List<UptimeEvent>>()
+    private var _pingHistory = emptyMap<String, List<PingEvent>>()
     private var _foundThisScan = linkedMapOf<String, List<Int>>()
     private var _previousScanHosts: Map<String, List<Int>>? = null
 
@@ -98,12 +102,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         urls.forEach { _urls[it.url] = it }
         _favorites = FavoritesStore.load(getApplication()).toMutableSet()
         _uptime = UptimeStore.load(getApplication())
+        _pingHistory = PingStore.load(getApplication())
         _state.update {
             it.copy(
                 hosts = _hosts.values.toList(),
                 discoveredUrls = _urls.values.toList(),
                 favoriteIps = _favorites.toSet(),
                 uptime = _uptime,
+                pingHistory = _pingHistory,
                 summary = if (_hosts.isEmpty()) "Ready" else "Riwayat: ${_hosts.size} host(s), ${_urls.size} URL(s)"
             )
         }
@@ -130,6 +136,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun setScanSpeed(speed: ScanSpeed) { _state.update { it.copy(scanSpeed = speed) } }
     fun setSearchQuery(query: String) { _state.update { it.copy(searchQuery = query) } }
     fun setDeviceFilter(filter: DeviceFilter) { _state.update { it.copy(deviceFilter = filter) } }
+    fun setStatusFilter(filter: HostStatusFilter) { _state.update { it.copy(statusFilter = filter) } }
     fun toggleAbout() { _state.update { it.copy(showAbout = !it.showAbout) } }
 
     fun startScan(type: ScanType) {
@@ -183,6 +190,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             else _state.update { it.copy(hosts = _hosts.values.toList()) }
                             if (isNew && type != ScanType.TRACE) notifyNewDevice(host)
                             recordUptime(event.host.ip, true)
+                            event.host.latencyMs?.let { recordPing(host.ip, it) }
                             persistResults()
                         }
                         is ScanEvent.UrlFound -> {
@@ -310,9 +318,45 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             SortMode.IP -> _hosts.values.sortedBy { it.ip }
             SortMode.PORTS -> _hosts.values.sortedByDescending { it.openPorts.size }
             SortMode.LATENCY -> _hosts.values.sortedBy { it.latencyMs ?: Long.MAX_VALUE }
-            SortMode.HOSTNAME -> _hosts.values.sortedBy { it.hostname ?: it.ip }
+            SortMode.NAMA -> _hosts.values.sortedBy { it.label ?: it.hostname ?: it.ip }
+            SortMode.UPTIME -> _hosts.values.sortedByDescending { uptimeOnlinePct(it.ip) }
         }
         _state.update { it.copy(hosts = sorted) }
+    }
+
+    /** Persentase online dari riwayat ketersediaan (untuk sortir Uptime). */
+    private fun uptimeOnlinePct(ip: String): Int {
+        val events = _uptime[ip] ?: return 0
+        if (events.isEmpty()) return 0
+        return events.count { it.online } * 100 / events.size
+    }
+
+    /** Ping satu host: perbarui latency di kartu + riwayat grafik ping. */
+    fun pingHost(ip: String) {
+        viewModelScope.launch {
+            _state.update { it.copy(summary = "ping $ip...", summaryColor = 0xFF00695C, isSummaryOk = true) }
+            val probe = withContext(Dispatchers.IO) { PingUtil.pingProbe(ip) }
+            val host = _hosts[ip]
+            if (probe != null && host != null) {
+                _hosts[ip] = host.copy(latencyMs = probe.latencyMs)
+                recordPing(ip, probe.latencyMs)
+                _state.update {
+                    it.copy(hosts = _hosts.values.toList(),
+                        summary = "ping $ip — ${probe.latencyMs}ms",
+                        summaryColor = 0xFF2E7D32, isSummaryOk = true)
+                }
+            } else if (host != null) {
+                _state.update {
+                    it.copy(summary = "ping $ip — ✗ tidak merespons",
+                        summaryColor = 0xFFC62828, isSummaryOk = false)
+                }
+            }
+        }
+    }
+
+    private fun recordPing(ip: String, latencyMs: Long) {
+        _pingHistory = PingStore.record(getApplication(), _pingHistory, ip, latencyMs)
+        _state.update { it.copy(pingHistory = _pingHistory) }
     }
 
     fun copyToClipboard(label: String, text: String) {
@@ -396,6 +440,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 val host = withContext(Dispatchers.IO) { portScanner.scanHost(ip, speed = _state.value.scanSpeed) }
                 val ports = host?.openPorts?.size ?: 0
                 recordUptime(ip, host != null)
+                host?.latencyMs?.let { recordPing(ip, it) }
                 if (host != null) _hosts[ip] = host.copy(label = _hosts[ip]?.label)
                 _state.update {
                     it.copy(hosts = _hosts.values.toList(),
@@ -417,6 +462,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _state.update {
             it.copy(hosts = emptyList(), discoveredUrls = emptyList(), hostSummary = "", scanResult = null,
                 selectedHosts = emptySet(), searchQuery = "", deviceFilter = DeviceFilter.ALL,
+                statusFilter = HostStatusFilter.ALL,
                 summary = "Results cleared", summaryColor = 0xFF00695C, isSummaryOk = true)
         }
         persistResults(force = true)

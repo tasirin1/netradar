@@ -2,6 +2,7 @@ package com.tasirin.network.radar.scanner
 
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.util.NetworkUtils
+import com.tasirin.network.radar.util.PingUtil
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.BufferedReader
@@ -76,8 +77,9 @@ class PortScanner {
         val vendor = NetworkUtils.lookupMacVendor(mac)
         val permits = Semaphore(speed.socketPermits)
         val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
+        val latencyMs = PingUtil.pingProbe(ip)?.latencyMs
         return if (openPorts.isNotEmpty()) HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-            macVendor = vendor, isAlive = true, openPorts = openPorts) else null
+            macVendor = vendor, latencyMs = latencyMs, isAlive = true, openPorts = openPorts) else null
     }
 
     /**
@@ -219,7 +221,7 @@ class PortScanner {
             8444 -> "HTTPS-Alt"; 9090 -> "HTTP-Alt"
             3000 -> "HTTP-Dev"; 8000 -> "HTTP-Alt"; 8888 -> "HTTP-Dev"
             9000 -> "HTTP-Dev"; 81 -> "HTTP-Alt"; 444 -> "HTTPS-Alt"
-            else -> null
+            else -> PortDescriptions.get(port)
         }
     }
 }

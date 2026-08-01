@@ -77,10 +77,12 @@ class MainActivity : AppCompatActivity() {
                         onSelectScanSpeed = { speed -> viewModel.setScanSpeed(speed) },
                         onSearchChange = { q -> viewModel.setSearchQuery(q) },
                         onDeviceFilter = { f -> viewModel.setDeviceFilter(f) },
+                        onStatusFilter = { f -> viewModel.setStatusFilter(f) },
                         onRescanHost = { ip -> viewModel.rescanHost(ip) },
                         onSelectInterface = { name -> viewModel.selectInterface(name) },
                         onToggleFavorite = { ip -> viewModel.toggleFavorite(ip) },
                         onDeepScan = { ip -> viewModel.deepScanHost(ip) },
+                        onPingHost = { ip -> viewModel.pingHost(ip) },
                         onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) }
                     )
                 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -64,10 +65,12 @@ fun MainScreen(
     onSelectScanSpeed: ((ScanSpeed) -> Unit)? = null,
     onSearchChange: ((String) -> Unit)? = null,
     onDeviceFilter: ((DeviceFilter) -> Unit)? = null,
+    onStatusFilter: ((HostStatusFilter) -> Unit)? = null,
     onRescanHost: ((String) -> Unit)? = null,
     onSelectInterface: ((String) -> Unit)? = null,
     onToggleFavorite: ((String) -> Unit)? = null,
     onDeepScan: ((String) -> Unit)? = null,
+    onPingHost: ((String) -> Unit)? = null,
     onSetHostLabel: ((String, String?) -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -107,6 +110,7 @@ fun MainScreen(
             host = host,
             isFavorite = host.ip in state.favoriteIps,
             uptime = state.uptime[host.ip] ?: emptyList(),
+            pingHistory = state.pingHistory[host.ip] ?: emptyList(),
             onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
             onSetLabel = { label -> onSetHostLabel?.invoke(host.ip, label) },
             onDismiss = { detailHost = null }
@@ -136,12 +140,15 @@ fun MainScreen(
         )
     }
 
-    val filteredHosts = remember(state.hosts, state.searchQuery, state.deviceFilter) {
+    val filteredHosts = remember(state.hosts, state.searchQuery, state.deviceFilter, state.statusFilter, state.uptime) {
         val q = state.searchQuery.trim()
         state.hosts.filter { host ->
             val okQuery = q.isEmpty() || host.ip.contains(q, true) ||
+                host.label?.contains(q, true) == true ||
                 host.hostname?.contains(q, true) == true ||
-                host.macAddress?.contains(q, true) == true
+                host.macAddress?.contains(q, true) == true ||
+                host.macVendor?.contains(q, true) == true ||
+                host.openPorts.any { it.port.toString().contains(q) || it.service?.contains(q, true) == true }
             val okFilter = when (state.deviceFilter) {
                 DeviceFilter.ALL -> true
                 DeviceFilter.CAMERA -> DeviceKind.CAMERA in host.deviceKinds()
@@ -153,7 +160,13 @@ fun MainScreen(
                 DeviceFilter.IOT -> DeviceKind.IOT in host.deviceKinds()
                 DeviceFilter.PHONE -> DeviceKind.PHONE in host.deviceKinds()
             }
-            okQuery && okFilter
+            val lastOnline = state.uptime[host.ip]?.lastOrNull()?.online
+            val okStatus = when (state.statusFilter) {
+                HostStatusFilter.ALL -> true
+                HostStatusFilter.ONLINE -> lastOnline == true
+                HostStatusFilter.OFFLINE -> lastOnline == false
+            }
+            okQuery && okFilter && okStatus
         }
     }
 
@@ -209,6 +222,22 @@ fun MainScreen(
                         interfaces = state.networkInfo.availableInterfaces,
                         selectedInterface = state.networkInfo.selectedInterface,
                         onSelectInterface = onSelectInterface
+                    )
+                }
+                item { Spacer(Modifier.height(6.dp)) }
+            }
+
+            // ─── Ringkasan jaringan realtime ───
+            if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
+                item {
+                    NetworkSummaryBar(
+                        hostCount = state.hosts.size,
+                        onlineCount = if (state.monitor.isRunning && state.monitor.statuses.isNotEmpty())
+                            state.monitor.statuses.values.count { it }
+                        else state.hosts.count { state.uptime[it.ip]?.lastOrNull()?.online == true },
+                        newCount = state.hosts.count { it.isNew },
+                        portCount = state.hosts.sumOf { it.openPorts.size },
+                        urlCount = state.discoveredUrls.size
                     )
                 }
                 item { Spacer(Modifier.height(6.dp)) }
@@ -406,7 +435,7 @@ fun MainScreen(
                             value = state.searchQuery,
                             onValueChange = { onSearchChange?.invoke(it) },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Cari IP / hostname / MAC", fontSize = 11.sp) },
+                            placeholder = { Text("Cari IP / nama / MAC / port / service", fontSize = 11.sp) },
                             leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
                             trailingIcon = if (state.searchQuery.isNotEmpty()) {
                                 {
@@ -424,6 +453,17 @@ fun MainScreen(
                                 FilterChip(
                                     selected = state.deviceFilter == f,
                                     onClick = { onDeviceFilter?.invoke(f) },
+                                    label = { Text(f.label, fontSize = 10.sp) },
+                                    modifier = Modifier.height(28.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            HostStatusFilter.entries.forEach { f ->
+                                FilterChip(
+                                    selected = state.statusFilter == f,
+                                    onClick = { onStatusFilter?.invoke(f) },
                                     label = { Text(f.label, fontSize = 10.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
@@ -453,6 +493,7 @@ fun MainScreen(
                             isSelected = host.ip in state.selectedHosts,
                             selectionMode = state.selectedHosts.isNotEmpty(),
                             onToggleSelect = { onToggleHostSelect?.invoke(host.ip) },
+                            onPingHost = if (onPingHost == null) null else ({ onPingHost(host.ip) }),
                             onRescanHost = if (state.isScanning || onRescanHost == null) null
                             else ({ onRescanHost(host.ip) })
                         )
@@ -573,6 +614,52 @@ fun NetworkChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: Str
             Spacer(Modifier.width(4.dp))
             Text(text, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
         }
+    }
+}
+
+/** Ringkasan jaringan realtime di header: total host, online, baru, port, URL. */
+@Composable
+private fun NetworkSummaryBar(
+    hostCount: Int,
+    onlineCount: Int,
+    newCount: Int,
+    portCount: Int,
+    urlCount: Int
+) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            SummaryChip("Hosts: $hostCount", TextSecondary)
+            SummaryChip("Online: $onlineCount", if (onlineCount > 0) StatusGreen else StatusRed)
+            if (newCount > 0) SummaryChip("Baru: $newCount", AccentGreen)
+            if (portCount > 0) SummaryChip("Port: $portCount", StatusBlue)
+            if (urlCount > 0) SummaryChip("URL: $urlCount", TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun SummaryChip(text: String, color: Color) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = color.copy(alpha = 0.12f)
+    ) {
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }
 
@@ -716,11 +803,20 @@ private fun HostDetailDialog(
     host: HostInfo,
     isFavorite: Boolean,
     uptime: List<UptimeEvent>,
+    pingHistory: List<PingEvent> = emptyList(),
     onToggleFavorite: () -> Unit,
     onSetLabel: ((String?) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
+    val uriHandler = LocalUriHandler.current
     var labelText by remember(host.ip) { mutableStateOf(host.label ?: "") }
+    val webUrl = remember(host) {
+        val webPort = host.openPorts.firstOrNull { it.port in WEB_PORTS } ?: host.openPorts.firstOrNull()
+        if (webPort != null) {
+            val scheme = if (webPort.port == 443 || webPort.port == 8443) "https" else "http"
+            "$scheme://${host.ip}:${webPort.port}/"
+        } else "http://${host.ip}/"
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(host.ip, fontWeight = FontWeight.Bold) },
@@ -758,6 +854,15 @@ private fun HostDetailDialog(
                     Spacer(Modifier.width(6.dp))
                     Text(if (isFavorite) "Hapus dari perangkat penting" else "Jadikan perangkat penting", fontSize = 12.sp)
                 }
+                OutlinedButton(
+                    onClick = { try { uriHandler.openUri(webUrl) } catch (_: Exception) {} },
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.OpenInBrowser, null, Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Buka di browser", fontSize = 12.sp)
+                }
                 Spacer(Modifier.height(8.dp))
                 Text("Riwayat ketersediaan", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
@@ -783,10 +888,47 @@ private fun HostDetailDialog(
                         )
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                Text("Riwayat ping (latency)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Spacer(Modifier.height(4.dp))
+                if (pingHistory.isEmpty()) {
+                    Text("Belum ada riwayat ping — tekan tombol ping di kartu host", fontSize = 11.sp, color = TextSecondary)
+                } else {
+                    PingChart(pingHistory)
+                    Spacer(Modifier.height(4.dp))
+                    val last = pingHistory.last()
+                    Text("Ping terakhir: ${last.latencyMs}ms · total ${pingHistory.size} pengukuran",
+                        fontSize = 11.sp, color = TextSecondary)
+                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
     )
+}
+
+/** Grafik garis latency ping (60 titik terakhir). */
+@Composable
+private fun PingChart(events: List<PingEvent>) {
+    if (events.isEmpty()) return
+    val recent = events.takeLast(60)
+    val maxLat = recent.maxOf { it.latencyMs }.coerceAtLeast(1)
+    Canvas(modifier = Modifier.fillMaxWidth().height(48.dp)) {
+        val stepX = if (recent.size > 1) size.width / (recent.size - 1) else size.width
+        val points = recent.mapIndexed { i, e ->
+            Offset(
+                x = i * stepX,
+                y = size.height - (e.latencyMs.toFloat() / maxLat) * size.height
+            )
+        }
+        points.zipWithNext().forEach { (a, b) ->
+            drawLine(color = StatusBlue, start = a, end = b, strokeWidth = 2.dp.toPx())
+        }
+        points.forEachIndexed { i, p ->
+            val lat = recent[i].latencyMs
+            val color = when { lat < 10 -> StatusGreen; lat < 50 -> StatusOrange; else -> StatusRed }
+            drawCircle(color = color, radius = 2.5.dp.toPx(), center = p)
+        }
+    }
 }
 
 @Composable
