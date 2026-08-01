@@ -173,7 +173,6 @@ fun MainScreen(
                     if (onSelectScanSpeed != null) {
                         Spacer(Modifier.height(6.dp))
                         FlowRow(
-                            verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
