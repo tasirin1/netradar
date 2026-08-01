@@ -444,10 +444,20 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val cameras = result.hosts.count { DeviceKind.CAMERA in it.deviceKinds() }
         val routers = result.hosts.count { DeviceKind.ROUTER in it.deviceKinds() }
         val shares = result.hosts.count { DeviceKind.SHARE in it.deviceKinds() }
+        val printers = result.hosts.count { DeviceKind.PRINTER in it.deviceKinds() }
+        val nas = result.hosts.count { DeviceKind.NAS in it.deviceKinds() }
+        val tvs = result.hosts.count { DeviceKind.TV in it.deviceKinds() }
+        val iots = result.hosts.count { DeviceKind.IOT in it.deviceKinds() }
+        val phones = result.hosts.count { DeviceKind.PHONE in it.deviceKinds() }
         val parts = mutableListOf<String>()
         if (cameras > 0) parts.add("📷 $cameras")
         if (routers > 0) parts.add("🌐 $routers")
         if (shares > 0) parts.add("📁 $shares")
+        if (printers > 0) parts.add("🖨️ $printers")
+        if (nas > 0) parts.add("💾 $nas")
+        if (tvs > 0) parts.add("📺 $tvs")
+        if (iots > 0) parts.add("💡 $iots")
+        if (phones > 0) parts.add("📱 $phones")
         return parts.joinToString("  ")
     }
 

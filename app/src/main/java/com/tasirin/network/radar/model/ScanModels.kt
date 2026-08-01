@@ -52,7 +52,8 @@ enum class SortMode(val label: String) {
 
 /** Jenis perangkat yang terdeteksi dari service/port yang terbuka. */
 enum class DeviceKind(val icon: String) {
-    CAMERA("📷"), ROUTER("🌐"), SHARE("📁")
+    CAMERA("📷"), ROUTER("🌐"), SHARE("📁"),
+    PRINTER("🖨️"), NAS("💾"), TV("📺"), IOT("💡"), PHONE("📱")
 }
 
 /** Filter tampilan hasil host. */
@@ -60,7 +61,12 @@ enum class DeviceFilter(val label: String) {
     ALL("Semua"),
     CAMERA("📷 CCTV"),
     ROUTER("🌐 Router"),
-    SHARE("📁 Share")
+    SHARE("📁 Share"),
+    PRINTER("🖨️ Printer"),
+    NAS("💾 NAS"),
+    TV("📺 TV"),
+    IOT("💡 IoT"),
+    PHONE("📱 HP")
 }
 
 fun HostInfo.deviceKinds(): Set<DeviceKind> = buildSet {
@@ -73,7 +79,26 @@ fun HostInfo.deviceKinds(): Set<DeviceKind> = buildSet {
             p.service?.contains("Winbox", true) == true || p.service?.contains("TR-069", true) == true ||
             p.service?.contains("UPnP", true) == true }) add(DeviceKind.ROUTER)
     if (openPorts.any { p -> p.port in listOf(445, 139, 2049, 21, 111, 135) }) add(DeviceKind.SHARE)
+    if (openPorts.any { p ->
+            p.port in PRINTER_PORTS ||
+            p.service?.contains("printer", true) == true ||
+            p.service?.contains("ipp", true) == true ||
+            p.service?.contains("jetdirect", true) == true }) add(DeviceKind.PRINTER)
+    if (openPorts.any { p -> p.port in NAS_PORTS }) add(DeviceKind.NAS)
+    if (openPorts.any { p ->
+            p.port in TV_PORTS ||
+            p.service?.contains("dlna", true) == true ||
+            p.service?.contains("media", true) == true ||
+            p.service?.contains("smart tv", true) == true }) add(DeviceKind.TV)
+    if (openPorts.any { p -> p.port in IOT_PORTS }) add(DeviceKind.IOT)
+    if (openPorts.any { p -> p.port in PHONE_PORTS }) add(DeviceKind.PHONE)
 }
+
+private val PRINTER_PORTS = setOf(515, 631, 9100)
+private val NAS_PORTS = setOf(548, 873, 3260)
+private val TV_PORTS = setOf(55000, 9197, 8060, 56789, 1926, 49000)
+private val IOT_PORTS = setOf(1883, 8883, 5683, 502, 623, 2323)
+private val PHONE_PORTS = setOf(5555, 4747)
 
 data class ScanResult(
     val type: ScanType,
@@ -136,7 +161,7 @@ enum class ScanSpeed(
     val socketPermits: Int,
     val portCount: Int
 ) {
-    SANGAT_STABIL("Sangat Stabil", 8, 3, 600, 64, 60),
+    SANGAT_STABIL("Sangat Stabil", 8, 3, 600, 64, 70),
     STABIL("Stabil", 15, 5, 400, 150, 40),
     SEDANG("Sedang", 30, 10, 200, 400, 28),
     CEPAT("Cepat", 50, 15, 150, 500, 16),
@@ -151,7 +176,8 @@ object PortRangeParser {
         8888, 9000, 3000, 5432, 6379, 27017, 8081, 81, 5555, 5900, 7547, 6666,
         8291, 2000, 1433, 1521, 2049, 2375, 2376, 3128, 3307, 3388, 4444, 4848,
         25, 110, 143, 161, 162, 2323, 5060, 1723, 10000, 1434,
-        6378, 7001, 8001, 8082, 8083, 8084, 8085, 8444, 9090, 9200
+        6378, 7001, 8001, 8082, 8083, 8084, 8085, 8444, 9090, 9200,
+        515, 631, 9100, 548, 873, 3260, 1883, 8883, 5683, 502
     )
 }
 

@@ -143,6 +143,11 @@ fun MainScreen(
                 DeviceFilter.CAMERA -> DeviceKind.CAMERA in host.deviceKinds()
                 DeviceFilter.ROUTER -> DeviceKind.ROUTER in host.deviceKinds()
                 DeviceFilter.SHARE -> DeviceKind.SHARE in host.deviceKinds()
+                DeviceFilter.PRINTER -> DeviceKind.PRINTER in host.deviceKinds()
+                DeviceFilter.NAS -> DeviceKind.NAS in host.deviceKinds()
+                DeviceFilter.TV -> DeviceKind.TV in host.deviceKinds()
+                DeviceFilter.IOT -> DeviceKind.IOT in host.deviceKinds()
+                DeviceFilter.PHONE -> DeviceKind.PHONE in host.deviceKinds()
             }
             okQuery && okFilter
         }
@@ -395,7 +400,7 @@ fun MainScreen(
                             textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
                         )
                         Spacer(Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             DeviceFilter.entries.forEach { f ->
                                 FilterChip(
                                     selected = state.deviceFilter == f,
@@ -817,10 +822,15 @@ private fun NetworkMapDialog(hosts: List<HostInfo>, gateway: String, onDismiss: 
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("● Camera", fontSize = 10.sp, color = Color(0xFFE53935))
                     Text("● Router", fontSize = 10.sp, color = Color(0xFF1E88E5))
                     Text("● Share", fontSize = 10.sp, color = Color(0xFFFB8C00))
+                    Text("● Printer", fontSize = 10.sp, color = Color(0xFF8E24AA))
+                    Text("● NAS", fontSize = 10.sp, color = Color(0xFF00ACC1))
+                    Text("● TV", fontSize = 10.sp, color = Color(0xFFD81B60))
+                    Text("● IoT", fontSize = 10.sp, color = Color(0xFF6D4C41))
+                    Text("● HP", fontSize = 10.sp, color = Color(0xFF5E35B1))
                     Text("● Lainnya", fontSize = 10.sp, color = Color(0xFF43A047))
                 }
                 Text("Pusat = gateway · tebal garis = jumlah port", fontSize = 9.sp, color = TextSecondary)
@@ -834,6 +844,11 @@ private fun hostColor(host: HostInfo): Color = when {
     DeviceKind.CAMERA in host.deviceKinds() -> Color(0xFFE53935)
     DeviceKind.ROUTER in host.deviceKinds() -> Color(0xFF1E88E5)
     DeviceKind.SHARE in host.deviceKinds() -> Color(0xFFFB8C00)
+    DeviceKind.PRINTER in host.deviceKinds() -> Color(0xFF8E24AA)
+    DeviceKind.NAS in host.deviceKinds() -> Color(0xFF00ACC1)
+    DeviceKind.TV in host.deviceKinds() -> Color(0xFFD81B60)
+    DeviceKind.IOT in host.deviceKinds() -> Color(0xFF6D4C41)
+    DeviceKind.PHONE in host.deviceKinds() -> Color(0xFF5E35B1)
     else -> Color(0xFF43A047)
 }
 
