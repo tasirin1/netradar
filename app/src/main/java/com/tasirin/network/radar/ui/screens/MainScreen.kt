@@ -785,11 +785,12 @@ private fun NetworkMapDialog(hosts: List<HostInfo>, gateway: String, onDismiss: 
         text = {
             Column {
                 val textMeasurer = rememberTextMeasurer()
+                val primaryColor = MaterialTheme.colorScheme.primary
                 Canvas(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                     val cx = size.width / 2f
                     val cy = size.height / 2f
                     val radius = minOf(size.width, size.height) / 2f - 30.dp.toPx()
-                    drawCircle(color = MaterialTheme.colorScheme.primary, radius = 10.dp.toPx(), center = Offset(cx, cy))
+                    drawCircle(color = primaryColor, radius = 10.dp.toPx(), center = Offset(cx, cy))
                     val centerLabel = textMeasurer.measure(
                         AnnotatedString(gateway.ifBlank { "Gateway" }),
                         TextStyle(fontSize = 9.sp, color = Color.DarkGray)
