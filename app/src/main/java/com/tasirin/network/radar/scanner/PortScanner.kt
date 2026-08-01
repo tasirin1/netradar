@@ -23,7 +23,7 @@ class PortScanner {
             return@flow
         }
 
-        val ports = PortRangeParser.defaultPorts.take(speed.portCount)
+        val ports = PortRangeParser.defaultPorts.take(speed.portCount).toIntArray()
         val total = subnets.size * 254L
         val isWide = subnets.size > 4
         val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
@@ -68,7 +68,7 @@ class PortScanner {
         ip: String,
         speed: ScanSpeed = ScanSpeed.SEDANG
     ): HostInfo? {
-        val ports = PortRangeParser.defaultPorts.take(speed.portCount)
+        val ports = PortRangeParser.defaultPorts.take(speed.portCount).toIntArray()
         val hostname = try {
             withTimeout(300) { InetAddress.getByName(ip).hostName }.let { if (it != ip) it else null }
         } catch (_: Exception) { null }
