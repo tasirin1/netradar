@@ -38,6 +38,23 @@ object PingStore {
         return next
     }
 
+    /** Tambah banyak pengukuran sekaligus (satu kali save — dipakai loop monitor). */
+    fun recordBatch(
+        context: Context,
+        current: Map<String, List<PingEvent>>,
+        updates: Map<String, Long>,
+        persist: Boolean = true
+    ): Map<String, List<PingEvent>> {
+        if (updates.isEmpty()) return current
+        val now = System.currentTimeMillis()
+        val next = current.toMutableMap()
+        updates.forEach { (ip, latencyMs) ->
+            next[ip] = ((next[ip] ?: emptyList()) + PingEvent(now, latencyMs)).takeLast(MAX_PER_HOST)
+        }
+        if (persist) save(context, next)
+        return next
+    }
+
     fun save(context: Context, data: Map<String, List<PingEvent>>) {
         try {
             val obj = JSONObject()

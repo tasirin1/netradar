@@ -73,6 +73,8 @@ data class ScanUiState(
     val gatewayLatencyMs: Long? = null,
     val internetOnline: Boolean? = null,
     val internetLatencyMs: Long? = null,
+    val networkQualityLabel: String = "",
+    val networkQualityColor: Long = 0xFF00695C,
     val notifyNewDevices: Boolean = true,
     val notifyImportantOffline: Boolean = true,
     val notifyScanDone: Boolean = true,
@@ -108,6 +110,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var lastHostUiAt = 0L
     private var gatewayJob: Job? = null
     private var lastBackOnlineAt = 0L
+    private val gatewayLatencies = ArrayDeque<Long>()
+    private var lastPingBatchSaveAt = 0L
 
     private companion object {
         const val CHANNEL_NEW_DEVICE = "new_device"
@@ -314,11 +318,22 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             var pings = 0
             while (isActive) {
                 // pingProbe memblokir (ProcessBuilder), jadi jalankan di IO
-                val statuses = withContext(Dispatchers.IO) {
+                val probes = withContext(Dispatchers.IO) {
                     ips.chunked(8).flatMap { chunk ->
-                        chunk.map { ip -> async { ip to (PingUtil.pingProbe(ip) != null) } }.map { it.await() }
+                        chunk.map { ip -> async { ip to PingUtil.pingProbe(ip) } }.map { it.await() }
                     }
+                }
+                val statuses = probes.associate { (ip, probe) -> ip to (probe != null) }
+                val latUpdates = probes.mapNotNull { (ip, probe) ->
+                    if (probe != null) ip to probe.latencyMs else null
                 }.toMap()
+                if (latUpdates.isNotEmpty()) {
+                    val now = System.currentTimeMillis()
+                    val persist = now - lastPingBatchSaveAt >= 10_000
+                    if (persist) lastPingBatchSaveAt = now
+                    _pingHistory = PingStore.recordBatch(getApplication(), _pingHistory, latUpdates, persist)
+                    _state.update { it.copy(pingHistory = _pingHistory) }
+                }
                 pings++
                 val prevStatuses = _state.value.monitor.statuses
                 statuses.forEach { (ip, online) ->
@@ -356,6 +371,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 val wasOnline = _state.value.monitor.statuses[ip]
                 if (online && ip in _favorites && wasOnline == false) notifyFavoriteBackOnline(ip)
                 recordUptime(ip, online)
+                probe?.let { recordPing(ip, it.latencyMs) }
                 _state.update {
                     it.copy(monitor = MonitorState(isRunning = true, statuses = mapOf(ip to online)),
                         summary = if (online) "ping $ip — ${probe!!.latencyMs}ms" else "ping $ip — ✗",
@@ -536,6 +552,16 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(error = "Rescan $ip gagal") }
             }
         }
+    }
+
+    /** Mulai scan subnet /24 di sekitar satu IP (satu ketukan dari kartu host). */
+    fun expandScanFromHost(ip: String) {
+        if (_state.value.isScanning || ip.isBlank()) return
+        val parts = ip.split(".")
+        if (parts.size != 4 || parts.any { it.toIntOrNull()?.let { n -> n in 0..255 } != true }) return
+        val target = "${parts[0]}.${parts[1]}.${parts[2]}.0/24"
+        _state.update { it.copy(target = target) }
+        startScan(ScanType.PORT_SCAN)
     }
 
     fun clearResults() {
@@ -775,6 +801,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             while (isActive) {
                 checkGateway()
                 checkInternet()
+                updateNetworkQuality()
                 delay(5_000)
             }
         }
@@ -790,9 +817,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val probe = withContext(Dispatchers.IO) { PingUtil.pingProbe(gw) }
         val st = _state.value
         if (probe != null) {
+            gatewayLatencies.addLast(probe.latencyMs)
+            while (gatewayLatencies.size > 12) gatewayLatencies.removeFirst()
             if (st.gatewayOnline != true || st.gatewayLatencyMs != probe.latencyMs)
                 _state.update { it.copy(gatewayOnline = true, gatewayLatencyMs = probe.latencyMs) }
         } else {
+            gatewayLatencies.clear()
             if (st.gatewayOnline != false)
                 _state.update { it.copy(gatewayOnline = false, gatewayLatencyMs = null) }
         }
@@ -810,6 +840,31 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             if (st.internetOnline != false)
                 _state.update { it.copy(internetOnline = false, internetLatencyMs = null) }
+        }
+    }
+
+    /** Hitung label kualitas jaringan dari rata-rata latency gateway + jitter antar ping. */
+    private fun updateNetworkQuality() {
+        val st = _state.value
+        val (label, color) = when {
+            st.gatewayOnline == false -> "Gateway ✗" to 0xFFC62828L
+            st.internetOnline == false -> "Internet ✗" to 0xFFE65100L
+            gatewayLatencies.size < 2 -> "Mengukur…" to 0xFF00695CL
+            else -> {
+                val avg = gatewayLatencies.average()
+                val jitter = (1 until gatewayLatencies.size)
+                    .map { kotlin.math.abs(gatewayLatencies[it] - gatewayLatencies[it - 1]) }
+                    .average()
+                when {
+                    avg < 15 && jitter < 8 -> "Stabil" to 0xFF2E7D32L
+                    avg < 60 && jitter < 30 -> "Normal" to 0xFF00695CL
+                    avg < 150 && jitter < 100 -> "Lemot" to 0xFFE65100L
+                    else -> "Tidak stabil" to 0xFFC62828L
+                }
+            }
+        }
+        if (st.networkQualityLabel != label || st.networkQualityColor != color) {
+            _state.update { it.copy(networkQualityLabel = label, networkQualityColor = color) }
         }
     }
 

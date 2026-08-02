@@ -98,6 +98,7 @@ fun MainScreen(
     onDeepScan: ((String) -> Unit)? = null,
     onCancelDeepScan: (() -> Unit)? = null,
     onPingHost: ((String) -> Unit)? = null,
+    onExpandScan: ((String) -> Unit)? = null,
     onResolveHostname: ((String) -> Unit)? = null,
     onSetHostLabel: ((String, String?) -> Unit)? = null
 ) {
@@ -165,6 +166,7 @@ fun MainScreen(
             onSetLabel = { label -> onSetHostLabel?.invoke(host.ip, label) },
             onDeepScan = { onDeepScan?.invoke(host.ip) },
             onResolveHostname = { onResolveHostname?.invoke(host.ip) },
+            onExpandScan = { onExpandScan?.invoke(host.ip) },
             onDismiss = { detailHost = null }
         )
     }
@@ -301,7 +303,9 @@ fun MainScreen(
                         gatewayOnline = state.gatewayOnline,
                         gatewayLatencyMs = state.gatewayLatencyMs,
                         internetOnline = state.internetOnline,
-                        internetLatencyMs = state.internetLatencyMs
+                        internetLatencyMs = state.internetLatencyMs,
+                        networkQualityLabel = state.networkQualityLabel,
+                        networkQualityColor = state.networkQualityColor
                     )
                     if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
@@ -614,6 +618,7 @@ fun MainScreen(
                     items(filteredHosts, key = { it.ip }) { host ->
                         HostCard(
                             host = host,
+                            pingHistory = state.pingHistory[host.ip] ?: emptyList(),
                             onCopyIp = onCopyIp,
                             onWol = onWol,
             isFavorite = host.ip in state.favoriteIps,
@@ -684,7 +689,9 @@ fun NetworkInfoBar(
     gatewayOnline: Boolean? = null,
     gatewayLatencyMs: Long? = null,
     internetOnline: Boolean? = null,
-    internetLatencyMs: Long? = null
+    internetLatencyMs: Long? = null,
+    networkQualityLabel: String = "",
+    networkQualityColor: Long = 0xFF00695C
 ) {
     var showInterfacePicker by remember { mutableStateOf(false) }
 
@@ -726,6 +733,13 @@ fun NetworkInfoBar(
                     else -> TextSecondary
                 }
             )
+            if (networkQualityLabel.isNotEmpty()) {
+                NetworkChip(
+                    icon = Icons.Default.Speed,
+                    text = "Kualitas: $networkQualityLabel",
+                    tint = Color(networkQualityColor)
+                )
+            }
         }
         if (interfaces.size > 1) {
             Spacer(Modifier.height(2.dp))
@@ -1317,6 +1331,7 @@ private fun HostDetailDialog(
     onToggleFavorite: () -> Unit,
     onSetLabel: ((String?) -> Unit)? = null,
     onDeepScan: (() -> Unit)? = null,
+    onExpandScan: (() -> Unit)? = null,
     onResolveHostname: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
@@ -1435,6 +1450,18 @@ private fun HostDetailDialog(
                         Icon(Icons.Default.ZoomIn, null, Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Deep scan semua port (1–65535)", fontSize = 12.sp)
+                    }
+                }
+                if (onExpandScan != null) {
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = onExpandScan,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.MyLocation, null, Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Scan subnet /24 sekitar IP ini", fontSize = 12.sp)
                     }
                 }
                 Spacer(Modifier.height(8.dp))

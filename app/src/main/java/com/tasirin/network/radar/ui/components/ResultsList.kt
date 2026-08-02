@@ -1,6 +1,7 @@
 package com.tasirin.network.radar.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
@@ -18,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tasirin.network.radar.model.HostInfo
+import com.tasirin.network.radar.model.PingEvent
 import com.tasirin.network.radar.model.PortDescriptions
 import com.tasirin.network.radar.model.PortInfo
 import com.tasirin.network.radar.model.UrlDiscovery
@@ -40,7 +43,8 @@ fun HostCard(
     isDeepScanning: Boolean = false,
     selectionMode: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
-    onRescanHost: (() -> Unit)? = null
+    onRescanHost: (() -> Unit)? = null,
+    pingHistory: List<PingEvent> = emptyList()
 ) {
     val uriHandler = LocalUriHandler.current
     var showPortInfo by remember { mutableStateOf<PortInfo?>(null) }
@@ -169,6 +173,12 @@ fun HostCard(
                         Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = TextSecondary)
                     }
                 }
+            }
+
+            // Sparkline latency (riwayat ping terbaru)
+            if (pingHistory.size >= 2) {
+                Spacer(Modifier.height(2.dp))
+                PingSparkline(pingHistory.takeLast(30))
             }
 
             if (host.label != null) {
@@ -350,6 +360,31 @@ private fun getPortIcon(port: PortInfo) = when {
     port.service?.contains("Telnet", true) == true -> Icons.Default.Terminal
     port.port == 443 || port.port == 8443 || port.port == 80 || port.port == 8080 -> Icons.Default.Public
     else -> Icons.Default.RadioButtonChecked
+}
+
+/** Grafik mini latency ping (sparkline) di kartu host. */
+@Composable
+private fun PingSparkline(events: List<PingEvent>) {
+    if (events.isEmpty()) return
+    val recent = events.takeLast(30)
+    val maxLat = recent.maxOf { it.latencyMs }.coerceAtLeast(1)
+    Canvas(modifier = Modifier.fillMaxWidth().height(18.dp)) {
+        val stepX = if (recent.size > 1) size.width / (recent.size - 1) else size.width
+        val points = recent.mapIndexed { i, e ->
+            Offset(
+                x = i * stepX,
+                y = size.height - (e.latencyMs.toFloat() / maxLat) * size.height
+            )
+        }
+        points.zipWithNext().forEach { (a, b) ->
+            drawLine(color = StatusBlue.copy(alpha = 0.6f), start = a, end = b, strokeWidth = 1.5.dp.toPx())
+        }
+        points.forEachIndexed { i, p ->
+            val lat = recent[i].latencyMs
+            val color = when { lat < 10 -> StatusGreen; lat < 50 -> StatusOrange; else -> StatusRed }
+            drawCircle(color = color, radius = 1.8.dp.toPx(), center = p)
+        }
+    }
 }
 
 @Composable

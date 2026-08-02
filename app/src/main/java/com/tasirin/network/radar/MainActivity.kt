@@ -91,6 +91,7 @@ class MainActivity : AppCompatActivity() {
                         onDeepScan = { ip -> viewModel.deepScanHost(ip) },
                         onCancelDeepScan = { viewModel.cancelDeepScan() },
                         onPingHost = { ip -> viewModel.pingHost(ip) },
+                        onExpandScan = { ip -> viewModel.expandScanFromHost(ip) },
                         onResolveHostname = { ip -> viewModel.resolveHostname(ip) },
                         onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) }
                     )
