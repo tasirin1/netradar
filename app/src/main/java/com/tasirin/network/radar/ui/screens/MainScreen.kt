@@ -7,6 +7,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -23,14 +24,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.layer.GraphicsLayer
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1203,72 +1201,31 @@ private fun AmbientDashboard(monitor: MonitorState, gateway: String, onDismiss: 
     }
 }
 
-/** Rasi bintang jaringan: perangkat sebagai bintang + garis aktivitas, bisa disimpan/dibagikan. */
+/** Rasi bintang jaringan: perangkat sebagai bintang + garis aktivitas, bisa dibagikan sebagai gambar. */
 @Composable
 private fun ConstellationDialog(hosts: List<HostInfo>, gateway: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val nodes = hosts.take(60)
-    val graphicsLayer = rememberGraphicsLayer()
+    val bitmap = remember(nodes) { buildConstellationBitmap(nodes, gateway, 900, 640) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Rasi bintang jaringan", fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                        .drawWithContent {
-                            graphicsLayer.record { this@drawWithContent.drawContent() }
-                            drawLayer(graphicsLayer)
-                        }
-                ) {
-                    val textMeasurer = rememberTextMeasurer()
-                    val primary = MaterialTheme.colorScheme.primary
-                    Canvas(Modifier.fillMaxSize()) {
-                        if (nodes.isEmpty()) return@Canvas
-                        val cx = size.width / 2f
-                        val cy = size.height / 2f
-                        val r = minOf(size.width, size.height) / 2f - 40.dp.toPx()
-                        val pts = nodes.mapIndexed { i, _ ->
-                            val t = i.toFloat() / nodes.size
-                            val angle = t * PI.toFloat() * 5f  // spiral 2.5 putaran
-                            val rad = r * (0.25f + 0.75f * t)
-                            Offset(cx + rad * cos(angle).toFloat(), cy + rad * sin(angle).toFloat())
-                        }
-                        // garis dari gateway (pusat) ke tiap bintang
-                        pts.forEach { p ->
-                            drawLine(primary.copy(alpha = 0.15f), Offset(cx, cy), p, 1f)
-                        }
-                        // garis antar bintang berurutan
-                        pts.zipWithNext().forEach { (a, b) ->
-                            drawLine(primary.copy(alpha = 0.3f), a, b, 1f)
-                        }
-                        nodes.forEachIndexed { i, host ->
-                            val p = pts[i]
-                            drawCircle(
-                                color = if (host.isAlive) StatusGreen else StatusRed,
-                                radius = 4.dp.toPx(),
-                                center = p
-                            )
-                            val label = textMeasurer.measure(
-                                AnnotatedString(host.ip),
-                                TextStyle(fontSize = 8.sp, color = TextSecondary)
-                            )
-                            drawText(label, topLeft = Offset(p.x - label.size.width / 2f, p.y + 5.dp.toPx()))
-                        }
-                    }
-                }
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Peta rasi bintang jaringan",
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                )
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Button(
-                        onClick = { saveConstellationImage(context, graphicsLayer) },
+                        onClick = { shareConstellationImage(context, bitmap) },
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Icon(Icons.Default.Share, null, Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Simpan & bagikan", fontSize = 11.sp)
+                        Text("Bagikan gambar", fontSize = 11.sp)
                     }
                     Spacer(Modifier.width(10.dp))
                     Text("Gateway: ${gateway.ifBlank { "-" }}", fontSize = 10.sp, color = TextSecondary)
@@ -1279,10 +1236,66 @@ private fun ConstellationDialog(hosts: List<HostInfo>, gateway: String, onDismis
     )
 }
 
-/** Render layer konstelasi ke PNG lalu share lewat intent. */
-private fun saveConstellationImage(context: Context, layer: GraphicsLayer) {
+/** Gambar peta konstelasi langsung ke Bitmap (background gelap, bintang + garis + label). */
+private fun buildConstellationBitmap(hosts: List<HostInfo>, gateway: String, width: Int, height: Int): Bitmap {
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val bg = android.graphics.Paint().apply { color = android.graphics.Color.rgb(18, 18, 18) }
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bg)
+    if (hosts.isEmpty()) return bitmap
+
+    val cx = width / 2f
+    val cy = height / 2f
+    val r = minOf(width, height) / 2f - 60f
+    val linePaint = android.graphics.Paint().apply {
+        color = android.graphics.Color.argb(70, 0, 137, 123)
+        strokeWidth = 2f
+        style = android.graphics.Paint.Style.STROKE
+        isAntiAlias = true
+    }
+    val labelPaint = android.graphics.Paint().apply {
+        color = android.graphics.Color.rgb(144, 164, 174)
+        textSize = 24f
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+    }
+    val pts = hosts.mapIndexed { i, _ ->
+        val t = i.toFloat() / hosts.size
+        val angle = t * (PI.toFloat() * 5f)  // spiral 2.5 putaran
+        val rad = r * (0.25f + 0.75f * t)
+        Offset(cx + rad * cos(angle), cy + rad * sin(angle))
+    }
+    // garis dari gateway (pusat) ke tiap bintang
+    pts.forEach { p -> canvas.drawLine(cx, cy, p.x, p.y, linePaint) }
+    // garis antar bintang berurutan
+    linePaint.color = android.graphics.Color.argb(60, 0, 137, 123)
+    pts.zipWithNext().forEach { (a, b) -> canvas.drawLine(a.x, a.y, b.x, b.y, linePaint) }
+    // gateway di pusat
+    val gwPaint = android.graphics.Paint().apply {
+        color = android.graphics.Color.rgb(0, 150, 136)
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx, cy, 16f, gwPaint)
+    labelPaint.color = android.graphics.Color.WHITE
+    canvas.drawText(gateway.ifBlank { "Gateway" }, cx, cy - 26f, labelPaint)
+
+    hosts.forEachIndexed { i, host ->
+        val p = pts[i]
+        val starPaint = android.graphics.Paint().apply {
+            color = if (host.isAlive) android.graphics.Color.rgb(46, 125, 50)
+            else android.graphics.Color.rgb(198, 40, 40)
+            isAntiAlias = true
+        }
+        canvas.drawCircle(p.x, p.y, 9f, starPaint)
+        labelPaint.color = android.graphics.Color.rgb(224, 224, 224)
+        canvas.drawText(host.ip, p.x, p.y + 32f, labelPaint)
+    }
+    return bitmap
+}
+
+/** Simpan bitmap ke PNG di cache lalu share lewat intent FileProvider. */
+private fun shareConstellationImage(context: Context, bitmap: Bitmap) {
     try {
-        val bitmap = layer.toImageBitmap().asAndroidBitmap()
         val file = File(context.cacheDir, "constellation.png")
         FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
