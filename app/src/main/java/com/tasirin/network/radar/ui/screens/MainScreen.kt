@@ -727,7 +727,9 @@ private fun SummaryChip(text: String, color: Color) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
-    var tab by remember { mutableStateOf(0) }
+    val context = LocalContext.current
+    // Kalau ada jejak crash, buka langsung di tab Crash biar mudah dilaporkan
+    var tab by remember { mutableStateOf(if (CrashLog.read(context) != null) 3 else 0) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("NetRadar v${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold) },
@@ -782,7 +784,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         HelpBullet("Monitor mode pings every 1.5s")
                     }
                     3 -> {
-                        val context = LocalContext.current
                         var crashLog by remember { mutableStateOf(CrashLog.read(context)) }
                         val log = crashLog
                         if (log == null) {

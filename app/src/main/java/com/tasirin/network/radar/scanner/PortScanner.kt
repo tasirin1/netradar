@@ -136,6 +136,8 @@ class PortScanner {
                     lastReported = pct
                     onProgress(pct)
                 }
+                // Jeda kecil antar chunk agar OS sempat menutup socket (hindari crash native di sebagian perangkat)
+                delay(2)
                 // Host yang membalas SYN-ACK semua port (firewall aneh) → hentikan agar UI/penyimpanan aman
                 if (open.size >= DEEP_SCAN_MAX_RESULTS) {
                     truncated = true
@@ -256,7 +258,7 @@ class PortScanner {
     }
 
     private companion object {
-        const val DEEP_SCAN_CONCURRENCY = 64
+        const val DEEP_SCAN_CONCURRENCY = 24
         const val DEEP_SCAN_MAX_RESULTS = 4000
     }
 }
