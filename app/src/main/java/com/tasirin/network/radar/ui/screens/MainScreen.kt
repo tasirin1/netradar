@@ -801,9 +801,10 @@ fun AboutDialog(onDismiss: () -> Unit) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
+                                        val log = crashLog ?: return@Button
                                         try {
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            clipboard.setPrimaryClip(ClipData.newPlainText("Crash Log", crashLog))
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("Crash Log", log))
                                         } catch (_: Exception) { }
                                     },
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)

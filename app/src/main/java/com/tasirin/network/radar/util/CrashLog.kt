@@ -14,7 +14,7 @@ object CrashLog {
             val sw = StringWriter()
             throwable.printStackTrace(PrintWriter(sw))
             context.openFileOutput(FILE, Context.MODE_PRIVATE).use { out ->
-                out.write(sw.toString())
+                out.write(sw.toString().toByteArray())
             }
         } catch (_: Exception) { }
     }
