@@ -1,8 +1,11 @@
 package com.tasirin.network.radar.ui.screens
 
+import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -10,6 +13,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,9 +23,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
@@ -35,6 +44,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.FileProvider
 import com.tasirin.network.radar.BuildConfig
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.ui.components.*
@@ -45,6 +57,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -63,6 +77,7 @@ fun MainScreen(
     onSetNotifyImportantOffline: ((Boolean) -> Unit)? = null,
     onSetNotifyScanDone: ((Boolean) -> Unit)? = null,
     onSetKeepScreenOn: ((Boolean) -> Unit)? = null,
+    onSetSoundEnabled: ((Boolean) -> Unit)? = null,
     onCopyIp: ((String) -> Unit)? = null,
     onCopyAll: (() -> Unit)? = null,
     onToggleHostSelect: ((String) -> Unit)? = null,
@@ -96,6 +111,8 @@ fun MainScreen(
     var showMapDialog by remember { mutableStateOf(false) }
     var showMatrixDialog by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var showDashboard by remember { mutableStateOf(false) }
+    var showConstellation by remember { mutableStateOf(false) }
 
     // About dialog
     if (state.showAbout) {
@@ -110,11 +127,13 @@ fun MainScreen(
             notifyImportantOffline = state.notifyImportantOffline,
             notifyScanDone = state.notifyScanDone,
             keepScreenOn = state.keepScreenOn,
+            soundEnabled = state.soundEnabled,
             onTheme = { onSetTheme?.invoke(it) },
             onNotifyNewDevices = { onSetNotifyNewDevices?.invoke(it) },
             onNotifyImportantOffline = { onSetNotifyImportantOffline?.invoke(it) },
             onNotifyScanDone = { onSetNotifyScanDone?.invoke(it) },
             onKeepScreenOn = { onSetKeepScreenOn?.invoke(it) },
+            onSoundEnabled = { onSetSoundEnabled?.invoke(it) },
             onDismiss = { onToggleSettings?.invoke() }
         )
     }
@@ -165,6 +184,24 @@ fun MainScreen(
         ScanHistoryDialog(
             history = state.scanHistory,
             onDismiss = { showHistoryDialog = false }
+        )
+    }
+
+    // Dashboard ambient (monitor mode)
+    if (showDashboard) {
+        AmbientDashboard(
+            monitor = state.monitor,
+            gateway = state.networkInfo.gateway,
+            onDismiss = { showDashboard = false }
+        )
+    }
+
+    // Rasi bintang jaringan
+    if (showConstellation) {
+        ConstellationDialog(
+            hosts = state.hosts,
+            gateway = state.networkInfo.gateway,
+            onDismiss = { showConstellation = false }
         )
     }
 
@@ -453,7 +490,7 @@ fun MainScreen(
 
             // ─── Monitor ───
             if (state.scanType == ScanType.MONITOR && state.monitor.isRunning) {
-                item { MonitorDisplay(state.monitor) }
+                item { MonitorDisplay(state.monitor, onDashboard = { showDashboard = true }) }
                 item { Spacer(Modifier.height(6.dp)) }
             }
 
@@ -510,6 +547,10 @@ fun MainScreen(
                                 onClick = { showMatrixDialog = true },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                             ) { Text("▦ Matriks", fontSize = 11.sp) }
+                            TextButton(
+                                onClick = { showConstellation = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) { Text("✦ Konstelasi", fontSize = 11.sp) }
                         }
                         Spacer(Modifier.height(4.dp))
                         Surface(
@@ -825,11 +866,13 @@ private fun SettingsDialog(
     notifyImportantOffline: Boolean,
     notifyScanDone: Boolean,
     keepScreenOn: Boolean,
+    soundEnabled: Boolean,
     onTheme: (Boolean?) -> Unit,
     onNotifyNewDevices: (Boolean) -> Unit,
     onNotifyImportantOffline: (Boolean) -> Unit,
     onNotifyScanDone: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
+    onSoundEnabled: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -857,6 +900,7 @@ private fun SettingsDialog(
                 SettingsSwitch("Perangkat baru terdeteksi", notifyNewDevices, onNotifyNewDevices)
                 SettingsSwitch("Perangkat penting offline", notifyImportantOffline, onNotifyImportantOffline)
                 SettingsSwitch("Ringkasan scan selesai (background)", notifyScanDone, onNotifyScanDone)
+                SettingsSwitch("Suara saat perangkat ditemukan", soundEnabled, onSoundEnabled)
                 Spacer(Modifier.height(12.dp))
                 Text("Perilaku", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 SettingsSwitch("Cegah layar mati saat scan", keepScreenOn, onKeepScreenOn)
@@ -1038,7 +1082,7 @@ fun SortBar(currentSort: SortMode, onSortMode: (SortMode) -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun MonitorDisplay(monitor: MonitorState) {
+fun MonitorDisplay(monitor: MonitorState, onDashboard: (() -> Unit)? = null) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -1057,6 +1101,14 @@ fun MonitorDisplay(monitor: MonitorState) {
             Text("$online/${monitor.statuses.size} online",
                 fontSize = 11.sp, fontWeight = FontWeight.Bold,
                 color = if (online > 0) StatusGreen else StatusRed)
+            if (onDashboard != null) {
+                TextButton(
+                    onClick = onDashboard,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text("🖥 Mode Dashboard", fontSize = 11.sp)
+                }
+            }
             Spacer(Modifier.height(6.dp))
             if (monitor.statuses.isEmpty()) {
                 Text("Waiting...", fontSize = 11.sp, color = TextSecondary)
@@ -1081,6 +1133,166 @@ fun MonitorDisplay(monitor: MonitorState) {
             }
         }
     }
+}
+
+/** Dashboard ambient ukuran penuh: angka besar + denyut status, kebaca dari jauh. */
+@Composable
+private fun AmbientDashboard(monitor: MonitorState, gateway: String, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val online = monitor.statuses.values.count { it }
+                Text("$online/${monitor.statuses.size}",
+                    color = if (online > 0) StatusGreen else StatusRed,
+                    fontSize = 110.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text("perangkat online", color = Color.White, fontSize = 16.sp)
+                Spacer(Modifier.height(20.dp))
+                val pulse = rememberInfiniteTransition(label = "pulse")
+                val alpha by pulse.animateFloat(
+                    initialValue = 1f, targetValue = 0.15f,
+                    animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+                    label = "alpha"
+                )
+                Box(
+                    Modifier.size(22.dp).clip(CircleShape)
+                        .background(if (online > 0) StatusGreen else StatusRed.copy(alpha = alpha))
+                )
+                Spacer(Modifier.height(16.dp))
+                Text("Gateway: ${gateway.ifBlank { "-" }}",
+                    color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+                Text("Siklus ke-${monitor.pings}",
+                    color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp)
+                Spacer(Modifier.height(24.dp))
+                if (monitor.statuses.isNotEmpty()) {
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    ) {
+                        monitor.statuses.entries.sortedBy { it.key }.forEach { (ip, ok) ->
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (ok) StatusGreen.copy(alpha = 0.14f) else StatusRed.copy(alpha = 0.12f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Box(Modifier.size(9.dp).clip(CircleShape)
+                                        .background(if (ok) StatusGreen else StatusRed))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(ip, color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(28.dp))
+                TextButton(onClick = onDismiss) {
+                    Text("Tutup dashboard", color = Color.White, fontSize = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+/** Rasi bintang jaringan: perangkat sebagai bintang + garis aktivitas, bisa disimpan/dibagikan. */
+@Composable
+private fun ConstellationDialog(hosts: List<HostInfo>, gateway: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val nodes = hosts.take(60)
+    val graphicsLayer = rememberGraphicsLayer()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rasi bintang jaringan", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                        .drawWithContent {
+                            graphicsLayer.record { this@drawWithContent.drawContent() }
+                            drawLayer(graphicsLayer)
+                        }
+                ) {
+                    val textMeasurer = rememberTextMeasurer()
+                    val primary = MaterialTheme.colorScheme.primary
+                    Canvas(Modifier.fillMaxSize()) {
+                        if (nodes.isEmpty()) return@Canvas
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        val r = minOf(size.width, size.height) / 2f - 40.dp.toPx()
+                        val pts = nodes.mapIndexed { i, _ ->
+                            val t = i.toFloat() / nodes.size
+                            val angle = t * PI.toFloat() * 5f  // spiral 2.5 putaran
+                            val rad = r * (0.25f + 0.75f * t)
+                            Offset(cx + rad * cos(angle).toFloat(), cy + rad * sin(angle).toFloat())
+                        }
+                        // garis dari gateway (pusat) ke tiap bintang
+                        pts.forEach { p ->
+                            drawLine(primary.copy(alpha = 0.15f), Offset(cx, cy), p, 1f)
+                        }
+                        // garis antar bintang berurutan
+                        pts.zipWithNext().forEach { (a, b) ->
+                            drawLine(primary.copy(alpha = 0.3f), a, b, 1f)
+                        }
+                        nodes.forEachIndexed { i, host ->
+                            val p = pts[i]
+                            drawCircle(
+                                color = if (host.isAlive) StatusGreen else StatusRed,
+                                radius = 4.dp.toPx(),
+                                center = p
+                            )
+                            val label = textMeasurer.measure(
+                                AnnotatedString(host.ip),
+                                TextStyle(fontSize = 8.sp, color = TextSecondary)
+                            )
+                            drawText(label, topLeft = Offset(p.x - label.size.width / 2f, p.y + 5.dp.toPx()))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = { saveConstellationImage(context, graphicsLayer) },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Share, null, Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Simpan & bagikan", fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text("Gateway: ${gateway.ifBlank { "-" }}", fontSize = 10.sp, color = TextSecondary)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+/** Render layer konstelasi ke PNG lalu share lewat intent. */
+private fun saveConstellationImage(context: Context, layer: GraphicsLayer) {
+    try {
+        val bitmap = layer.toImageBitmap().asAndroidBitmap()
+        val file = File(context.cacheDir, "constellation.png")
+        FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Bagikan peta jaringan"))
+    } catch (_: Exception) { }
 }
 
 @Composable

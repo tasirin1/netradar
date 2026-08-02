@@ -28,6 +28,7 @@ import com.tasirin.network.radar.util.ResultsStore
 import com.tasirin.network.radar.util.ScanHistoryStore
 import com.tasirin.network.radar.util.AppSettings
 import com.tasirin.network.radar.util.SettingsStore
+import com.tasirin.network.radar.util.SoundFeedback
 import com.tasirin.network.radar.util.UptimeStore
 import com.tasirin.network.radar.util.WakeOnLan
 import com.tasirin.network.radar.widget.NetRadarWidget
@@ -75,7 +76,8 @@ data class ScanUiState(
     val notifyNewDevices: Boolean = true,
     val notifyImportantOffline: Boolean = true,
     val notifyScanDone: Boolean = true,
-    val keepScreenOn: Boolean = true
+    val keepScreenOn: Boolean = true,
+    val soundEnabled: Boolean = true
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -105,6 +107,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var _previousScanHosts: Map<String, List<Int>>? = null
     private var lastHostUiAt = 0L
     private var gatewayJob: Job? = null
+    private var lastBackOnlineAt = 0L
 
     private companion object {
         const val CHANNEL_NEW_DEVICE = "new_device"
@@ -136,6 +139,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 notifyImportantOffline = settings.notifyImportantOffline,
                 notifyScanDone = settings.notifyScanDone,
                 keepScreenOn = settings.keepScreenOn,
+                soundEnabled = settings.soundEnabled,
                 summary = if (_hosts.isEmpty()) "Ready" else "Riwayat: ${_hosts.size} host(s), ${_urls.size} URL(s)"
             )
         }
@@ -219,6 +223,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             _hosts[host.ip] = host
                             refreshHostsUi()
                             if (isNew && type != ScanType.TRACE) notifyNewDevice(host)
+                            if (_state.value.soundEnabled) {
+                                SoundFeedback.playForPort(event.host.openPorts.firstOrNull()?.port ?: 0)
+                            }
+                            if (host.ip in _favorites && !isNew &&
+                                _uptime[host.ip]?.lastOrNull()?.online == false) {
+                                notifyFavoriteBackOnline(host.ip)
+                            }
                             recordUptime(event.host.ip, true)
                             event.host.latencyMs?.let { recordPing(host.ip, it) }
                             persistResults()
@@ -309,9 +320,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }.toMap()
                 pings++
+                val prevStatuses = _state.value.monitor.statuses
                 statuses.forEach { (ip, online) ->
                     recordUptime(ip, online)
-                    if (!online && ip in _favorites &&
+                    if (online && ip in _favorites && prevStatuses[ip] == false) {
+                        notifyFavoriteBackOnline(ip)
+                    } else if (!online && ip in _favorites &&
                         System.currentTimeMillis() - lastFavoriteAlertAt > 30_000) {
                         lastFavoriteAlertAt = System.currentTimeMillis()
                         notifyImportantOffline(ip)
@@ -339,6 +353,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             while (isActive) {
                 val probe = withContext(Dispatchers.IO) { PingUtil.pingProbe(ip) }
                 val online = probe != null
+                val wasOnline = _state.value.monitor.statuses[ip]
+                if (online && ip in _favorites && wasOnline == false) notifyFavoriteBackOnline(ip)
                 recordUptime(ip, online)
                 _state.update {
                     it.copy(monitor = MonitorState(isRunning = true, statuses = mapOf(ip to online)),
@@ -572,6 +588,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         persistSettings()
     }
 
+    fun setSoundEnabled(enabled: Boolean) {
+        _state.update { it.copy(soundEnabled = enabled) }
+        persistSettings()
+    }
+
     private fun persistSettings() {
         val s = _state.value
         SettingsStore.save(getApplication(), AppSettings(
@@ -579,7 +600,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             notifyNewDevices = s.notifyNewDevices,
             notifyImportantOffline = s.notifyImportantOffline,
             notifyScanDone = s.notifyScanDone,
-            keepScreenOn = s.keepScreenOn
+            keepScreenOn = s.keepScreenOn,
+            soundEnabled = s.soundEnabled
         ))
     }
 
@@ -845,6 +867,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 _hosts[ip] = host
                 refreshHostsUi(force = true)
+                if (_state.value.soundEnabled) SoundFeedback.playForPort(ports.firstOrNull()?.port ?: 0)
                 recordUptime(ip, true)
                 persistResults(force = true)
                 recordHistory("Deep scan", ip, 1, ports.size, System.currentTimeMillis() - startedAt)
@@ -921,6 +944,34 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 .setAutoCancel(true)
                 .build()
             nm.notify(ip.hashCode() + 9999, notification)
+        } catch (_: Exception) { }
+    }
+
+    /** Notifikasi saat perangkat penting yang tadinya offline kembali online. */
+    private fun notifyFavoriteBackOnline(ip: String) {
+        if (!_state.value.notifyImportantOffline) return
+        val now = System.currentTimeMillis()
+        if (now - lastBackOnlineAt < 30_000) return
+        lastBackOnlineAt = now
+        try {
+            val ctx = getApplication<Application>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) return
+            val nm = NotificationManagerCompat.from(ctx)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel(CHANNEL_IMPORTANT, "Perangkat Penting", NotificationManager.IMPORTANCE_HIGH)
+                )
+            }
+            val name = _hosts[ip]?.label ?: _hosts[ip]?.hostname?.takeIf { it != ip } ?: "Perangkat"
+            val notification = NotificationCompat.Builder(ctx, CHANNEL_IMPORTANT)
+                .setSmallIcon(android.R.drawable.stat_notify_more)
+                .setContentTitle("📱 $name kembali online")
+                .setContentText("$ip merespons ping lagi.")
+                .setAutoCancel(true)
+                .build()
+            nm.notify(ip.hashCode() + 7777, notification)
         } catch (_: Exception) { }
     }
 

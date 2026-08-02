@@ -8,7 +8,8 @@ data class AppSettings(
     val notifyNewDevices: Boolean = true,
     val notifyImportantOffline: Boolean = true,
     val notifyScanDone: Boolean = true,
-    val keepScreenOn: Boolean = true
+    val keepScreenOn: Boolean = true,
+    val soundEnabled: Boolean = true
 )
 
 /** Simpan preferensi aplikasi ke SharedPreferences. */
@@ -27,7 +28,8 @@ object SettingsStore {
             notifyNewDevices = p.getBoolean("notify_new", true),
             notifyImportantOffline = p.getBoolean("notify_important", true),
             notifyScanDone = p.getBoolean("notify_done", true),
-            keepScreenOn = p.getBoolean("keep_screen_on", true)
+            keepScreenOn = p.getBoolean("keep_screen_on", true),
+            soundEnabled = p.getBoolean("sound_enabled", true)
         )
     }
 
@@ -43,6 +45,7 @@ object SettingsStore {
                 .putBoolean("notify_important", s.notifyImportantOffline)
                 .putBoolean("notify_done", s.notifyScanDone)
                 .putBoolean("keep_screen_on", s.keepScreenOn)
+                .putBoolean("sound_enabled", s.soundEnabled)
                 .apply()
         } catch (_: Exception) { }
     }

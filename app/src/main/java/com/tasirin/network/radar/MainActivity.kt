@@ -66,6 +66,7 @@ class MainActivity : AppCompatActivity() {
                         onSetNotifyImportantOffline = { v -> viewModel.setNotifyImportantOffline(v) },
                         onSetNotifyScanDone = { v -> viewModel.setNotifyScanDone(v) },
                         onSetKeepScreenOn = { v -> viewModel.setKeepScreenOn(v) },
+                        onSetSoundEnabled = { v -> viewModel.setSoundEnabled(v) },
                         onCopyIp = { ip -> viewModel.copyToClipboard("IP", ip) },
                         onCopyAll = {
                             viewModel.copyToClipboard("Scan Results", viewModel.copyAllText())
