@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tasirin.network.radar.BuildConfig
@@ -77,6 +78,7 @@ fun MainScreen(
     onSelectInterface: ((String) -> Unit)? = null,
     onToggleFavorite: ((String) -> Unit)? = null,
     onDeepScan: ((String) -> Unit)? = null,
+    onCancelDeepScan: (() -> Unit)? = null,
     onPingHost: ((String) -> Unit)? = null,
     onResolveHostname: ((String) -> Unit)? = null,
     onSetHostLabel: ((String, String?) -> Unit)? = null
@@ -88,6 +90,7 @@ fun MainScreen(
     var showDiffDialog by remember { mutableStateOf(false) }
     var showMapDialog by remember { mutableStateOf(false) }
     var showMatrixDialog by remember { mutableStateOf(false) }
+    var showHistoryDialog by remember { mutableStateOf(false) }
 
     // About dialog
     if (state.showAbout) {
@@ -132,6 +135,14 @@ fun MainScreen(
         ScanDiffDialog(
             diff = state.diff ?: ScanDiff(),
             onDismiss = { showDiffDialog = false }
+        )
+    }
+
+    // Riwayat scan
+    if (showHistoryDialog) {
+        ScanHistoryDialog(
+            history = state.scanHistory,
+            onDismiss = { showHistoryDialog = false }
         )
     }
 
@@ -236,7 +247,9 @@ fun MainScreen(
                         subnet = state.networkInfo.subnet,
                         interfaces = state.networkInfo.availableInterfaces,
                         selectedInterface = state.networkInfo.selectedInterface,
-                        onSelectInterface = onSelectInterface
+                        onSelectInterface = onSelectInterface,
+                        gatewayOnline = state.gatewayOnline,
+                        gatewayLatencyMs = state.gatewayLatencyMs
                     )
                     if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
@@ -321,6 +334,20 @@ fun MainScreen(
             }
             item { Spacer(Modifier.height(4.dp)) }
 
+            // ─── Riwayat scan ───
+            item {
+                OutlinedButton(
+                    onClick = { showHistoryDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.History, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Riwayat scan", fontSize = 11.sp)
+                }
+            }
+            item { Spacer(Modifier.height(4.dp)) }
+
             // ─── Status ───
             item {
                 Column {
@@ -336,9 +363,19 @@ fun MainScreen(
                     )
                     if (state.deepScanning != null) {
                         Column(Modifier.padding(top = 4.dp)) {
-                            Text("Deep scan ${state.deepScanning}... ${state.deepScanProgress}%",
-                                fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Deep scan ${state.deepScanning}... ${state.deepScanProgress}%",
+                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                if (onCancelDeepScan != null) {
+                                    TextButton(
+                                        onClick = onCancelDeepScan,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                    ) {
+                                        Text("Batal", fontSize = 10.sp, color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
                             LinearProgressIndicator(
                                 progress = state.deepScanProgress / 100f,
                                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
@@ -587,7 +624,9 @@ fun MainScreen(
 fun NetworkInfoBar(
     localIp: String, gateway: String, subnet: String,
     interfaces: List<NetworkInterfaceInfo>, selectedInterface: String,
-    onSelectInterface: ((String) -> Unit)?
+    onSelectInterface: ((String) -> Unit)?,
+    gatewayOnline: Boolean? = null,
+    gatewayLatencyMs: Long? = null
 ) {
     var showInterfacePicker by remember { mutableStateOf(false) }
 
@@ -597,7 +636,22 @@ fun NetworkInfoBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             NetworkChip(icon = Icons.Default.NetworkCell, text = localIp)
-            if (gateway.isNotEmpty()) NetworkChip(icon = Icons.Default.SettingsEthernet, text = gateway)
+            if (gateway.isNotEmpty()) {
+                val gwText = gateway + when {
+                    gatewayLatencyMs != null -> " · ${gatewayLatencyMs}ms"
+                    gatewayOnline == false -> " · ✗"
+                    else -> ""
+                }
+                NetworkChip(
+                    icon = Icons.Default.SettingsEthernet,
+                    text = gwText,
+                    tint = when {
+                        gatewayOnline == false -> StatusRed
+                        gatewayOnline == true -> StatusGreen
+                        else -> TextSecondary
+                    }
+                )
+            }
             if (subnet.isNotEmpty()) NetworkChip(icon = Icons.Default.Cloud, text = subnet)
         }
         if (interfaces.size > 1) {
@@ -639,7 +693,11 @@ fun NetworkInfoBar(
 }
 
 @Composable
-fun NetworkChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+fun NetworkChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    tint: Color = TextSecondary
+) {
     Surface(
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -649,9 +707,10 @@ fun NetworkChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: Str
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
         ) {
-            Icon(icon, null, Modifier.size(12.dp), tint = AccentGreen)
+            Icon(icon, null, Modifier.size(12.dp), tint = tint)
             Spacer(Modifier.width(4.dp))
-            Text(text, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
+            Text(text, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = tint,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -722,6 +781,37 @@ private fun SummaryChip(text: String, color: Color) {
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
         )
     }
+}
+
+/** Dialog daftar riwayat scan (target, waktu, hasil). */
+@Composable
+private fun ScanHistoryDialog(history: List<ScanHistoryEntry>, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Riwayat Scan", fontWeight = FontWeight.Bold) },
+        text = {
+            if (history.isEmpty()) {
+                Text("Belum ada riwayat scan", color = TextSecondary, fontSize = 12.sp)
+            } else {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    history.forEachIndexed { index, e ->
+                        if (index > 0) Divider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                        Column(Modifier.padding(vertical = 4.dp)) {
+                            Text("${e.type} — ${e.target}", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val waktu = SimpleDateFormat("dd MMM yyyy · HH:mm", Locale.getDefault()).format(Date(e.time))
+                            val durasi = if (e.durationMs >= 60_000)
+                                "${e.durationMs / 60_000}m ${(e.durationMs % 60_000) / 1000}s"
+                            else "${e.durationMs / 1000}s"
+                            Text("$waktu · ${e.hostCount} host · ${e.portCount} port · $durasi",
+                                fontSize = 10.sp, color = TextSecondary)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

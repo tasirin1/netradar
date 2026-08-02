@@ -130,6 +130,16 @@ data class ScanSummary(
     val durationMs: Long = 0
 )
 
+/** Satu entri riwayat scan (target, waktu, hasil) yang disimpan antar sesi. */
+data class ScanHistoryEntry(
+    val time: Long,
+    val type: String,
+    val target: String,
+    val hostCount: Int,
+    val portCount: Int,
+    val durationMs: Long
+)
+
 /** Status monitor semua host: ip -> online/offline. */
 data class MonitorState(
     val isRunning: Boolean = false,

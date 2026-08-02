@@ -3,6 +3,15 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+/** Jumlah commit git — dipakai sebagai fallback versionCode untuk build lokal. */
+fun gitCommitCount(): Int = try {
+    ProcessBuilder("git", "rev-list", "--count", "HEAD").start()
+        .inputStream.bufferedReader().readText().trim().toInt()
+} catch (_: Exception) { 1 }
+
+// VersionCode otomatis: pakai run number CI (monotonik) atau jumlah commit git.
+val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: maxOf(gitCommitCount(), 3)
+
 android {
     namespace = "com.tasirin.network.radar"
     compileSdk = 35
@@ -11,7 +20,7 @@ android {
         applicationId = "com.tasirin.network.radar"
         minSdk = 21
         targetSdk = 35
-        versionCode = 3
+        versionCode = buildNumber
         versionName = "2.0"
     }
 
@@ -71,6 +80,7 @@ dependencies {
     // Lifecycle + ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-process:2.7.0")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")

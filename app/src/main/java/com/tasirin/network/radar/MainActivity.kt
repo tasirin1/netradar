@@ -37,8 +37,8 @@ class MainActivity : AppCompatActivity() {
             val state = viewModel.state.collectAsStateWithLifecycle().value
 
             // Cegah layar mati saat scanning / monitoring
-            LaunchedEffect(state.isScanning, state.monitor.isRunning) {
-                if (state.isScanning || state.monitor.isRunning)
+            LaunchedEffect(state.isScanning, state.monitor.isRunning, state.deepScanning != null) {
+                if (state.isScanning || state.monitor.isRunning || state.deepScanning != null)
                     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 else
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -82,6 +82,7 @@ class MainActivity : AppCompatActivity() {
                         onSelectInterface = { name -> viewModel.selectInterface(name) },
                         onToggleFavorite = { ip -> viewModel.toggleFavorite(ip) },
                         onDeepScan = { ip -> viewModel.deepScanHost(ip) },
+                        onCancelDeepScan = { viewModel.cancelDeepScan() },
                         onPingHost = { ip -> viewModel.pingHost(ip) },
                         onResolveHostname = { ip -> viewModel.resolveHostname(ip) },
                         onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) }

@@ -59,6 +59,7 @@ class ScanService : Service() {
     companion object {
         const val CHANNEL_ID = "scan_progress"
         const val NOTIFICATION_ID = 2001
+        const val NOTIFICATION_DONE_ID = 2002
         const val ACTION_STOP = "com.tasirin.network.radar.action.STOP_SCAN"
     }
 }

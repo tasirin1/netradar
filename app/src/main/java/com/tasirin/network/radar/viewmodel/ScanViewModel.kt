@@ -20,10 +20,12 @@ import com.tasirin.network.radar.ScanService
 import com.tasirin.network.radar.scanner.ScanLoop
 import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.FavoritesStore
+import com.tasirin.network.radar.util.AppForeground
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.PingUtil
 import com.tasirin.network.radar.util.PingStore
 import com.tasirin.network.radar.util.ResultsStore
+import com.tasirin.network.radar.util.ScanHistoryStore
 import com.tasirin.network.radar.util.UptimeStore
 import com.tasirin.network.radar.util.WakeOnLan
 import com.tasirin.network.radar.widget.NetRadarWidget
@@ -61,7 +63,10 @@ data class ScanUiState(
     val statusFilter: HostStatusFilter = HostStatusFilter.ALL,
     val diff: ScanDiff? = null,
     val deepScanning: String? = null,
-    val deepScanProgress: Int = 0
+    val deepScanProgress: Int = 0,
+    val scanHistory: List<ScanHistoryEntry> = emptyList(),
+    val gatewayOnline: Boolean? = null,
+    val gatewayLatencyMs: Long? = null
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -86,8 +91,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var _favorites = mutableSetOf<String>()
     private var _uptime = emptyMap<String, List<UptimeEvent>>()
     private var _pingHistory = emptyMap<String, List<PingEvent>>()
+    private var _history = emptyList<ScanHistoryEntry>()
     private var _foundThisScan = linkedMapOf<String, List<Int>>()
     private var _previousScanHosts: Map<String, List<Int>>? = null
+    private var lastHostUiAt = 0L
+    private var gatewayJob: Job? = null
 
     private companion object {
         const val CHANNEL_NEW_DEVICE = "new_device"
@@ -104,6 +112,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _favorites = FavoritesStore.load(getApplication()).toMutableSet()
         _uptime = UptimeStore.load(getApplication())
         _pingHistory = PingStore.load(getApplication())
+        _history = ScanHistoryStore.load(getApplication())
         _state.update {
             it.copy(
                 hosts = _hosts.values.toList(),
@@ -111,9 +120,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 favoriteIps = _favorites.toSet(),
                 uptime = _uptime,
                 pingHistory = _pingHistory,
+                scanHistory = _history,
                 summary = if (_hosts.isEmpty()) "Ready" else "Riwayat: ${_hosts.size} host(s), ${_urls.size} URL(s)"
             )
         }
+        startGatewayMonitor()
     }
 
     fun refreshNetworkInfo() {
@@ -191,8 +202,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                                     ipConflict = conflict || existing.ipConflict)
                             } else event.host.copy(isNew = true)
                             _hosts[host.ip] = host
-                            if (_hosts.size <= 500) applySort()
-                            else _state.update { it.copy(hosts = _hosts.values.toList()) }
+                            refreshHostsUi()
                             if (isNew && type != ScanType.TRACE) notifyNewDevice(host)
                             recordUptime(event.host.ip, true)
                             event.host.latencyMs?.let { recordPing(host.ip, it) }
@@ -207,7 +217,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         is ScanEvent.Complete -> {
                             val duration = System.currentTimeMillis() - _startTime
                             computeDiff()
-                            applySort()
+                            refreshHostsUi(force = true)
                             persistResults(force = true)
                             val result = event.result.copy(hosts = _hosts.values.toList(),
                                 discoveredUrls = _urls.values.toList(),
@@ -219,6 +229,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             val finalSummary = if (diffText != null) "$summaryText$diffText" else summaryText
                             val ok = _hosts.isNotEmpty() || _urls.isNotEmpty()
+                            recordHistory(type.label, target, _hosts.size,
+                                _hosts.values.sumOf { it.openPorts.size }, duration)
+                            postScanDoneNotification("NetRadar — scan selesai", finalSummary)
                             _state.update { it.copy(isScanning = false, isPaused = false, scanType = null,
                                 progress = "", progressPercent = 1f, summary = finalSummary,
                                 summaryColor = if (ok) 0xFF2E7D32 else 0xFFC62828, isSummaryOk = ok,
@@ -230,6 +243,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: CancellationException) {
                 if (gen == scanGeneration) stopScanService()
+                refreshHostsUi(force = true)
                 _state.update { it.copy(isScanning = false, summary = "Cancelled", summaryColor = 0xFFC62828) }
             }
         }
@@ -237,6 +251,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun pauseScan() {
         scannerManager.pause()
+        refreshHostsUi(force = true)
         _state.update { it.copy(isPaused = true, summary = "Paused — ${_hosts.size} host(s) ditemukan",
             summaryColor = 0xFFE65100, isSummaryOk = true) }
     }
@@ -252,7 +267,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _deepScanJob?.cancel(); _deepScanJob = null
         stopScanService()
         persistResults(force = true)
-        _state.update { it.copy(isScanning = false, isPaused = false, summary = "Stopped",
+        refreshHostsUi(force = true)
+        _state.update { it.copy(isScanning = false, isPaused = false, deepScanning = null, deepScanProgress = 0,
+            summary = "Stopped",
             summaryColor = 0xFFC62828, isSummaryOk = false, monitor = MonitorState(), selectedHosts = emptySet()) }
     }
 
@@ -593,11 +610,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) { }
     }
 
-    /** Perbarui notifikasi progress scan (throttle 1 detik). */
-    private fun updateScanNotification(event: ScanEvent.Progress) {
-        val now = System.currentTimeMillis()
-        if (now - lastScanNotifAt < 1_000) return
-        lastScanNotifAt = now
+    /** Kirim/update notifikasi progress (throttle 1 detik di pemanggil). */
+    private fun postProgressNotification(title: String, text: String, pct: Int) {
         try {
             val ctx = getApplication<Application>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -609,17 +623,100 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     NotificationChannel(ScanService.CHANNEL_ID, "Scan Berjalan", NotificationManager.IMPORTANCE_LOW)
                 )
             }
-            val pct = if (event.total > 0) event.current * 100 / event.total else 0
             val notification = NotificationCompat.Builder(ctx, ScanService.CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_notify_more)
-                .setContentTitle("NetRadar — scan berjalan")
-                .setContentText(event.ip)
+                .setContentTitle(title)
+                .setContentText(text)
                 .setOnlyAlertOnce(true)
                 .setOngoing(true)
                 .setProgress(100, pct, pct == 0)
                 .build()
             nm.notify(ScanService.NOTIFICATION_ID, notification)
         } catch (_: Exception) { }
+    }
+
+    /** Perbarui notifikasi progress scan biasa (throttle 1 detik). */
+    private fun updateScanNotification(event: ScanEvent.Progress) {
+        val now = System.currentTimeMillis()
+        if (now - lastScanNotifAt < 1_000) return
+        lastScanNotifAt = now
+        val pct = if (event.total > 0) event.current * 100 / event.total else 0
+        postProgressNotification("NetRadar — scan berjalan", event.ip, pct)
+    }
+
+    /** Notifikasi ringkas saat scan selesai (hanya jika app di background). */
+    private fun postScanDoneNotification(title: String, text: String) {
+        if (AppForeground.isForeground) return
+        try {
+            val ctx = getApplication<Application>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) return
+            val nm = NotificationManagerCompat.from(ctx)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel(ScanService.CHANNEL_ID, "Scan Berjalan", NotificationManager.IMPORTANCE_LOW)
+                )
+            }
+            val notification = NotificationCompat.Builder(ctx, ScanService.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_notify_done)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setAutoCancel(true)
+                .build()
+            nm.notify(ScanService.NOTIFICATION_DONE_ID, notification)
+        } catch (_: Exception) { }
+    }
+
+    /**
+     * Perbarui daftar host di UI secara throttled (maks ~6x/detik) saat scan
+     * berjalan, agar tidak menyalin + mengurutkan list tiap host ditemukan.
+     */
+    private fun refreshHostsUi(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastHostUiAt < 150) return
+        lastHostUiAt = now
+        if (_hosts.size <= 500) applySort()
+        else _state.update { it.copy(hosts = _hosts.values.toList()) }
+    }
+
+    /** Simpan satu entri riwayat scan (state + disk, IO di background). */
+    private fun recordHistory(type: String, target: String, hostCount: Int, portCount: Int, durationMs: Long) {
+        val entry = ScanHistoryEntry(System.currentTimeMillis(), type, target, hostCount, portCount, durationMs)
+        _history = ScanHistoryStore.record(_history, entry)
+        _state.update { it.copy(scanHistory = _history) }
+        val app = getApplication<Application>()
+        val history = _history
+        viewModelScope.launch(Dispatchers.IO) { ScanHistoryStore.save(app, history) }
+    }
+
+    /** Pantau status gateway (online/offline + latency) tiap 5 detik. */
+    private fun startGatewayMonitor() {
+        gatewayJob?.cancel()
+        gatewayJob = viewModelScope.launch {
+            while (isActive) {
+                checkGateway()
+                delay(5_000)
+            }
+        }
+    }
+
+    private suspend fun checkGateway() {
+        val gw = _state.value.networkInfo.gateway
+        if (gw.isBlank()) {
+            if (_state.value.gatewayOnline != null)
+                _state.update { it.copy(gatewayOnline = null, gatewayLatencyMs = null) }
+            return
+        }
+        val probe = withContext(Dispatchers.IO) { PingUtil.pingProbe(gw) }
+        val st = _state.value
+        if (probe != null) {
+            if (st.gatewayOnline != true || st.gatewayLatencyMs != probe.latencyMs)
+                _state.update { it.copy(gatewayOnline = true, gatewayLatencyMs = probe.latencyMs) }
+        } else {
+            if (st.gatewayOnline != false)
+                _state.update { it.copy(gatewayOnline = false, gatewayLatencyMs = null) }
+        }
     }
 
     private fun persistResults(force: Boolean = false) {
@@ -649,6 +746,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(deepScanning = ip, deepScanProgress = 0,
                 summary = "Deep scan $ip...", summaryColor = 0xFF00695C, isSummaryOk = true)
         }
+        startScanService()
+        val startedAt = System.currentTimeMillis()
         _deepScanJob?.cancel()
         _deepScanJob = viewModelScope.launch {
             try {
@@ -659,6 +758,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         // ComposeRuntimeError (pending composition has not been applied).
                         viewModelScope.launch(Dispatchers.Main.immediate) {
                             _state.update { it.copy(deepScanProgress = pct) }
+                            updateDeepScanNotification(ip, pct)
                         }
                     }
                 }
@@ -672,10 +772,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     ipConflict = existing?.ipConflict == true
                 )
                 _hosts[ip] = host
-                if (_hosts.size <= 500) applySort()
-                else _state.update { it.copy(hosts = _hosts.values.toList()) }
+                refreshHostsUi(force = true)
                 recordUptime(ip, true)
                 persistResults(force = true)
+                recordHistory("Deep scan", ip, 1, ports.size, System.currentTimeMillis() - startedAt)
+                stopScanService()
                 _state.update {
                     it.copy(deepScanning = null, deepScanProgress = 0,
                         summary = "Deep scan $ip selesai: ${ports.size} port terbuka" +
@@ -683,14 +784,33 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         summaryColor = 0xFF2E7D32, isSummaryOk = true)
                 }
             } catch (e: CancellationException) {
+                stopScanService()
                 _state.update { it.copy(deepScanning = null, deepScanProgress = 0,
                     summary = "Deep scan dibatalkan", summaryColor = 0xFFC62828, isSummaryOk = false) }
                 throw e
             } catch (_: Throwable) {
+                stopScanService()
                 _state.update { it.copy(deepScanning = null, deepScanProgress = 0,
                     error = "Deep scan $ip gagal") }
             }
         }
+    }
+
+    /** Batalkan deep scan yang sedang berjalan dari UI. */
+    fun cancelDeepScan() {
+        _deepScanJob?.cancel()
+        _deepScanJob = null
+        stopScanService()
+        _state.update { it.copy(deepScanning = null, deepScanProgress = 0,
+            summary = "Deep scan dibatalkan", summaryColor = 0xFFC62828, isSummaryOk = false) }
+    }
+
+    /** Perbarui notifikasi progress deep scan (throttle 1 detik). */
+    private fun updateDeepScanNotification(ip: String, pct: Int) {
+        val now = System.currentTimeMillis()
+        if (now - lastScanNotifAt < 1_000) return
+        lastScanNotifAt = now
+        postProgressNotification("NetRadar — deep scan", ip, pct)
     }
 
     /** Set/ubah label (nama) perangkat. */
@@ -759,6 +879,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         scannerManager.stop()
         monitorJob?.cancel()
+        gatewayJob?.cancel()
         _deepScanJob?.cancel()
         stopScanService()
         ResultsStore.save(getApplication(), _hosts.values.toList(), _urls.values.toList())
