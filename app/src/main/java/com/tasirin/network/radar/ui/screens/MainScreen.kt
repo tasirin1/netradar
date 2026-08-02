@@ -57,7 +57,12 @@ fun MainScreen(
     onScan: (ScanType) -> Unit,
     onStop: () -> Unit,
     onPauseResume: (() -> Unit)? = null,
-    onToggleTheme: () -> Unit,
+    onToggleSettings: (() -> Unit)? = null,
+    onSetTheme: ((Boolean?) -> Unit)? = null,
+    onSetNotifyNewDevices: ((Boolean) -> Unit)? = null,
+    onSetNotifyImportantOffline: ((Boolean) -> Unit)? = null,
+    onSetNotifyScanDone: ((Boolean) -> Unit)? = null,
+    onSetKeepScreenOn: ((Boolean) -> Unit)? = null,
     onCopyIp: ((String) -> Unit)? = null,
     onCopyAll: (() -> Unit)? = null,
     onToggleHostSelect: ((String) -> Unit)? = null,
@@ -95,6 +100,23 @@ fun MainScreen(
     // About dialog
     if (state.showAbout) {
         AboutDialog(onDismiss = { onAbout?.invoke() })
+    }
+
+    // Dialog pengaturan
+    if (state.showSettings) {
+        SettingsDialog(
+            darkTheme = state.isDarkTheme,
+            notifyNewDevices = state.notifyNewDevices,
+            notifyImportantOffline = state.notifyImportantOffline,
+            notifyScanDone = state.notifyScanDone,
+            keepScreenOn = state.keepScreenOn,
+            onTheme = { onSetTheme?.invoke(it) },
+            onNotifyNewDevices = { onSetNotifyNewDevices?.invoke(it) },
+            onNotifyImportantOffline = { onSetNotifyImportantOffline?.invoke(it) },
+            onNotifyScanDone = { onSetNotifyScanDone?.invoke(it) },
+            onKeepScreenOn = { onSetKeepScreenOn?.invoke(it) },
+            onDismiss = { onToggleSettings?.invoke() }
+        )
     }
 
     // Konfirmasi hapus semua hasil
@@ -208,15 +230,8 @@ fun MainScreen(
                     IconButton(onClick = { onAbout?.invoke() }) {
                         Icon(Icons.Default.Info, contentDescription = "About")
                     }
-                    IconButton(onClick = onToggleTheme) {
-                        Icon(
-                            imageVector = when (state.isDarkTheme) {
-                                true -> Icons.Default.LightMode
-                                false -> Icons.Default.DarkMode
-                                null -> Icons.Default.SettingsBrightness
-                            },
-                            contentDescription = "Toggle theme"
-                        )
+                    IconButton(onClick = { onToggleSettings?.invoke() }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Pengaturan")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -249,7 +264,9 @@ fun MainScreen(
                         selectedInterface = state.networkInfo.selectedInterface,
                         onSelectInterface = onSelectInterface,
                         gatewayOnline = state.gatewayOnline,
-                        gatewayLatencyMs = state.gatewayLatencyMs
+                        gatewayLatencyMs = state.gatewayLatencyMs,
+                        internetOnline = state.internetOnline,
+                        internetLatencyMs = state.internetLatencyMs
                     )
                     if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
@@ -626,14 +643,17 @@ fun NetworkInfoBar(
     interfaces: List<NetworkInterfaceInfo>, selectedInterface: String,
     onSelectInterface: ((String) -> Unit)?,
     gatewayOnline: Boolean? = null,
-    gatewayLatencyMs: Long? = null
+    gatewayLatencyMs: Long? = null,
+    internetOnline: Boolean? = null,
+    internetLatencyMs: Long? = null
 ) {
     var showInterfacePicker by remember { mutableStateOf(false) }
 
     Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             NetworkChip(icon = Icons.Default.NetworkCell, text = localIp)
             if (gateway.isNotEmpty()) {
@@ -653,6 +673,20 @@ fun NetworkInfoBar(
                 )
             }
             if (subnet.isNotEmpty()) NetworkChip(icon = Icons.Default.Cloud, text = subnet)
+            val internetText = "Internet" + when {
+                internetLatencyMs != null -> " · ${internetLatencyMs}ms"
+                internetOnline == false -> " · ✗"
+                else -> ""
+            }
+            NetworkChip(
+                icon = Icons.Default.Language,
+                text = internetText,
+                tint = when {
+                    internetOnline == false -> StatusRed
+                    internetOnline == true -> StatusGreen
+                    else -> TextSecondary
+                }
+            )
         }
         if (interfaces.size > 1) {
             Spacer(Modifier.height(2.dp))
@@ -780,6 +814,63 @@ private fun SummaryChip(text: String, color: Color) {
             color = color,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
         )
+    }
+}
+
+/** Dialog pengaturan: tema, notifikasi, dan perilaku (tersimpan otomatis). */
+@Composable
+private fun SettingsDialog(
+    darkTheme: Boolean?,
+    notifyNewDevices: Boolean,
+    notifyImportantOffline: Boolean,
+    notifyScanDone: Boolean,
+    keepScreenOn: Boolean,
+    onTheme: (Boolean?) -> Unit,
+    onNotifyNewDevices: (Boolean) -> Unit,
+    onNotifyImportantOffline: (Boolean) -> Unit,
+    onNotifyScanDone: (Boolean) -> Unit,
+    onKeepScreenOn: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pengaturan", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("Tampilan", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                ) {
+                    listOf<Pair<Boolean?, String>>(null to "Sistem", false to "Terang", true to "Gelap")
+                        .forEach { (mode, label) ->
+                            FilterChip(
+                                selected = darkTheme == mode,
+                                onClick = { onTheme(mode) },
+                                label = { Text(label, fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Notifikasi", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                SettingsSwitch("Perangkat baru terdeteksi", notifyNewDevices, onNotifyNewDevices)
+                SettingsSwitch("Perangkat penting offline", notifyImportantOffline, onNotifyImportantOffline)
+                SettingsSwitch("Ringkasan scan selesai (background)", notifyScanDone, onNotifyScanDone)
+                Spacer(Modifier.height(12.dp))
+                Text("Perilaku", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                SettingsSwitch("Cegah layar mati saat scan", keepScreenOn, onKeepScreenOn)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+@Composable
+private fun SettingsSwitch(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(title, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 

@@ -26,6 +26,8 @@ import com.tasirin.network.radar.util.PingUtil
 import com.tasirin.network.radar.util.PingStore
 import com.tasirin.network.radar.util.ResultsStore
 import com.tasirin.network.radar.util.ScanHistoryStore
+import com.tasirin.network.radar.util.AppSettings
+import com.tasirin.network.radar.util.SettingsStore
 import com.tasirin.network.radar.util.UptimeStore
 import com.tasirin.network.radar.util.WakeOnLan
 import com.tasirin.network.radar.widget.NetRadarWidget
@@ -53,6 +55,7 @@ data class ScanUiState(
     val hostSummary: String = "",
     val isDarkTheme: Boolean? = null,
     val showAbout: Boolean = false,
+    val showSettings: Boolean = false,
     val networkInfo: NetworkInfo = NetworkInfo(),
     val sortMode: SortMode = SortMode.IP,
     val monitor: MonitorState = MonitorState(),
@@ -66,7 +69,13 @@ data class ScanUiState(
     val deepScanProgress: Int = 0,
     val scanHistory: List<ScanHistoryEntry> = emptyList(),
     val gatewayOnline: Boolean? = null,
-    val gatewayLatencyMs: Long? = null
+    val gatewayLatencyMs: Long? = null,
+    val internetOnline: Boolean? = null,
+    val internetLatencyMs: Long? = null,
+    val notifyNewDevices: Boolean = true,
+    val notifyImportantOffline: Boolean = true,
+    val notifyScanDone: Boolean = true,
+    val keepScreenOn: Boolean = true
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -113,6 +122,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _uptime = UptimeStore.load(getApplication())
         _pingHistory = PingStore.load(getApplication())
         _history = ScanHistoryStore.load(getApplication())
+        val settings = SettingsStore.load(getApplication())
         _state.update {
             it.copy(
                 hosts = _hosts.values.toList(),
@@ -121,6 +131,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 uptime = _uptime,
                 pingHistory = _pingHistory,
                 scanHistory = _history,
+                isDarkTheme = settings.darkTheme,
+                notifyNewDevices = settings.notifyNewDevices,
+                notifyImportantOffline = settings.notifyImportantOffline,
+                notifyScanDone = settings.notifyScanDone,
+                keepScreenOn = settings.keepScreenOn,
                 summary = if (_hosts.isEmpty()) "Ready" else "Riwayat: ${_hosts.size} host(s), ${_urls.size} URL(s)"
             )
         }
@@ -527,8 +542,45 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    fun toggleDarkTheme() {
-        _state.update { it.copy(isDarkTheme = when (it.isDarkTheme) { null -> true; true -> false; false -> null }) }
+    fun toggleSettings() {
+        _state.update { it.copy(showSettings = !it.showSettings) }
+    }
+
+    /** Set tema: null = sistem, false = terang, true = gelap (tersimpan). */
+    fun setTheme(dark: Boolean?) {
+        _state.update { it.copy(isDarkTheme = dark) }
+        persistSettings()
+    }
+
+    fun setNotifyNewDevices(enabled: Boolean) {
+        _state.update { it.copy(notifyNewDevices = enabled) }
+        persistSettings()
+    }
+
+    fun setNotifyImportantOffline(enabled: Boolean) {
+        _state.update { it.copy(notifyImportantOffline = enabled) }
+        persistSettings()
+    }
+
+    fun setNotifyScanDone(enabled: Boolean) {
+        _state.update { it.copy(notifyScanDone = enabled) }
+        persistSettings()
+    }
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        _state.update { it.copy(keepScreenOn = enabled) }
+        persistSettings()
+    }
+
+    private fun persistSettings() {
+        val s = _state.value
+        SettingsStore.save(getApplication(), AppSettings(
+            darkTheme = s.isDarkTheme,
+            notifyNewDevices = s.notifyNewDevices,
+            notifyImportantOffline = s.notifyImportantOffline,
+            notifyScanDone = s.notifyScanDone,
+            keepScreenOn = s.keepScreenOn
+        ))
     }
 
     private fun buildSummary(result: ScanResult): String {
@@ -566,6 +618,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Notifikasi perangkat baru, di-throttle (maks 20/scan, min 2 detik antar notif). */
     private fun notifyNewDevice(host: HostInfo) {
+        if (!_state.value.notifyNewDevices) return
         val now = System.currentTimeMillis()
         if (now - lastNotifyAt < 2_000 || notifyCount >= MAX_NOTIFY_PER_SCAN) return
         lastNotifyAt = now; notifyCount++
@@ -649,7 +702,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Notifikasi ringkas saat scan selesai (hanya jika app di background). */
     private fun postScanDoneNotification(title: String, text: String) {
-        if (AppForeground.isForeground) return
+        if (AppForeground.isForeground || !_state.value.notifyScanDone) return
         try {
             val ctx = getApplication<Application>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -699,6 +752,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         gatewayJob = viewModelScope.launch {
             while (isActive) {
                 checkGateway()
+                checkInternet()
                 delay(5_000)
             }
         }
@@ -719,6 +773,21 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             if (st.gatewayOnline != false)
                 _state.update { it.copy(gatewayOnline = false, gatewayLatencyMs = null) }
+        }
+    }
+
+    /** Cek koneksi internet: ping 1.1.1.1 lalu 8.8.8.8 (online jika salah satu membalas). */
+    private suspend fun checkInternet() {
+        val probe = withContext(Dispatchers.IO) {
+            listOf("1.1.1.1", "8.8.8.8").firstNotNullOfOrNull { PingUtil.pingProbe(it) }
+        }
+        val st = _state.value
+        if (probe != null) {
+            if (st.internetOnline != true || st.internetLatencyMs != probe.latencyMs)
+                _state.update { it.copy(internetOnline = true, internetLatencyMs = probe.latencyMs) }
+        } else {
+            if (st.internetOnline != false)
+                _state.update { it.copy(internetOnline = false, internetLatencyMs = null) }
         }
     }
 
@@ -833,6 +902,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Notifikasi saat perangkat penting (favorit) offline. */
     private fun notifyImportantOffline(ip: String) {
+        if (!_state.value.notifyImportantOffline) return
         try {
             val ctx = getApplication<Application>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

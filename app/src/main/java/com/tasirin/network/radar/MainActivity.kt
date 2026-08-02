@@ -37,8 +37,9 @@ class MainActivity : AppCompatActivity() {
             val state = viewModel.state.collectAsStateWithLifecycle().value
 
             // Cegah layar mati saat scanning / monitoring
-            LaunchedEffect(state.isScanning, state.monitor.isRunning, state.deepScanning != null) {
-                if (state.isScanning || state.monitor.isRunning || state.deepScanning != null)
+            LaunchedEffect(state.isScanning, state.monitor.isRunning, state.deepScanning != null, state.keepScreenOn) {
+                if (state.keepScreenOn &&
+                    (state.isScanning || state.monitor.isRunning || state.deepScanning != null))
                     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 else
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -59,7 +60,12 @@ class MainActivity : AppCompatActivity() {
                         onPauseResume = {
                             if (state.isPaused) viewModel.resumeScan() else viewModel.pauseScan()
                         },
-                        onToggleTheme = { viewModel.toggleDarkTheme() },
+                        onToggleSettings = { viewModel.toggleSettings() },
+                        onSetTheme = { dark -> viewModel.setTheme(dark) },
+                        onSetNotifyNewDevices = { v -> viewModel.setNotifyNewDevices(v) },
+                        onSetNotifyImportantOffline = { v -> viewModel.setNotifyImportantOffline(v) },
+                        onSetNotifyScanDone = { v -> viewModel.setNotifyScanDone(v) },
+                        onSetKeepScreenOn = { v -> viewModel.setKeepScreenOn(v) },
                         onCopyIp = { ip -> viewModel.copyToClipboard("IP", ip) },
                         onCopyAll = {
                             viewModel.copyToClipboard("Scan Results", viewModel.copyAllText())
