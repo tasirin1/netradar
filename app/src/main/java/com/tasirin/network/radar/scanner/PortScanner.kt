@@ -10,6 +10,7 @@ import java.io.InputStreamReader
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import android.os.SystemClock
 import java.util.concurrent.Semaphore
 
 /** Hasil deep scan: daftar port terbuka + penanda kalau dibatasi. */
@@ -106,6 +107,7 @@ class PortScanner {
             val total = 65535
             var done = 0
             var lastReported = -1
+            var lastReportAt = 0L
 
             // Chunk kecil membatasi socket serentak (hindari "too many open files" / force close)
             for (chunk in (1..total).chunked(DEEP_SCAN_CONCURRENCY)) {
@@ -132,8 +134,13 @@ class PortScanner {
                 }
                 done += chunk.size
                 val pct = done * 100 / total
-                if (pct - lastReported >= 2) {
+                val now = SystemClock.elapsedRealtime()
+                // Batasi frekuensi laporan progress (maks ~4x/detik): update UI yang
+                // terlalu sering membuat komposisi LazyColumn berkompetisi dengan
+                // pengukuran layout dan memicu crash Compose runtime.
+                if (pct - lastReported >= 2 && now - lastReportAt >= 250) {
                     lastReported = pct
+                    lastReportAt = now
                     onProgress(pct)
                 }
                 // Jeda kecil antar chunk agar OS sempat menutup socket (hindari crash native di sebagian perangkat)

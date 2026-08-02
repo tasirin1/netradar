@@ -29,20 +29,26 @@ fun StatusBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         ) {
-            val infiniteTransition = rememberInfiniteTransition(label = "dot")
-            val dotAlpha by infiniteTransition.animateFloat(
-                initialValue = 1f, targetValue = 0.3f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(500, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ), label = "dotAlpha"
-            )
             val dotColor = if (isOk) StatusGreen else StatusRed
+            // Animasi dot hanya dijalankan saat scanning. Animasi infinite yang
+            // berjalan terus di dalam item LazyColumn membuat item ter-invalidasi
+            // tiap frame dan bisa memicu crash Compose "pending composition has
+            // not been applied" saat daftar diukur ulang (mis. saat deep scan).
+            val dotAlpha = if (isScanning) {
+                val infiniteTransition = rememberInfiniteTransition(label = "dot")
+                infiniteTransition.animateFloat(
+                    initialValue = 1f, targetValue = 0.3f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(500, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ), label = "dotAlpha"
+                ).value
+            } else 1f
             Box(
                 modifier = Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(dotColor.copy(alpha = if (isScanning) dotAlpha else 1f))
+                    .background(dotColor.copy(alpha = dotAlpha))
                     .shadow(if (isScanning) 2.dp else 0.dp, CircleShape)
             )
             Spacer(Modifier.width(8.dp))

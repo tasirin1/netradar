@@ -57,7 +57,10 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
 
     // Compose
-    implementation(platform("androidx.compose:compose-bom:2024.01.00"))
+    // 2024.06.00 = Compose UI 1.6.8 + Material3 1.2.1 (berisi banyak perbaikan bug
+    // LazyColumn/SubcomposeLayout yang menyebabkan crash "pending composition has
+    // not been applied" saat item beranimasi/diperbarui selama deep scan).
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
