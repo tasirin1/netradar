@@ -654,7 +654,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val result = withContext(Dispatchers.IO) {
                     portScanner.deepScan(ip, speed) { pct ->
-                        _state.update { it.copy(deepScanProgress = pct) }
+                        // Update state harus di main thread: mengubah state dari thread
+                        // background saat Compose sedang mengukur layout memicu
+                        // ComposeRuntimeError (pending composition has not been applied).
+                        viewModelScope.launch(Dispatchers.Main.immediate) {
+                            _state.update { it.copy(deepScanProgress = pct) }
+                        }
                     }
                 }
                 val ports = result.ports
