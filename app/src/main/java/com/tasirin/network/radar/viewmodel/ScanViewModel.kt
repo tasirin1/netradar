@@ -659,7 +659,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             val notification = NotificationCompat.Builder(ctx, ScanService.CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_notify_done)
+                .setSmallIcon(android.R.drawable.stat_notify_more)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setAutoCancel(true)
