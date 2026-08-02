@@ -784,7 +784,8 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     3 -> {
                         val context = LocalContext.current
                         var crashLog by remember { mutableStateOf(CrashLog.read(context)) }
-                        if (crashLog == null) {
+                        val log = crashLog
+                        if (log == null) {
                             Text("Tidak ada crash tercatat", fontSize = 12.sp, color = TextSecondary)
                         } else {
                             Box(
@@ -795,13 +796,12 @@ fun AboutDialog(onDismiss: () -> Unit) {
                                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
                                     .padding(8.dp)
                             ) {
-                                Text(crashLog, fontSize = 8.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
+                                Text(log, fontSize = 8.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
                             }
                             Spacer(Modifier.height(6.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
-                                        val log = crashLog ?: return@Button
                                         try {
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                             clipboard.setPrimaryClip(ClipData.newPlainText("Crash Log", log))
