@@ -287,8 +287,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         monitorJob = viewModelScope.launch {
             var pings = 0
             while (isActive) {
-                val statuses = ips.chunked(8).flatMap { chunk ->
-                    chunk.map { ip -> async { ip to (PingUtil.pingProbe(ip) != null) } }.map { it.await() }
+                // pingProbe memblokir (ProcessBuilder), jadi jalankan di IO
+                val statuses = withContext(Dispatchers.IO) {
+                    ips.chunked(8).flatMap { chunk ->
+                        chunk.map { ip -> async { ip to (PingUtil.pingProbe(ip) != null) } }.map { it.await() }
+                    }
                 }.toMap()
                 pings++
                 statuses.forEach { (ip, online) ->
@@ -319,7 +322,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         monitorJob?.cancel()
         monitorJob = viewModelScope.launch {
             while (isActive) {
-                val probe = PingUtil.pingProbe(ip)
+                val probe = withContext(Dispatchers.IO) { PingUtil.pingProbe(ip) }
                 val online = probe != null
                 recordUptime(ip, online)
                 _state.update {

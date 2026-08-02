@@ -353,17 +353,6 @@ private fun getPortIcon(port: PortInfo) = when {
 }
 
 @Composable
-fun UrlResultsList(urls: List<UrlDiscovery>, modifier: Modifier = Modifier) {
-    if (urls.isEmpty()) return
-    Column(modifier = modifier) {
-        urls.forEach { url ->
-            UrlCard(url)
-            Spacer(Modifier.height(4.dp))
-        }
-    }
-}
-
-@Composable
 fun UrlCard(url: UrlDiscovery) {
     val uriHandler = LocalUriHandler.current
     val statusColor = when (url.statusCode) {
