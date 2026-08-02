@@ -1,5 +1,8 @@
 package com.tasirin.network.radar.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -20,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -34,6 +38,7 @@ import com.tasirin.network.radar.BuildConfig
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.ui.components.*
 import com.tasirin.network.radar.ui.theme.*
+import com.tasirin.network.radar.util.CrashLog
 import com.tasirin.network.radar.viewmodel.ScanUiState
 import kotlinx.coroutines.launch
 import kotlin.math.PI
@@ -732,6 +737,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("About", fontSize = 11.sp) })
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Ports", fontSize = 11.sp) })
                     Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Help", fontSize = 11.sp) })
+                    Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Crash", fontSize = 11.sp) })
                 }
                 Spacer(Modifier.height(8.dp))
                 when (tab) {
@@ -774,6 +780,46 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         HelpBullet("NEW badge = device first seen this scan")
                         HelpBullet("WoL button ⚡ wakes sleeping devices")
                         HelpBullet("Monitor mode pings every 1.5s")
+                    }
+                    3 -> {
+                        val context = LocalContext.current
+                        var crashLog by remember { mutableStateOf(CrashLog.read(context)) }
+                        if (crashLog == null) {
+                            Text("Tidak ada crash tercatat", fontSize = 12.sp, color = TextSecondary)
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 220.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                                    .padding(8.dp)
+                            ) {
+                                Text(crashLog, fontSize = 8.sp, fontFamily = FontFamily.Monospace, color = TextSecondary)
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("Crash Log", crashLog))
+                                        } catch (_: Exception) { }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) { Text("Salin", fontSize = 11.sp) }
+                                TextButton(
+                                    onClick = {
+                                        CrashLog.clear(context)
+                                        crashLog = null
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) { Text("Hapus", fontSize = 11.sp) }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text("Jika aplikasi force close, salin isi tab ini dan kirim ke pengembang.",
+                                fontSize = 10.sp, color = TextSecondary)
+                        }
                     }
                 }
             }

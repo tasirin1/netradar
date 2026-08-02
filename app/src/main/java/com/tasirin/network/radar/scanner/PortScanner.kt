@@ -97,42 +97,55 @@ class PortScanner {
         speed: ScanSpeed = ScanSpeed.SEDANG,
         onProgress: (Int) -> Unit = {}
     ): DeepScanResult = withContext(Dispatchers.IO) {
-        val addr = try { InetAddress.getByName(ip) } catch (_: Exception) { null }
-        if (addr == null) return@withContext DeepScanResult(emptyList())
-
         val open = mutableListOf<PortInfo>()
-        val total = 65535
-        var done = 0
-        var lastReported = -1
         var truncated = false
+        try {
+            val addr = try { InetAddress.getByName(ip) } catch (_: Exception) { null }
+            if (addr == null) return@withContext DeepScanResult(emptyList())
 
-        // Chunk kecil membatasi socket serentak (hindari "too many open files" / force close)
-        for (chunk in (1..total).chunked(DEEP_SCAN_CONCURRENCY)) {
-            coroutineScope {
-                val found = chunk.map { port ->
-                    async {
-                        tryConnect(addr, port, speed.timeoutMs)?.let { sock ->
-                            try {
-                                PortInfo(port = port, service = detectService(port, null))
-                            } finally {
-                                try { sock.close() } catch (_: Exception) {}
+            val total = 65535
+            var done = 0
+            var lastReported = -1
+
+            // Chunk kecil membatasi socket serentak (hindari "too many open files" / force close)
+            for (chunk in (1..total).chunked(DEEP_SCAN_CONCURRENCY)) {
+                ensureActive()
+                try {
+                    coroutineScope {
+                        val found = chunk.map { port ->
+                            async {
+                                tryConnect(addr, port, speed.timeoutMs)?.let { sock ->
+                                    try {
+                                        PortInfo(port = port, service = detectService(port, null))
+                                    } finally {
+                                        try { sock.close() } catch (_: Exception) {}
+                                    }
+                                }
                             }
-                        }
+                        }.mapNotNull { it.await() }
+                        open.addAll(found)
                     }
-                }.mapNotNull { it.await() }
-                open.addAll(found)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    // Satu chunk gagal (keterbatasan perangkat) → lanjutkan, jangan crash
+                }
+                done += chunk.size
+                val pct = done * 100 / total
+                if (pct - lastReported >= 2) {
+                    lastReported = pct
+                    onProgress(pct)
+                }
+                // Host yang membalas SYN-ACK semua port (firewall aneh) → hentikan agar UI/penyimpanan aman
+                if (open.size >= DEEP_SCAN_MAX_RESULTS) {
+                    truncated = true
+                    break
+                }
             }
-            done += chunk.size
-            val pct = done * 100 / total
-            if (pct - lastReported >= 2) {
-                lastReported = pct
-                onProgress(pct)
-            }
-            // Host yang membalas SYN-ACK semua port (firewall aneh) → hentikan agar UI/penyimpanan aman
-            if (open.size >= DEEP_SCAN_MAX_RESULTS) {
-                truncated = true
-                break
-            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            // Crash apa pun di deep scan → kembalikan hasil parsial, jangan force close
         }
         DeepScanResult(open.sortedBy { it.port }, truncated)
     }

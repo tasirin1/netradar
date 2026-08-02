@@ -681,7 +681,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(deepScanning = null, deepScanProgress = 0,
                     summary = "Deep scan dibatalkan", summaryColor = 0xFFC62828, isSummaryOk = false) }
                 throw e
-            } catch (_: Exception) {
+            } catch (_: Throwable) {
                 _state.update { it.copy(deepScanning = null, deepScanProgress = 0,
                     error = "Deep scan $ip gagal") }
             }
