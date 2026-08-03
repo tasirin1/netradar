@@ -44,7 +44,8 @@ fun HostCard(
     selectionMode: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
     onRescanHost: (() -> Unit)? = null,
-    pingHistory: List<PingEvent> = emptyList()
+    pingHistory: List<PingEvent> = emptyList(),
+    compact: Boolean = false
 ) {
     val uriHandler = LocalUriHandler.current
     var showPortInfo by remember { mutableStateOf<PortInfo?>(null) }
@@ -176,12 +177,12 @@ fun HostCard(
             }
 
             // Sparkline latency (riwayat ping terbaru)
-            if (pingHistory.size >= 2) {
+            if (pingHistory.size >= 2 && !compact) {
                 Spacer(Modifier.height(2.dp))
                 PingSparkline(pingHistory.takeLast(30))
             }
 
-            if (host.label != null) {
+            if (host.label != null && !compact) {
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Label, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.secondary)
@@ -192,7 +193,7 @@ fun HostCard(
             }
 
             // ─── MAC & Hostname ───
-            if (host.macAddress != null) {
+            if (host.macAddress != null && !compact) {
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Hub, null, Modifier.size(12.dp), tint = TextSecondary)
@@ -203,7 +204,7 @@ fun HostCard(
                     )
                 }
             }
-            if (!host.hostname.isNullOrBlank() && host.hostname != host.ip) {
+            if (!host.hostname.isNullOrBlank() && host.hostname != host.ip && !compact) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Language, null, Modifier.size(12.dp), tint = TextSecondary)
                     Spacer(Modifier.width(4.dp))
@@ -235,7 +236,7 @@ fun HostCard(
                         fontSize = 9.sp, color = TextSecondary)
                 }
             }
-            if (onDeepScan != null) {
+            if (onDeepScan != null && !compact) {
                 Spacer(Modifier.height(6.dp))
                 OutlinedButton(
                     onClick = onDeepScan,

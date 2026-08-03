@@ -79,7 +79,10 @@ data class ScanUiState(
     val notifyImportantOffline: Boolean = true,
     val notifyScanDone: Boolean = true,
     val keepScreenOn: Boolean = true,
-    val soundEnabled: Boolean = true
+    val soundEnabled: Boolean = true,
+    val autoDiffDialog: Boolean = true,
+    val compactMode: Boolean = false,
+    val openDiffDialog: Boolean = false
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -144,6 +147,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 notifyScanDone = settings.notifyScanDone,
                 keepScreenOn = settings.keepScreenOn,
                 soundEnabled = settings.soundEnabled,
+                autoDiffDialog = settings.autoDiffDialog,
+                compactMode = settings.compactMode,
                 summary = if (_hosts.isEmpty()) "Ready" else "Riwayat: ${_hosts.size} host(s), ${_urls.size} URL(s)"
             )
         }
@@ -262,10 +267,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             recordHistory(type.label, target, _hosts.size,
                                 _hosts.values.sumOf { it.openPorts.size }, duration)
                             postScanDoneNotification("NetRadar — scan selesai", finalSummary)
+                            val diff = _state.value.diff
+                            val openDiff = _state.value.autoDiffDialog && diff != null &&
+                                (diff.added.isNotEmpty() || diff.removed.isNotEmpty() || diff.changed.isNotEmpty())
                             _state.update { it.copy(isScanning = false, isPaused = false, scanType = null,
                                 progress = "", progressPercent = 1f, summary = finalSummary,
                                 summaryColor = if (ok) 0xFF2E7D32 else 0xFFC62828, isSummaryOk = ok,
-                                hostSummary = buildHostSummary(result), scanResult = result) }
+                                hostSummary = buildHostSummary(result), scanResult = result,
+                                openDiffDialog = openDiff) }
                             if (gen == scanGeneration) stopScanService()
                         }
                         else -> {}
@@ -619,6 +628,21 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         persistSettings()
     }
 
+    fun setAutoDiffDialog(enabled: Boolean) {
+        _state.update { it.copy(autoDiffDialog = enabled) }
+        persistSettings()
+    }
+
+    fun setCompactMode(enabled: Boolean) {
+        _state.update { it.copy(compactMode = enabled) }
+        persistSettings()
+    }
+
+    /** Tandai dialog perubahan antar scan sudah ditampilkan (dibuka dari UI). */
+    fun diffDialogShown() {
+        _state.update { it.copy(openDiffDialog = false) }
+    }
+
     private fun persistSettings() {
         val s = _state.value
         SettingsStore.save(getApplication(), AppSettings(
@@ -627,7 +651,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             notifyImportantOffline = s.notifyImportantOffline,
             notifyScanDone = s.notifyScanDone,
             keepScreenOn = s.keepScreenOn,
-            soundEnabled = s.soundEnabled
+            soundEnabled = s.soundEnabled,
+            autoDiffDialog = s.autoDiffDialog,
+            compactMode = s.compactMode
         ))
     }
 

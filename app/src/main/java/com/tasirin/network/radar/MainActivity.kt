@@ -67,6 +67,8 @@ class MainActivity : AppCompatActivity() {
                         onSetNotifyScanDone = { v -> viewModel.setNotifyScanDone(v) },
                         onSetKeepScreenOn = { v -> viewModel.setKeepScreenOn(v) },
                         onSetSoundEnabled = { v -> viewModel.setSoundEnabled(v) },
+                        onSetAutoDiffDialog = { v -> viewModel.setAutoDiffDialog(v) },
+                        onSetCompactMode = { v -> viewModel.setCompactMode(v) },
                         onCopyIp = { ip -> viewModel.copyToClipboard("IP", ip) },
                         onCopyAll = {
                             viewModel.copyToClipboard("Scan Results", viewModel.copyAllText())
@@ -93,7 +95,8 @@ class MainActivity : AppCompatActivity() {
                         onPingHost = { ip -> viewModel.pingHost(ip) },
                         onExpandScan = { ip -> viewModel.expandScanFromHost(ip) },
                         onResolveHostname = { ip -> viewModel.resolveHostname(ip) },
-                        onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) }
+                        onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) },
+                        onDiffDialogShown = { viewModel.diffDialogShown() }
                     )
                 }
             }

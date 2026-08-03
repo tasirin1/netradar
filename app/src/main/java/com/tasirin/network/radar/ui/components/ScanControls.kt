@@ -101,9 +101,6 @@ fun ActionButtons(
     onStop: () -> Unit,
     isPaused: Boolean = false,
     onPauseResume: (() -> Unit)? = null,
-    hasResults: Boolean = false,
-    onCopyAll: (() -> Unit)? = null,
-    onClear: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -131,25 +128,6 @@ fun ActionButtons(
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
             Text("Stop", fontSize = 12.sp)
-        }
-        if (hasResults && onCopyAll != null) {
-            OutlinedButton(
-                onClick = onCopyAll,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(vertical = 8.dp)
-            ) {
-                Text("Copy All", fontSize = 12.sp)
-            }
-        }
-        if (!isScanning && hasResults && onClear != null) {
-            OutlinedButton(
-                onClick = onClear,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(vertical = 8.dp)
-            ) {
-                Text("Clear", fontSize = 12.sp)
-            }
         }
     }
 }

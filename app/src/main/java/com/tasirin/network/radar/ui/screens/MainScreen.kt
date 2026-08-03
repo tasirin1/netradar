@@ -9,6 +9,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -38,7 +39,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,6 +76,8 @@ fun MainScreen(
     onSetNotifyScanDone: ((Boolean) -> Unit)? = null,
     onSetKeepScreenOn: ((Boolean) -> Unit)? = null,
     onSetSoundEnabled: ((Boolean) -> Unit)? = null,
+    onSetAutoDiffDialog: ((Boolean) -> Unit)? = null,
+    onSetCompactMode: ((Boolean) -> Unit)? = null,
     onCopyIp: ((String) -> Unit)? = null,
     onCopyAll: (() -> Unit)? = null,
     onToggleHostSelect: ((String) -> Unit)? = null,
@@ -100,7 +102,8 @@ fun MainScreen(
     onPingHost: ((String) -> Unit)? = null,
     onExpandScan: ((String) -> Unit)? = null,
     onResolveHostname: ((String) -> Unit)? = null,
-    onSetHostLabel: ((String, String?) -> Unit)? = null
+    onSetHostLabel: ((String, String?) -> Unit)? = null,
+    onDiffDialogShown: (() -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -112,6 +115,17 @@ fun MainScreen(
     var showHistoryDialog by remember { mutableStateOf(false) }
     var showDashboard by remember { mutableStateOf(false) }
     var showConstellation by remember { mutableStateOf(false) }
+    var showVizDialog by remember { mutableStateOf(false) }
+    var showFilterDialog by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
+
+    // Buka dialog perubahan antar scan otomatis saat scan selesai (opsi pengaturan)
+    LaunchedEffect(state.openDiffDialog) {
+        if (state.openDiffDialog) {
+            showDiffDialog = true
+            onDiffDialogShown?.invoke()
+        }
+    }
 
     // About dialog
     if (state.showAbout) {
@@ -127,12 +141,16 @@ fun MainScreen(
             notifyScanDone = state.notifyScanDone,
             keepScreenOn = state.keepScreenOn,
             soundEnabled = state.soundEnabled,
+            autoDiffDialog = state.autoDiffDialog,
+            compactMode = state.compactMode,
             onTheme = { onSetTheme?.invoke(it) },
             onNotifyNewDevices = { onSetNotifyNewDevices?.invoke(it) },
             onNotifyImportantOffline = { onSetNotifyImportantOffline?.invoke(it) },
             onNotifyScanDone = { onSetNotifyScanDone?.invoke(it) },
             onKeepScreenOn = { onSetKeepScreenOn?.invoke(it) },
             onSoundEnabled = { onSetSoundEnabled?.invoke(it) },
+            onAutoDiffDialog = { onSetAutoDiffDialog?.invoke(it) },
+            onCompactMode = { onSetCompactMode?.invoke(it) },
             onDismiss = { onToggleSettings?.invoke() }
         )
     }
@@ -205,6 +223,27 @@ fun MainScreen(
         )
     }
 
+    // Pilihan visualisasi (Peta / Matriks / Rasi bintang)
+    if (showVizDialog) {
+        VisualizationDialog(
+            onMap = { showVizDialog = false; showMapDialog = true },
+            onMatrix = { showVizDialog = false; showMatrixDialog = true },
+            onConstellation = { showVizDialog = false; showConstellation = true },
+            onDismiss = { showVizDialog = false }
+        )
+    }
+
+    // Filter jenis perangkat + status (dipindah dari halaman utama)
+    if (showFilterDialog) {
+        HostFilterDialog(
+            deviceFilter = state.deviceFilter,
+            onDeviceFilter = { onDeviceFilter?.invoke(it) },
+            statusFilter = state.statusFilter,
+            onStatusFilter = { onStatusFilter?.invoke(it) },
+            onDismiss = { showFilterDialog = false }
+        )
+    }
+
     if (showMapDialog) {
         NetworkMapDialog(
             hosts = state.hosts,
@@ -264,8 +303,26 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    var menuOpen by remember { mutableStateOf(false) }
                     IconButton(onClick = { onAbout?.invoke() }) {
                         Icon(Icons.Default.Info, contentDescription = "About")
+                    }
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Salin semua hasil", fontSize = 12.sp) },
+                            enabled = state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty(),
+                            leadingIcon = { Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp)) },
+                            onClick = { menuOpen = false; onCopyAll?.invoke() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Hapus semua hasil", fontSize = 12.sp) },
+                            enabled = state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty(),
+                            leadingIcon = { Icon(Icons.Default.Delete, null, Modifier.size(16.dp)) },
+                            onClick = { menuOpen = false; showClearConfirm = true }
+                        )
                     }
                     IconButton(onClick = { onToggleSettings?.invoke() }) {
                         Icon(Icons.Default.Settings, contentDescription = "Pengaturan")
@@ -382,10 +439,7 @@ fun MainScreen(
                     isScanning = state.isScanning,
                     onStop = onStop,
                     isPaused = state.isPaused,
-                    onPauseResume = onPauseResume,
-                    hasResults = state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty(),
-                    onCopyAll = onCopyAll,
-                    onClear = { showClearConfirm = true }
+                    onPauseResume = onPauseResume
                 )
             }
             item { Spacer(Modifier.height(4.dp)) }
@@ -449,42 +503,12 @@ fun MainScreen(
                 }
             }
 
-            // ─── Diff antar scan ───
-            if (!state.isScanning && state.diff != null) {
-                val d = state.diff!!
-                if (d.added.isNotEmpty() || d.removed.isNotEmpty() || d.changed.isNotEmpty()) {
-                    item {
-                        Column {
-                            Spacer(Modifier.height(6.dp))
-                            OutlinedButton(
-                                onClick = { showDiffDialog = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = PaddingValues(vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.CompareArrows, null, Modifier.size(14.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Perubahan: +${d.added.size} baru · -${d.removed.size} hilang · ~${d.changed.size} berubah",
-                                    fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
-            }
-
             // ─── Hasil ───
             if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
                 item {
                     Column {
                         Spacer(Modifier.height(12.dp))
                         SectionHeader("Hasil")
-                    }
-                }
-            }
-            if (state.hosts.isNotEmpty() && onSortMode != null) {
-                item {
-                    Column {
-                        Spacer(Modifier.height(6.dp))
-                        SortBar(currentSort = state.sortMode, onSortMode = onSortMode)
                     }
                 }
             }
@@ -541,18 +565,46 @@ fun MainScreen(
                                 fontWeight = FontWeight.Bold, fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f)
                             )
+                            val filterActive =
+                                state.deviceFilter != DeviceFilter.ALL || state.statusFilter != HostStatusFilter.ALL
+                            IconButton(onClick = { showFilterDialog = true }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.FilterList, null, Modifier.size(18.dp),
+                                    tint = if (filterActive) MaterialTheme.colorScheme.primary else TextSecondary)
+                            }
+                            Box {
+                                IconButton(onClick = { sortMenuOpen = true }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Sort, null, Modifier.size(18.dp), tint = TextSecondary)
+                                }
+                                DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                                    SortMode.entries.forEach { mode ->
+                                        DropdownMenuItem(
+                                            text = { Text(mode.label, fontSize = 12.sp) },
+                                            trailingIcon = if (state.sortMode == mode) {
+                                                { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                                            } else null,
+                                            onClick = { sortMenuOpen = false; onSortMode?.invoke(mode) }
+                                        )
+                                    }
+                                }
+                            }
                             TextButton(
-                                onClick = { showMapDialog = true },
+                                onClick = { showVizDialog = true },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) { Text("🗺 Peta", fontSize = 11.sp) }
-                            TextButton(
-                                onClick = { showMatrixDialog = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) { Text("▦ Matriks", fontSize = 11.sp) }
-                            TextButton(
-                                onClick = { showConstellation = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) { Text("✦ Konstelasi", fontSize = 11.sp) }
+                            ) { Text("🪐 Visualisasi", fontSize = 11.sp) }
+                        }
+                        if (filterActive) {
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                buildString {
+                                    if (state.deviceFilter != DeviceFilter.ALL) append(state.deviceFilter.label)
+                                    if (state.statusFilter != HostStatusFilter.ALL) {
+                                        if (isNotEmpty()) append(" · ")
+                                        append(state.statusFilter.label)
+                                    }
+                                },
+                                fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                         Spacer(Modifier.height(4.dp))
                         Surface(
@@ -560,11 +612,11 @@ fun MainScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(Modifier.padding(10.dp)) {
+                            Column(Modifier.padding(vertical = 6.dp)) {
                                 OutlinedTextField(
                                     value = state.searchQuery,
                                     onValueChange = { onSearchChange?.invoke(it) },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
                                     placeholder = { Text("Cari IP / nama / MAC / port / service", fontSize = 11.sp) },
                                     leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
                                     trailingIcon = if (state.searchQuery.isNotEmpty()) {
@@ -577,32 +629,6 @@ fun MainScreen(
                                     singleLine = true,
                                     textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
                                 )
-                                Spacer(Modifier.height(8.dp))
-                                Text("Jenis perangkat", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                                Spacer(Modifier.height(3.dp))
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    DeviceFilter.entries.forEach { f ->
-                                        FilterChip(
-                                            selected = state.deviceFilter == f,
-                                            onClick = { onDeviceFilter?.invoke(f) },
-                                            label = { Text(f.label, fontSize = 10.sp) },
-                                            modifier = Modifier.height(28.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Text("Status", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                                Spacer(Modifier.height(3.dp))
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    HostStatusFilter.entries.forEach { f ->
-                                        FilterChip(
-                                            selected = state.statusFilter == f,
-                                            onClick = { onStatusFilter?.invoke(f) },
-                                            label = { Text(f.label, fontSize = 10.sp) },
-                                            modifier = Modifier.height(28.dp)
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
@@ -619,6 +645,7 @@ fun MainScreen(
                         HostCard(
                             host = host,
                             pingHistory = state.pingHistory[host.ip] ?: emptyList(),
+                            compact = state.compactMode,
                             onCopyIp = onCopyIp,
                             onWol = onWol,
             isFavorite = host.ip in state.favoriteIps,
@@ -668,14 +695,6 @@ fun MainScreen(
                 }
             }
 
-            item {
-                Column {
-                    Spacer(Modifier.height(8.dp))
-                    Text("NetRadar v${BuildConfig.VERSION_NAME}  |  Julius Rudi Tasirin",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp,
-                        modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                }
-            }
         }
     }
 }
@@ -693,113 +712,124 @@ fun NetworkInfoBar(
     networkQualityLabel: String = "",
     networkQualityColor: Long = 0xFF00695C
 ) {
-    var showInterfacePicker by remember { mutableStateOf(false) }
+    var showInfo by remember { mutableStateOf(false) }
 
-    Column {
-        @OptIn(ExperimentalLayoutApi::class)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showInfo = true }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
-            NetworkChip(icon = Icons.Default.NetworkCell, text = localIp)
-            if (gateway.isNotEmpty()) {
-                val gwText = gateway + when {
-                    gatewayLatencyMs != null -> " · ${gatewayLatencyMs}ms"
-                    gatewayOnline == false -> " · ✗"
-                    else -> ""
-                }
-                NetworkChip(
-                    icon = Icons.Default.SettingsEthernet,
-                    text = gwText,
-                    tint = when {
-                        gatewayOnline == false -> StatusRed
-                        gatewayOnline == true -> StatusGreen
-                        else -> TextSecondary
-                    }
-                )
+            Icon(Icons.Default.NetworkCell, null, Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp))
+            Text(localIp, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(8.dp))
+            val statusText = when {
+                gatewayOnline == false -> "Gateway ✗"
+                internetOnline == false -> "Internet ✗"
+                networkQualityLabel.isNotEmpty() -> "● $networkQualityLabel"
+                else -> "● Mengukur…"
             }
-            if (subnet.isNotEmpty()) NetworkChip(icon = Icons.Default.Cloud, text = subnet)
-            val internetText = "Internet" + when {
-                internetLatencyMs != null -> " · ${internetLatencyMs}ms"
-                internetOnline == false -> " · ✗"
-                else -> ""
+            val statusColor = when {
+                gatewayOnline == false -> StatusRed
+                internetOnline == false -> StatusOrange
+                else -> Color(networkQualityColor)
             }
-            NetworkChip(
-                icon = Icons.Default.Language,
-                text = internetText,
-                tint = when {
-                    internetOnline == false -> StatusRed
-                    internetOnline == true -> StatusGreen
-                    else -> TextSecondary
-                }
-            )
-            if (networkQualityLabel.isNotEmpty()) {
-                NetworkChip(
-                    icon = Icons.Default.Speed,
-                    text = "Kualitas: $networkQualityLabel",
-                    tint = Color(networkQualityColor)
-                )
+            Surface(shape = MaterialTheme.shapes.small, color = statusColor.copy(alpha = 0.12f)) {
+                Text(statusText, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = statusColor,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
             }
-        }
-        if (interfaces.size > 1) {
-            Spacer(Modifier.height(2.dp))
-            TextButton(
-                onClick = { showInterfacePicker = true },
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Text("Interface: ${selectedInterface.ifBlank { "Auto" }}", fontSize = 10.sp)
-            }
+            Spacer(Modifier.weight(1f))
+            Text("ketuk untuk info", fontSize = 9.sp, color = TextSecondary)
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.Default.Info, null, Modifier.size(14.dp), tint = TextSecondary)
         }
     }
 
-    if (showInterfacePicker) {
-        AlertDialog(
-            onDismissRequest = { showInterfacePicker = false },
-            title = { Text("Select Interface", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
+    if (showInfo) {
+        NetworkInfoDialog(
+            localIp = localIp, gateway = gateway, subnet = subnet,
+            gatewayOnline = gatewayOnline, gatewayLatencyMs = gatewayLatencyMs,
+            internetOnline = internetOnline, internetLatencyMs = internetLatencyMs,
+            networkQualityLabel = networkQualityLabel, networkQualityColor = networkQualityColor,
+            interfaces = interfaces, selectedInterface = selectedInterface,
+            onSelectInterface = onSelectInterface,
+            onDismiss = { showInfo = false }
+        )
+    }
+}
+
+/** Dialog info jaringan lengkap (dibuka dari baris ringkas NetworkInfoBar). */
+@Composable
+private fun NetworkInfoDialog(
+    localIp: String,
+    gateway: String,
+    subnet: String,
+    gatewayOnline: Boolean?,
+    gatewayLatencyMs: Long?,
+    internetOnline: Boolean?,
+    internetLatencyMs: Long?,
+    networkQualityLabel: String,
+    networkQualityColor: Long,
+    interfaces: List<NetworkInterfaceInfo>,
+    selectedInterface: String,
+    onSelectInterface: ((String) -> Unit)?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Info Jaringan", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                DetailLine("IP lokal", localIp)
+                if (gateway.isNotEmpty()) {
+                    val gwStatus = when {
+                        gatewayOnline == false -> "✗"
+                        gatewayLatencyMs != null -> "${gatewayLatencyMs}ms"
+                        else -> "cek…"
+                    }
+                    DetailLine("Gateway", "$gateway ($gwStatus)")
+                }
+                if (subnet.isNotEmpty()) DetailLine("Subnet", subnet)
+                val inetStatus = when {
+                    internetOnline == false -> "✗"
+                    internetLatencyMs != null -> "${internetLatencyMs}ms"
+                    else -> "cek…"
+                }
+                DetailLine("Internet", "1.1.1.1 ($inetStatus)")
+                DetailLine("Kualitas", networkQualityLabel.ifBlank { "Mengukur…" })
+                if (interfaces.size > 1) {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Interface", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Aktif: ${selectedInterface.ifBlank { "Auto" }}", fontSize = 11.sp, color = TextSecondary)
+                    Spacer(Modifier.height(4.dp))
                     interfaces.forEach { ni ->
                         TextButton(
                             onClick = {
                                 onSelectInterface?.invoke(ni.name)
-                                showInterfacePicker = false
+                                onDismiss()
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                "${ni.name} — ${ni.ip}${if (ni.isActive) " (active)" else ""}",
+                                "${ni.name} — ${ni.ip}${if (ni.isActive) " (aktif)" else ""}",
                                 fontSize = 11.sp
                             )
                         }
                     }
                 }
-            },
-            confirmButton = { TextButton(onClick = { showInterfacePicker = false }) { Text("Close") } }
-        )
-    }
-}
-
-@Composable
-fun NetworkChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String,
-    tint: Color = TextSecondary
-) {
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 1.dp
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-        ) {
-            Icon(icon, null, Modifier.size(12.dp), tint = tint)
-            Spacer(Modifier.width(4.dp))
-            Text(text, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = tint,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
 }
 
 /** Label seksi + garis pemisah untuk mengelompokkan area layar. */
@@ -832,24 +862,50 @@ private fun NetworkSummaryBar(
     conflictCount: Int,
     urlCount: Int
 ) {
+    var expanded by remember { mutableStateOf(false) }
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        @OptIn(ExperimentalLayoutApi::class)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-        ) {
-            SummaryChip("Hosts: $hostCount", TextSecondary)
-            SummaryChip("Online: $onlineCount", if (onlineCount > 0) StatusGreen else StatusRed)
-            if (newCount > 0) SummaryChip("Baru: $newCount", AccentGreen)
-            if (portCount > 0) SummaryChip("Port: $portCount", StatusBlue)
-            if (conflictCount > 0) SummaryChip("⚠ Konflik: $conflictCount", StatusOrange)
-            if (urlCount > 0) SummaryChip("URL: $urlCount", TextSecondary)
+        Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                Text("Hosts: $hostCount", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "Online: $onlineCount",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (onlineCount > 0) StatusGreen else StatusRed
+                )
+                Spacer(Modifier.weight(1f))
+                Text(if (expanded) "sembunyikan detail" else "detail", fontSize = 9.sp, color = TextSecondary)
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    null, Modifier.size(16.dp), tint = TextSecondary
+                )
+            }
+            if (expanded) {
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp)
+                ) {
+                    if (newCount > 0) SummaryChip("Baru: $newCount", AccentGreen)
+                    if (portCount > 0) SummaryChip("Port: $portCount", StatusBlue)
+                    if (conflictCount > 0) SummaryChip("⚠ Konflik: $conflictCount", StatusOrange)
+                    if (urlCount > 0) SummaryChip("URL: $urlCount", TextSecondary)
+                }
+            }
         }
     }
 }
@@ -879,12 +935,16 @@ private fun SettingsDialog(
     notifyScanDone: Boolean,
     keepScreenOn: Boolean,
     soundEnabled: Boolean,
+    autoDiffDialog: Boolean,
+    compactMode: Boolean,
     onTheme: (Boolean?) -> Unit,
     onNotifyNewDevices: (Boolean) -> Unit,
     onNotifyImportantOffline: (Boolean) -> Unit,
     onNotifyScanDone: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
     onSoundEnabled: (Boolean) -> Unit,
+    onAutoDiffDialog: (Boolean) -> Unit,
+    onCompactMode: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -916,6 +976,10 @@ private fun SettingsDialog(
                 Spacer(Modifier.height(12.dp))
                 Text("Perilaku", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 SettingsSwitch("Cegah layar mati saat scan", keepScreenOn, onKeepScreenOn)
+                SettingsSwitch("Buka dialog perubahan otomatis setelah scan", autoDiffDialog, onAutoDiffDialog)
+                Spacer(Modifier.height(12.dp))
+                Text("Tampilan kartu", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                SettingsSwitch("Mode ringkas (sembunyikan sparkline & detail)", compactMode, onCompactMode)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
@@ -928,6 +992,90 @@ private fun SettingsSwitch(title: String, checked: Boolean, onChange: (Boolean) 
         Text(title, fontSize = 12.sp, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
     }
+}
+
+/** Dialog pilihan visualisasi (Peta / Matriks / Rasi bintang). */
+@Composable
+private fun VisualizationDialog(
+    onMap: () -> Unit,
+    onMatrix: () -> Unit,
+    onConstellation: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Visualisasi", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                VisualOption("🗺 Peta jaringan", "Posisi perangkat relatif terhadap gateway", onMap)
+                Spacer(Modifier.height(6.dp))
+                VisualOption("▦ Matriks port", "Rangkuman port per perangkat", onMatrix)
+                Spacer(Modifier.height(6.dp))
+                VisualOption("✦ Rasi bintang", "Perangkat sebagai bintang, bisa dibagikan", onConstellation)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+@Composable
+private fun VisualOption(title: String, desc: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(desc, fontSize = 10.sp, color = TextSecondary)
+        }
+    }
+}
+
+/** Dialog filter host: jenis perangkat + status (dipindah dari halaman utama). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HostFilterDialog(
+    deviceFilter: DeviceFilter,
+    onDeviceFilter: (DeviceFilter) -> Unit,
+    statusFilter: HostStatusFilter,
+    onStatusFilter: (HostStatusFilter) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Filter", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("Jenis perangkat", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                Spacer(Modifier.height(3.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    DeviceFilter.entries.forEach { f ->
+                        FilterChip(
+                            selected = deviceFilter == f,
+                            onClick = { onDeviceFilter(f) },
+                            label = { Text(f.label, fontSize = 10.sp) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Status", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                Spacer(Modifier.height(3.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    HostStatusFilter.entries.forEach { f ->
+                        FilterChip(
+                            selected = statusFilter == f,
+                            onClick = { onStatusFilter(f) },
+                            label = { Text(f.label, fontSize = 10.sp) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
 }
 
 /** Dialog daftar riwayat scan (target, waktu, hasil). */
@@ -1072,23 +1220,6 @@ private fun HelpBullet(text: String) {
     Row(modifier = Modifier.padding(vertical = 1.dp)) {
         Text(" • ", fontSize = 11.sp, color = TextSecondary)
         Text(text, fontSize = 11.sp, color = TextSecondary)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SortBar(currentSort: SortMode, onSortMode: (SortMode) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Icon(Icons.Default.Sort, null, Modifier.size(14.dp), tint = TextSecondary)
-        Text("Sort:", fontSize = 11.sp, color = TextSecondary)
-        SortMode.entries.forEach { mode ->
-            FilterChip(
-                selected = currentSort == mode,
-                onClick = { onSortMode(mode) },
-                label = { Text(mode.label, fontSize = 10.sp) },
-                modifier = Modifier.height(28.dp)
-            )
-        }
     }
 }
 

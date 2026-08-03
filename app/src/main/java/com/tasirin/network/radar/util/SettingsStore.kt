@@ -9,7 +9,9 @@ data class AppSettings(
     val notifyImportantOffline: Boolean = true,
     val notifyScanDone: Boolean = true,
     val keepScreenOn: Boolean = true,
-    val soundEnabled: Boolean = true
+    val soundEnabled: Boolean = true,
+    val autoDiffDialog: Boolean = true,
+    val compactMode: Boolean = false
 )
 
 /** Simpan preferensi aplikasi ke SharedPreferences. */
@@ -29,7 +31,9 @@ object SettingsStore {
             notifyImportantOffline = p.getBoolean("notify_important", true),
             notifyScanDone = p.getBoolean("notify_done", true),
             keepScreenOn = p.getBoolean("keep_screen_on", true),
-            soundEnabled = p.getBoolean("sound_enabled", true)
+            soundEnabled = p.getBoolean("sound_enabled", true),
+            autoDiffDialog = p.getBoolean("auto_diff_dialog", true),
+            compactMode = p.getBoolean("compact_mode", false)
         )
     }
 
@@ -46,6 +50,8 @@ object SettingsStore {
                 .putBoolean("notify_done", s.notifyScanDone)
                 .putBoolean("keep_screen_on", s.keepScreenOn)
                 .putBoolean("sound_enabled", s.soundEnabled)
+                .putBoolean("auto_diff_dialog", s.autoDiffDialog)
+                .putBoolean("compact_mode", s.compactMode)
                 .apply()
         } catch (_: Exception) { }
     }
