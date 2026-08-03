@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -29,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
@@ -118,6 +120,7 @@ fun MainScreen(
     var showVizDialog by remember { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
+    var showSpeedDialog by remember { mutableStateOf(false) }
 
     // Buka dialog perubahan antar scan otomatis saat scan selesai (opsi pengaturan)
     LaunchedEffect(state.openDiffDialog) {
@@ -185,6 +188,10 @@ fun MainScreen(
             onDeepScan = { onDeepScan?.invoke(host.ip) },
             onResolveHostname = { onResolveHostname?.invoke(host.ip) },
             onExpandScan = { onExpandScan?.invoke(host.ip) },
+            onCopyIp = { onCopyIp?.invoke(host.ip) },
+            onWol = host.macAddress?.let { mac -> { onWol?.invoke(host.ip, mac) } },
+            onRescan = { onRescanHost?.invoke(host.ip) },
+            onPing = { onPingHost?.invoke(host.ip) },
             onDismiss = { detailHost = null }
         )
     }
@@ -241,6 +248,15 @@ fun MainScreen(
             statusFilter = state.statusFilter,
             onStatusFilter = { onStatusFilter?.invoke(it) },
             onDismiss = { showFilterDialog = false }
+        )
+    }
+
+    // Pilihan sensitivitas scan (detail angka disembunyikan di halaman utama)
+    if (showSpeedDialog) {
+        ScanSpeedDialog(
+            current = state.scanSpeed,
+            onSelect = { onSelectScanSpeed?.invoke(it) },
+            onDismiss = { showSpeedDialog = false }
         )
     }
 
@@ -304,9 +320,6 @@ fun MainScreen(
                 },
                 actions = {
                     var menuOpen by remember { mutableStateOf(false) }
-                    IconButton(onClick = { onAbout?.invoke() }) {
-                        Icon(Icons.Default.Info, contentDescription = "About")
-                    }
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Menu")
                     }
@@ -323,9 +336,17 @@ fun MainScreen(
                             leadingIcon = { Icon(Icons.Default.Delete, null, Modifier.size(16.dp)) },
                             onClick = { menuOpen = false; showClearConfirm = true }
                         )
-                    }
-                    IconButton(onClick = { onToggleSettings?.invoke() }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Pengaturan")
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Tentang", fontSize = 12.sp) },
+                            leadingIcon = { Icon(Icons.Default.Info, null, Modifier.size(16.dp)) },
+                            onClick = { menuOpen = false; onAbout?.invoke() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Pengaturan", fontSize = 12.sp) },
+                            leadingIcon = { Icon(Icons.Default.Settings, null, Modifier.size(16.dp)) },
+                            onClick = { menuOpen = false; onToggleSettings?.invoke() }
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -387,83 +408,36 @@ fun MainScreen(
                     SectionHeader("Pemindaian")
                 }
             }
-            item { TargetInput(value = state.target, onValueChange = onTargetChange, hint = "Target IP, URL, or CIDR") }
-            item { Spacer(Modifier.height(6.dp)) }
             item {
-                Column {
-                    if (onSelectScanSpeed != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.Speed, null, Modifier.size(14.dp), tint = TextSecondary)
-                            Spacer(Modifier.width(4.dp))
-                            Text("Sensitivitas", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                "${state.scanSpeed.hostLocal} host · ${state.scanSpeed.timeoutMs}ms · ${state.scanSpeed.portCount} port",
-                                fontSize = 9.sp,
-                                color = TextSecondary
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            ScanSpeed.entries.forEach { speed ->
-                                FilterChip(
-                                    selected = state.scanSpeed == speed,
-                                    onClick = { onSelectScanSpeed(speed) },
-                                    label = { Text(speed.label, fontSize = 10.sp) },
-                                    modifier = Modifier.height(28.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            "Kiri = lebih teliti (banyak port, lambat) · Kanan = lebih cepat",
-                            fontSize = 9.sp,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TargetInput(
+                        value = state.target,
+                        onValueChange = onTargetChange,
+                        hint = "IP, URL, atau CIDR",
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(
+                        onClick = { showSpeedDialog = true },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp)
+                    ) {
+                        Icon(Icons.Default.Speed, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(4.dp))
+                        Text(state.scanSpeed.label, fontSize = 11.sp)
                     }
                 }
             }
-
             item { Spacer(Modifier.height(6.dp)) }
 
             // ─── Scan Buttons ───
             item { ScanButtonRow(isScanning = state.isScanning, onScan = onScan) }
-            item { Spacer(Modifier.height(4.dp)) }
+            item { Spacer(Modifier.height(6.dp)) }
 
-            // ─── Pause + Stop + Copy All + Clear ───
-            item {
-                ActionButtons(
-                    isScanning = state.isScanning,
-                    onStop = onStop,
-                    isPaused = state.isPaused,
-                    onPauseResume = onPauseResume
-                )
-            }
-            item { Spacer(Modifier.height(4.dp)) }
-
-            // ─── Riwayat scan ───
-            item {
-                OutlinedButton(
-                    onClick = { showHistoryDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.History, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Riwayat scan", fontSize = 11.sp)
-                }
-            }
-            item { Spacer(Modifier.height(4.dp)) }
-
-            // ─── Status ───
+            // ─── Status & progress (digabung dengan area pemindaian) ───
             item {
                 Column {
-                    Spacer(Modifier.height(12.dp))
-                    SectionHeader("Status")
-                    Spacer(Modifier.height(2.dp))
                     StatusBar(
                         text = state.summary,
                         isOk = state.isSummaryOk,
@@ -502,6 +476,19 @@ fun MainScreen(
                     }
                 }
             }
+            item { Spacer(Modifier.height(6.dp)) }
+
+            // ─── Aksi: Pause/Stop + Riwayat (satu baris senada) ───
+            item {
+                ScanActionRow(
+                    isScanning = state.isScanning,
+                    onStop = onStop,
+                    isPaused = state.isPaused,
+                    onPauseResume = onPauseResume,
+                    onHistory = { showHistoryDialog = true }
+                )
+            }
+            item { Spacer(Modifier.height(4.dp)) }
 
             // ─── Hasil ───
             if (state.hosts.isNotEmpty() || state.discoveredUrls.isNotEmpty()) {
@@ -608,27 +595,35 @@ fun MainScreen(
                         }
                         Spacer(Modifier.height(4.dp))
                         Surface(
-                            shape = MaterialTheme.shapes.medium,
+                            shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(Modifier.padding(vertical = 6.dp)) {
-                                OutlinedTextField(
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(Icons.Default.Search, null, Modifier.size(14.dp), tint = TextSecondary)
+                                Spacer(Modifier.width(6.dp))
+                                BasicTextField(
                                     value = state.searchQuery,
                                     onValueChange = { onSearchChange?.invoke(it) },
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-                                    placeholder = { Text("Cari IP / nama / MAC / port / service", fontSize = 11.sp) },
-                                    leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(16.dp)) },
-                                    trailingIcon = if (state.searchQuery.isNotEmpty()) {
-                                        {
-                                            IconButton(onClick = { onSearchChange?.invoke("") }, modifier = Modifier.size(28.dp)) {
-                                                Icon(Icons.Default.Close, null, Modifier.size(14.dp))
-                                            }
-                                        }
-                                    } else null,
+                                    modifier = Modifier.weight(1f),
                                     singleLine = true,
-                                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
+                                    textStyle = TextStyle(fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    decorationBox = { inner ->
+                                        if (state.searchQuery.isEmpty()) {
+                                            Text("Cari IP / nama / MAC / port", fontSize = 12.sp, color = TextSecondary)
+                                        }
+                                        inner()
+                                    }
                                 )
+                                if (state.searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { onSearchChange?.invoke("") }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.Close, null, Modifier.size(12.dp), tint = TextSecondary)
+                                    }
+                                }
                             }
                         }
                     }
@@ -646,20 +641,15 @@ fun MainScreen(
                             host = host,
                             pingHistory = state.pingHistory[host.ip] ?: emptyList(),
                             compact = state.compactMode,
-                            onCopyIp = onCopyIp,
-                            onWol = onWol,
-            isFavorite = host.ip in state.favoriteIps,
-            onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
-            onShowDetail = { detailHost = host },
-            onDeepScan = if (onDeepScan == null) null else ({ onDeepScan(host.ip) }),
-            isDeepScanBusy = state.deepScanning != null,
-            isDeepScanning = state.deepScanning == host.ip,
+                            isFavorite = host.ip in state.favoriteIps,
+                            onToggleFavorite = { onToggleFavorite?.invoke(host.ip) },
+                            onShowDetail = { detailHost = host },
+                            onDeepScan = if (onDeepScan == null) null else ({ onDeepScan(host.ip) }),
+                            isDeepScanBusy = state.deepScanning != null,
+                            isDeepScanning = state.deepScanning == host.ip,
                             isSelected = host.ip in state.selectedHosts,
                             selectionMode = state.selectedHosts.isNotEmpty(),
-                            onToggleSelect = { onToggleHostSelect?.invoke(host.ip) },
-                            onPingHost = if (onPingHost == null) null else ({ onPingHost(host.ip) }),
-                            onRescanHost = if (state.isScanning || onRescanHost == null) null
-                            else ({ onRescanHost(host.ip) })
+                            onToggleSelect = { onToggleHostSelect?.invoke(host.ip) }
                         )
                         Spacer(Modifier.height(6.dp))
                     }
@@ -967,19 +957,15 @@ private fun SettingsDialog(
                             )
                         }
                 }
+                SettingsSwitch("Mode ringkas (sembunyikan sparkline & detail)", compactMode, onCompactMode)
+                SettingsSwitch("Cegah layar mati saat scan", keepScreenOn, onKeepScreenOn)
                 Spacer(Modifier.height(12.dp))
                 Text("Notifikasi", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 SettingsSwitch("Perangkat baru terdeteksi", notifyNewDevices, onNotifyNewDevices)
                 SettingsSwitch("Perangkat penting offline", notifyImportantOffline, onNotifyImportantOffline)
                 SettingsSwitch("Ringkasan scan selesai (background)", notifyScanDone, onNotifyScanDone)
                 SettingsSwitch("Suara saat perangkat ditemukan", soundEnabled, onSoundEnabled)
-                Spacer(Modifier.height(12.dp))
-                Text("Perilaku", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                SettingsSwitch("Cegah layar mati saat scan", keepScreenOn, onKeepScreenOn)
                 SettingsSwitch("Buka dialog perubahan otomatis setelah scan", autoDiffDialog, onAutoDiffDialog)
-                Spacer(Modifier.height(12.dp))
-                Text("Tampilan kartu", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                SettingsSwitch("Mode ringkas (sembunyikan sparkline & detail)", compactMode, onCompactMode)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
@@ -1072,6 +1058,67 @@ private fun HostFilterDialog(
                         )
                     }
                 }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+/** Dialog pilihan sensitivitas: angka detail & penjelasan ditampilkan di sini. */
+@Composable
+private fun ScanSpeedDialog(
+    current: ScanSpeed,
+    onSelect: (ScanSpeed) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sensitivitas Scan", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                ScanSpeed.entries.forEach { s ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(s); onDismiss() }
+                            .padding(vertical = 6.dp)
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = if (s == current) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                s.label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (s == current) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${s.hostLocal} host paralel · timeout ${s.timeoutMs}ms · ${s.portCount} port umum",
+                                fontSize = 10.sp,
+                                color = TextSecondary
+                            )
+                        }
+                        if (s == current) {
+                            Icon(Icons.Default.Check, null, Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Kiri = lebih teliti (banyak port, lambat) · Kanan = lebih cepat. " +
+                        "Makin rendah level, makin banyak port umum yang discan dan makin kecil risiko skip.",
+                    fontSize = 10.sp,
+                    color = TextSecondary
+                )
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
@@ -1464,10 +1511,15 @@ private fun HostDetailDialog(
     onDeepScan: (() -> Unit)? = null,
     onExpandScan: (() -> Unit)? = null,
     onResolveHostname: (() -> Unit)? = null,
+    onCopyIp: (() -> Unit)? = null,
+    onWol: (() -> Unit)? = null,
+    onRescan: (() -> Unit)? = null,
+    onPing: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     var labelText by remember(host.ip) { mutableStateOf(host.label ?: "") }
+    var tab by remember(host.ip) { mutableStateOf(0) }
     val webUrl = remember(host) {
         val webPort = host.openPorts.firstOrNull { it.port in WEB_PORTS } ?: host.openPorts.firstOrNull()
         if (webPort != null) {
@@ -1479,158 +1531,211 @@ private fun HostDetailDialog(
         onDismissRequest = onDismiss,
         title = { Text(host.ip, fontWeight = FontWeight.Bold) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = labelText,
-                        onValueChange = { labelText = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("Nama perangkat", fontSize = 12.sp) },
-                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Button(
-                        onClick = { onSetLabel?.invoke(labelText) },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-                    ) { Text("Simpan", fontSize = 12.sp) }
+            Column {
+                TabRow(selectedTabIndex = tab) {
+                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Info", fontSize = 11.sp) })
+                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Port", fontSize = 11.sp) })
+                    Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Riwayat", fontSize = 11.sp) })
                 }
-                Spacer(Modifier.height(6.dp))
-                host.hostname?.takeIf { it != host.ip }?.let {
-                    DetailLine("Hostname", it)
-                }
-                host.macAddress?.let {
-                    DetailLine("MAC", it + (host.macVendor?.let { v -> " ($v)" } ?: ""))
-                }
-                host.osGuess?.let { DetailLine("OS", it) }
-                host.latencyMs?.let { DetailLine("Latency", "${it}ms") }
-                DetailLine("Port terbuka", host.openPorts.size.toString())
-                if (host.openPorts.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text("Daftar port (${host.openPorts.size})", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Spacer(Modifier.height(4.dp))
-                    @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        host.openPorts.take(100).forEach { p ->
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                tonalElevation = 1.dp
-                            ) {
-                                Text(
-                                    "${p.port}${p.service?.let { " $it" } ?: ""}",
-                                    fontSize = 9.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                Spacer(Modifier.height(8.dp))
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    when (tab) {
+                        0 -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(
+                                    value = labelText,
+                                    onValueChange = { labelText = it },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    placeholder = { Text("Nama perangkat", fontSize = 12.sp) },
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
                                 )
+                                Spacer(Modifier.width(6.dp))
+                                Button(
+                                    onClick = { onSetLabel?.invoke(labelText) },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                                ) { Text("Simpan", fontSize = 12.sp) }
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            host.hostname?.takeIf { it != host.ip }?.let { DetailLine("Hostname", it) }
+                            host.macAddress?.let {
+                                DetailLine("MAC", it + (host.macVendor?.let { v -> " ($v)" } ?: ""))
+                            }
+                            host.osGuess?.let { DetailLine("OS", it) }
+                            host.latencyMs?.let { DetailLine("Latency", "${it}ms") }
+                            DetailLine("Port terbuka", host.openPorts.size.toString())
+                            if (host.ipConflict) {
+                                Spacer(Modifier.height(4.dp))
+                                Surface(shape = MaterialTheme.shapes.small, color = StatusOrange.copy(alpha = 0.15f)) {
+                                    Text("⚠ Kemungkinan konflik IP — MAC berbeda dari deteksi sebelumnya",
+                                        fontSize = 11.sp, color = StatusOrange,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            @OptIn(ExperimentalLayoutApi::class)
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Button(
+                                    onClick = { try { uriHandler.openUri(webUrl) } catch (_: Exception) {} },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.OpenInBrowser, null, Modifier.size(12.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Browser", fontSize = 11.sp)
+                                }
+                                if (onCopyIp != null) {
+                                    OutlinedButton(onClick = onCopyIp,
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
+                                        Icon(Icons.Default.ContentCopy, null, Modifier.size(12.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Salin IP", fontSize = 11.sp)
+                                    }
+                                }
+                                if (onPing != null) {
+                                    OutlinedButton(onClick = onPing,
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
+                                        Icon(Icons.Default.NetworkCheck, null, Modifier.size(12.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Ping", fontSize = 11.sp)
+                                    }
+                                }
+                                if (onRescan != null) {
+                                    OutlinedButton(onClick = onRescan,
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
+                                        Icon(Icons.Default.Refresh, null, Modifier.size(12.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Rescan", fontSize = 11.sp)
+                                    }
+                                }
+                                if (onWol != null) {
+                                    OutlinedButton(onClick = onWol,
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
+                                        Icon(Icons.Default.PowerSettingsNew, null, Modifier.size(12.dp),
+                                            tint = AccentGreen)
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Wake on LAN", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            TextButton(onClick = onToggleFavorite) {
+                                Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                    null, Modifier.size(16.dp),
+                                    tint = if (isFavorite) Color(0xFFFFB300) else TextSecondary)
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (isFavorite) "Hapus dari perangkat penting"
+                                    else "Jadikan perangkat penting", fontSize = 12.sp)
+                            }
+                            if (onDeepScan != null) {
+                                OutlinedButton(
+                                    onClick = onDeepScan,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.ZoomIn, null, Modifier.size(14.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Deep scan semua port (1–65535)", fontSize = 12.sp)
+                                }
+                            }
+                            if (onExpandScan != null) {
+                                Spacer(Modifier.height(4.dp))
+                                OutlinedButton(
+                                    onClick = onExpandScan,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.MyLocation, null, Modifier.size(14.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Scan subnet /24 sekitar IP ini", fontSize = 12.sp)
+                                }
+                            }
+                            if (onResolveHostname != null) {
+                                TextButton(
+                                    onClick = onResolveHostname,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.Refresh, null, Modifier.size(12.dp), tint = TextSecondary)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Cari nama DNS (reverse lookup)", fontSize = 11.sp, color = TextSecondary)
+                                }
+                            }
+                        }
+                        1 -> {
+                            Text("Daftar port (${host.openPorts.size})", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(Modifier.height(4.dp))
+                            if (host.openPorts.isEmpty()) {
+                                Text("Tidak ada port terbuka — coba Rescan atau Deep scan.",
+                                    fontSize = 11.sp, color = TextSecondary)
+                            } else {
+                                @OptIn(ExperimentalLayoutApi::class)
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    host.openPorts.take(200).forEach { p ->
+                                        Surface(
+                                            shape = MaterialTheme.shapes.small,
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            tonalElevation = 1.dp
+                                        ) {
+                                            Text(
+                                                "${p.port}${p.service?.let { " $it" } ?: ""}",
+                                                fontSize = 9.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                if (host.openPorts.size > 200) {
+                                    Spacer(Modifier.height(2.dp))
+                                    Text("… +${host.openPorts.size - 200} port lainnya",
+                                        fontSize = 9.sp, color = TextSecondary)
+                                }
+                            }
+                        }
+                        else -> {
+                            Text("Riwayat ketersediaan", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(Modifier.height(4.dp))
+                            if (uptime.isEmpty()) {
+                                Text("Belum ada riwayat", fontSize = 11.sp, color = TextSecondary)
+                            } else {
+                                UptimeChart(uptime)
+                                Spacer(Modifier.height(4.dp))
+                                val dayAgo = System.currentTimeMillis() - 24 * 3600 * 1000
+                                val day = uptime.filter { it.ts >= dayAgo }
+                                if (day.isNotEmpty()) {
+                                    val onlinePct = day.count { it.online } * 100 / day.size
+                                    Text("24 jam terakhir: $onlinePct% online", fontSize = 11.sp, color = TextSecondary)
+                                    Spacer(Modifier.height(4.dp))
+                                }
+                                val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
+                                uptime.takeLast(5).reversed().forEach { e ->
+                                    Text(
+                                        "${fmt.format(Date(e.ts))} — ${if (e.online) "online" else "offline"}",
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = if (e.online) StatusGreen else StatusRed
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            Text("Riwayat ping (latency)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(Modifier.height(4.dp))
+                            if (pingHistory.isEmpty()) {
+                                Text("Belum ada riwayat ping — tekan Ping di tab Info", fontSize = 11.sp, color = TextSecondary)
+                            } else {
+                                PingChart(pingHistory)
+                                Spacer(Modifier.height(4.dp))
+                                val last = pingHistory.last()
+                                Text("Ping terakhir: ${last.latencyMs}ms · total ${pingHistory.size} pengukuran",
+                                    fontSize = 11.sp, color = TextSecondary)
                             }
                         }
                     }
-                    if (host.openPorts.size > 100) {
-                        Spacer(Modifier.height(2.dp))
-                        Text("… +${host.openPorts.size - 100} port lainnya",
-                            fontSize = 9.sp, color = TextSecondary)
-                    }
-                    Spacer(Modifier.height(6.dp))
-                }
-                if (onResolveHostname != null) {
-                    TextButton(
-                        onClick = onResolveHostname,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Icon(Icons.Default.Refresh, null, Modifier.size(12.dp), tint = TextSecondary)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Cari nama DNS (reverse lookup)", fontSize = 11.sp, color = TextSecondary)
-                    }
-                }
-                if (host.ipConflict) {
-                    Spacer(Modifier.height(4.dp))
-                    Surface(shape = MaterialTheme.shapes.small, color = StatusOrange.copy(alpha = 0.15f)) {
-                        Text("⚠ Kemungkinan konflik IP — MAC berbeda dari deteksi sebelumnya",
-                            fontSize = 11.sp,
-                            color = StatusOrange,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                TextButton(onClick = onToggleFavorite) {
-                    Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder, null, Modifier.size(16.dp),
-                        tint = if (isFavorite) Color(0xFFFFB300) else TextSecondary)
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (isFavorite) "Hapus dari perangkat penting" else "Jadikan perangkat penting", fontSize = 12.sp)
-                }
-                OutlinedButton(
-                    onClick = { try { uriHandler.openUri(webUrl) } catch (_: Exception) {} },
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.OpenInBrowser, null, Modifier.size(14.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Buka di browser", fontSize = 12.sp)
-                }
-                if (onDeepScan != null) {
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedButton(
-                        onClick = onDeepScan,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Default.ZoomIn, null, Modifier.size(14.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Deep scan semua port (1–65535)", fontSize = 12.sp)
-                    }
-                }
-                if (onExpandScan != null) {
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedButton(
-                        onClick = onExpandScan,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Default.MyLocation, null, Modifier.size(14.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Scan subnet /24 sekitar IP ini", fontSize = 12.sp)
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("Riwayat ketersediaan", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Spacer(Modifier.height(4.dp))
-                if (uptime.isEmpty()) {
-                    Text("Belum ada riwayat", fontSize = 11.sp, color = TextSecondary)
-                } else {
-                    UptimeChart(uptime)
-                    Spacer(Modifier.height(4.dp))
-                    val dayAgo = System.currentTimeMillis() - 24 * 3600 * 1000
-                    val day = uptime.filter { it.ts >= dayAgo }
-                    if (day.isNotEmpty()) {
-                        val onlinePct = day.count { it.online } * 100 / day.size
-                        Text("24 jam terakhir: $onlinePct% online", fontSize = 11.sp, color = TextSecondary)
-                        Spacer(Modifier.height(4.dp))
-                    }
-                    val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
-                    uptime.takeLast(5).reversed().forEach { e ->
-                        Text(
-                            "${fmt.format(Date(e.ts))} — ${if (e.online) "online" else "offline"}",
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = if (e.online) StatusGreen else StatusRed
-                        )
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                Text("Riwayat ping (latency)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Spacer(Modifier.height(4.dp))
-                if (pingHistory.isEmpty()) {
-                    Text("Belum ada riwayat ping — tekan tombol ping di kartu host", fontSize = 11.sp, color = TextSecondary)
-                } else {
-                    PingChart(pingHistory)
-                    Spacer(Modifier.height(4.dp))
-                    val last = pingHistory.last()
-                    Text("Ping terakhir: ${last.latencyMs}ms · total ${pingHistory.size} pengukuran",
-                        fontSize = 11.sp, color = TextSecondary)
                 }
             }
         },

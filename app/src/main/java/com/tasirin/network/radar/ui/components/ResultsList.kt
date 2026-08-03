@@ -31,19 +31,15 @@ import com.tasirin.network.radar.ui.theme.*
 @Composable
 fun HostCard(
     host: HostInfo,
-    onCopyIp: ((String) -> Unit)? = null,
-    onWol: ((String, String) -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
     onShowDetail: (() -> Unit)? = null,
     onDeepScan: (() -> Unit)? = null,
-    onPingHost: (() -> Unit)? = null,
     isDeepScanBusy: Boolean = false,
     isSelected: Boolean = false,
     isFavorite: Boolean = false,
     isDeepScanning: Boolean = false,
     selectionMode: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
-    onRescanHost: (() -> Unit)? = null,
     pingHistory: List<PingEvent> = emptyList(),
     compact: Boolean = false
 ) {
@@ -147,26 +143,6 @@ fun HostCard(
                             null, Modifier.size(14.dp),
                             tint = if (isFavorite) Color(0xFFFFB300) else TextSecondary
                         )
-                    }
-                }
-                if (onCopyIp != null) {
-                    IconButton(onClick = { onCopyIp(host.ip) }, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.ContentCopy, null, Modifier.size(14.dp), tint = TextSecondary)
-                    }
-                }
-                if (host.macAddress != null && onWol != null) {
-                    IconButton(onClick = { onWol(host.ip, host.macAddress) }, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.PowerSettingsNew, null, Modifier.size(14.dp), tint = AccentGreen)
-                    }
-                }
-                if (onRescanHost != null) {
-                    IconButton(onClick = { onRescanHost() }, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Refresh, null, Modifier.size(14.dp), tint = TextSecondary)
-                    }
-                }
-                if (onPingHost != null) {
-                    IconButton(onClick = onPingHost, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.NetworkCheck, null, Modifier.size(14.dp), tint = TextSecondary)
                     }
                 }
                 if (onShowDetail != null) {

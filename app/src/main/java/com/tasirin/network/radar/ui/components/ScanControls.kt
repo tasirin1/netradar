@@ -1,10 +1,11 @@
 package com.tasirin.network.radar.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tasirin.network.radar.model.ScanType
@@ -20,9 +21,9 @@ fun TargetInput(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
-        label = { Text("Target", fontWeight = FontWeight.Bold) },
-        placeholder = { Text(hint, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        placeholder = { Text(hint, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         singleLine = true,
+        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -37,70 +38,63 @@ fun ScanButtonRow(
     onScan: (ScanType) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val buttons = listOf(
+    val primary = listOf(
         ScanType.PORT_SCAN to "Port Scan",
+        ScanType.DISCOVER to "Discover",
+        ScanType.MONITOR to "Monitor"
+    )
+    val more = listOf(
         ScanType.CAMERA to "CCTV",
         ScanType.ROUTER to "Router",
         ScanType.URL_PATH to "URL Path",
-        ScanType.DISCOVER to "Discover",
         ScanType.PING to "Ping Sweep",
         ScanType.UDP to "UDP",
-        ScanType.TRACE to "Trace",
-        ScanType.MONITOR to "Monitor"
+        ScanType.TRACE to "Trace"
     )
+    var moreOpen by remember { mutableStateOf(false) }
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        // First row: 4 buttons
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            buttons.take(4).forEach { (type, label) ->
-                Button(
-                    onClick = { onScan(type) },
-                    enabled = !isScanning,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
-                ) {
-                    Text(text = label, fontSize = 10.sp, maxLines = 1)
-                }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        primary.forEach { (type, label) ->
+            Button(
+                onClick = { onScan(type) },
+                enabled = !isScanning,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+            ) {
+                Text(label, fontSize = 10.sp, maxLines = 1)
             }
         }
-        // Second row: 3 buttons
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            buttons.drop(4).forEach { (type, label) ->
-                Button(
-                    onClick = { onScan(type) },
-                    enabled = !isScanning,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
-                ) {
-                    Text(text = label, fontSize = 10.sp, maxLines = 1)
+        Box {
+            OutlinedButton(
+                onClick = { moreOpen = true },
+                enabled = !isScanning,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+            ) {
+                Text("Lainnya ▾", fontSize = 10.sp, maxLines = 1)
+            }
+            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                more.forEach { (type, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label, fontSize = 12.sp) },
+                        onClick = { moreOpen = false; onScan(type) }
+                    )
                 }
             }
-            // Isi slot kosong bila jumlah tombol baris kedua < 4
-            if (buttons.size - 4 < 4) Spacer(Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-fun ActionButtons(
+fun ScanActionRow(
     isScanning: Boolean,
     onStop: () -> Unit,
     isPaused: Boolean = false,
     onPauseResume: (() -> Unit)? = null,
+    onHistory: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -115,9 +109,9 @@ fun ActionButtons(
                     else MaterialTheme.colorScheme.tertiary
                 ),
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(vertical = 8.dp)
+                contentPadding = PaddingValues(vertical = 6.dp)
             ) {
-                Text(if (isPaused) "Resume" else "Pause", fontSize = 12.sp)
+                Text(if (isPaused) "Resume" else "Pause", fontSize = 11.sp)
             }
         }
         Button(
@@ -125,9 +119,20 @@ fun ActionButtons(
             enabled = isScanning,
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(vertical = 8.dp)
+            contentPadding = PaddingValues(vertical = 6.dp)
         ) {
-            Text("Stop", fontSize = 12.sp)
+            Text("Stop", fontSize = 11.sp)
+        }
+        if (onHistory != null) {
+            OutlinedButton(
+                onClick = onHistory,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.History, null, Modifier.size(12.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Riwayat", fontSize = 11.sp)
+            }
         }
     }
 }
