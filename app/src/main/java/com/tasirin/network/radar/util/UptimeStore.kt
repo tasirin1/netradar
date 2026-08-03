@@ -38,6 +38,23 @@ object UptimeStore {
         return next
     }
 
+    /** Tambah banyak status sekaligus (satu kali save — dipakai loop monitor). */
+    fun recordBatch(
+        context: Context,
+        current: Map<String, List<UptimeEvent>>,
+        updates: Map<String, Boolean>,
+        persist: Boolean = true
+    ): Map<String, List<UptimeEvent>> {
+        if (updates.isEmpty()) return current
+        val now = System.currentTimeMillis()
+        val next = current.toMutableMap()
+        updates.forEach { (ip, online) ->
+            next[ip] = ((next[ip] ?: emptyList()) + UptimeEvent(now, online)).takeLast(MAX_PER_HOST)
+        }
+        if (persist) save(context, next)
+        return next
+    }
+
     fun save(context: Context, data: Map<String, List<UptimeEvent>>) {
         try {
             val obj = JSONObject()

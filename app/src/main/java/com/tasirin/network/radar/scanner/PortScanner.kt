@@ -32,41 +32,16 @@ class PortScanner {
         }
 
         val ports = PortRangeParser.defaultPorts.take(speed.portCount).toIntArray()
-        val total = subnets.size * 254L
-        val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
         val permits = Semaphore(speed.socketPermits)
         val arpTable = NetworkUtils.readArpTable()
-        var completed = 0L
-        var found = 0
-        val startMs = System.currentTimeMillis()
 
-        emit(ScanEvent.Progress(
-            "Port scan ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
-            0, total.toInt()))
-
-        val totalSubnets = subnets.size
-        subnets.forEachIndexed { subnetIndex, subnet ->
-            ScanPause.checkPause()
-            val ips = NetworkUtils.expandSubnetHosts(subnet)
-            val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
-
-            emit(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
-
-            // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
-            // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
-            ScanLoop.scanIps(ips, hostConcurrency, scanOne = { ip ->
-                // Port scan dulu — DNS reverse lookup HANYA untuk host yang ketemu
-                // (DNS per-IP bikin subnet lambat/macet, padahal mayoritas mati)
-                val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
-                if (openPorts.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = openPorts)
-            }) { ip, host ->
-                completed++
-                if (host != null) { found++; emit(ScanEvent.HostFound(host)) }
-                val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
-            }
-        }
+        // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
+        // (banyak perangkat tidak membalas ICMP tapi portnya terbuka).
+        // Port scan dulu — DNS reverse lookup HANYA untuk host yang ketemu.
+        ScanLoop.scanSubnets(subnets, speed, "Port scan", scanOne = { ip ->
+            val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
+            if (openPorts.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = openPorts)
+        }) { ev -> emit(ev) }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.PORT_SCAN, target = target)))
     }
@@ -85,8 +60,11 @@ class PortScanner {
         val permits = Semaphore(speed.socketPermits)
         val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
         val latencyMs = PingUtil.pingProbe(ip)?.latencyMs
-        return if (openPorts.isNotEmpty()) HostInfo(ip = ip, hostname = hostname, macAddress = mac,
-            macVendor = vendor, latencyMs = latencyMs, isAlive = true, openPorts = openPorts) else null
+        // Selalu kembalikan info host (hostname/MAC/vendor/latency) walau port kosong,
+        // supaya kartu tidak kehilangan data ARP & DNS saat rescan.
+        return HostInfo(ip = ip, hostname = hostname, macAddress = mac,
+            macVendor = vendor, latencyMs = latencyMs,
+            isAlive = latencyMs != null || openPorts.isNotEmpty(), openPorts = openPorts)
     }
 
     /**

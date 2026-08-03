@@ -1,7 +1,6 @@
 package com.tasirin.network.radar.scanner
 
-import com.tasirin.network.radar.model.HostInfo
-import com.tasirin.network.radar.model.PortInfo
+import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.OsDetector
 import kotlinx.coroutines.async
@@ -62,6 +61,48 @@ object ScanLoop {
                     val (ip, host) = deferred.await()
                     onResult(ip, host)
                 }
+            }
+        }
+    }
+
+    /**
+     * Loop scan antar subnet yang dipakai semua scanner: progres per subnet,
+     * pause antar subnet, dan hitung total IP + temuan secara terpusat.
+     * [label] dipakai di teks progress (mis. "Port scan", "Discover").
+     */
+    suspend fun scanSubnets(
+        subnets: List<String>,
+        speed: ScanSpeed,
+        label: String,
+        scanOne: suspend (String) -> HostInfo?,
+        onEvent: suspend (ScanEvent) -> Unit
+    ) {
+        val total = subnets.size * 254L
+        val isWide = subnets.size > 4
+        val batchSize = if (isWide) speed.hostWide else speed.hostLocal
+        var completed = 0L
+        var found = 0
+        val startMs = System.currentTimeMillis()
+
+        onEvent(ScanEvent.Progress(
+            "$label ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
+            0, total.toInt()))
+
+        val totalSubnets = subnets.size
+        subnets.forEachIndexed { subnetIndex, subnet ->
+            ScanPause.checkPause()
+            val ips = NetworkUtils.expandSubnetHosts(subnet)
+            val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
+
+            onEvent(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
+
+            scanIps(ips, batchSize, scanOne) { ip, host ->
+                completed++
+                if (host != null) { found++; onEvent(ScanEvent.HostFound(host)) }
+                val elapsed = (System.currentTimeMillis() - startMs) / 1000
+                onEvent(ScanEvent.Progress(
+                    "$subnetLabel · $ip · $found ditemukan · ${elapsed}s",
+                    completed.toInt(), total.toInt()))
             }
         }
     }

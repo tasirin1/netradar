@@ -17,8 +17,11 @@ object PingUtil {
     /** Ping + ambil TTL untuk deteksi OS. */
     fun pingProbe(ip: String, timeoutMs: Int = 1000): PingProbe? {
         return try {
+            // -W memakai satuan detik: clamp minimal 1 agar level cepat (mis. 150ms)
+            // tidak menghasilkan "-W 0" yang bisa berarti tanpa batas / tidak konsisten.
+            val secs = (timeoutMs.coerceAtLeast(1000) / 1000).toString()
             val process = ProcessBuilder(
-                "ping", "-c", "1", "-W", (timeoutMs / 1000).toString(), ip
+                "ping", "-c", "1", "-W", secs, ip
             ).redirectErrorStream(true).start()
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = reader.readText()

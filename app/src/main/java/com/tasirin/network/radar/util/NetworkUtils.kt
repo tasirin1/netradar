@@ -68,12 +68,10 @@ object NetworkUtils {
     /** Generate /24 subnets for 1 octet + second-octet range. */
     private fun expandSubnetRange(a: Int, bStart: Int, bEnd: Int): List<String> {
         if (a !in 0..255 || bStart !in 0..255 || bEnd !in 0..255 || bStart > bEnd) return emptyList()
-        // "10." sangat luas → batasi ke 16 /16 pertama biar wajar
-        val maxB = if (a == 10 && bEnd - bStart > 15) (bStart + 15).coerceAtMost(255) else bEnd
         val result = mutableListOf<String>()
-        val count = (maxB - bStart + 1) * 256
+        val count = (bEnd - bStart + 1) * 256
         if (count > MAX_SUBNETS) return emptyList()
-        for (b in bStart..maxB) {
+        for (b in bStart..bEnd) {
             for (c in 0..255) result.add("$a.$b.$c")
         }
         return result
@@ -165,8 +163,42 @@ object NetworkUtils {
     }
 
     fun getLocalGateway(): String? {
+        // 1) Baca gateway asli dari tabel routing ("default via x.x.x.x")
+        try {
+            val process = ProcessBuilder("ip", "route").redirectErrorStream(true).start()
+            val out = process.inputStream.bufferedReader().readText()
+            process.waitFor()
+            val via = out.lineSequence()
+                .firstOrNull { it.trimStart().startsWith("default") }
+                ?.split("\\s+".toRegex())
+                ?.getOrNull(2)
+            if (via != null && via.count { it == '.' } == 3) return via
+        } catch (_: Exception) { }
+        // 2) Fallback /proc/net/route (gateway dalam hex little-endian)
+        try {
+            val lines = java.io.File("/proc/net/route").readLines()
+            for (line in lines.drop(1)) {
+                val parts = line.trim().split("\\s+".toRegex())
+                if (parts.size >= 3 && parts[1] == "00000000") {
+                    hexToIp(parts[2])?.let { return it }
+                }
+            }
+        } catch (_: Exception) { }
+        // 3) Asumsi lama: gateway di .1
         val prefix = getLocalNetworkPrefix() ?: return null
         return "$prefix.1"
+    }
+
+    /** Konversi gateway format hex little-endian (/proc/net/route) ke IPv4. */
+    private fun hexToIp(hex: String): String? {
+        if (hex.length != 8) return null
+        return try {
+            val a = hex.substring(6, 8).toInt(16)
+            val b = hex.substring(4, 6).toInt(16)
+            val c = hex.substring(2, 4).toInt(16)
+            val d = hex.substring(0, 2).toInt(16)
+            if (a == 0 && b == 0 && c == 0 && d == 0) null else "$a.$b.$c.$d"
+        } catch (_: Exception) { null }
     }
 
     fun getLocalSubnet(): List<String>? {

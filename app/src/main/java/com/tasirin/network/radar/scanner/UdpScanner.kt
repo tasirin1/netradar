@@ -25,45 +25,23 @@ class UdpScanner {
             return@flow
         }
 
-        val total = subnets.size * 254L
-        val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
         val udpTimeout = (speed.timeoutMs * 5).coerceIn(800, 1500)
+        // Item 10: makin rendah level, makin banyak port UDP yang discan
+        val udpPorts = UDP_PORTS.take(udpPortCount(speed))
         val arpTable = NetworkUtils.readArpTable()
-        var completed = 0L
-        var found = 0
-        val startMs = System.currentTimeMillis()
 
-        emit(ScanEvent.Progress(
-            "UDP scan ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
-            0, total.toInt()))
-
-        val totalSubnets = subnets.size
-        subnets.forEachIndexed { subnetIndex, subnet ->
-            ScanPause.checkPause()
-            val ips = NetworkUtils.expandSubnetHosts(subnet)
-            val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
-
-            emit(ScanEvent.Progress("$subnetLabel — $subnet.0/24 (UDP)", completed.toInt(), total.toInt()))
-
-            ScanLoop.scanIps(ips, hostConcurrency, scanOne = { ip ->
-                val open = coroutineScope {
-                    UDP_PORTS.map { (port, service) ->
-                        async {
-                            if (UdpProbe.probe(ip, port, udpTimeout)) PortInfo(port = port, service = "$service (UDP)")
-                            else null
-                        }
-                    }.mapNotNull { it.await() }
-                }
-                if (open.isEmpty()) null
-                else ScanLoop.hostInfo(ip, arpTable, openPorts = open.sortedBy { it.port })
-            }) { ip, host ->
-                completed++
-                if (host != null) { found++; emit(ScanEvent.HostFound(host)) }
-                val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
+        ScanLoop.scanSubnets(subnets, speed, "UDP scan", scanOne = { ip ->
+            val open = coroutineScope {
+                udpPorts.map { (port, service) ->
+                    async {
+                        if (UdpProbe.probe(ip, port, udpTimeout)) PortInfo(port = port, service = "$service (UDP)")
+                        else null
+                    }
+                }.mapNotNull { it.await() }
             }
-        }
+            if (open.isEmpty()) null
+            else ScanLoop.hostInfo(ip, arpTable, openPorts = open.sortedBy { it.port })
+        }) { ev -> emit(ev) }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.UDP, target = target)))
     }
@@ -77,6 +55,14 @@ class UdpScanner {
             1900 to "SSDP",
             5353 to "mDNS"
         )
+
+        /** Jumlah port UDP berdasarkan level: makin rendah (teliti) makin banyak. */
+        fun udpPortCount(speed: ScanSpeed): Int = when (speed) {
+            ScanSpeed.SANGAT_STABIL -> 6
+            ScanSpeed.STABIL -> 5
+            ScanSpeed.SEDANG -> 4
+            ScanSpeed.CEPAT -> 3
+        }
     }
 }
 

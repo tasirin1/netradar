@@ -96,7 +96,9 @@ class MainActivity : AppCompatActivity() {
                         onExpandScan = { ip -> viewModel.expandScanFromHost(ip) },
                         onResolveHostname = { ip -> viewModel.resolveHostname(ip) },
                         onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) },
-                        onDiffDialogShown = { viewModel.diffDialogShown() }
+                        onDiffDialogShown = { viewModel.diffDialogShown() },
+                        onConfirmWideScan = { viewModel.confirmWideScan() },
+                        onCancelWideScan = { viewModel.cancelWideScan() }
                     )
                 }
             }

@@ -82,7 +82,10 @@ data class ScanUiState(
     val soundEnabled: Boolean = true,
     val autoDiffDialog: Boolean = true,
     val compactMode: Boolean = false,
-    val openDiffDialog: Boolean = false
+    val openDiffDialog: Boolean = false,
+    val pendingWideTarget: String? = null,
+    val pendingWideScanType: ScanType? = null,
+    val pendingWideCount: Long = 0L
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -114,12 +117,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var gatewayJob: Job? = null
     private var lastBackOnlineAt = 0L
     private val gatewayLatencies = ArrayDeque<Long>()
-    private var lastPingBatchSaveAt = 0L
+    private var lastMonitorSaveAt = 0L
+    private var lastWidgetAt = 0L
 
     private companion object {
         const val CHANNEL_NEW_DEVICE = "new_device"
         const val CHANNEL_IMPORTANT = "important_device"
         const val MAX_NOTIFY_PER_SCAN = 20
+        const val WIDE_SCAN_THRESHOLD = 256  // > 256 subnet (≈65 ribu IP) → minta konfirmasi
     }
 
     init {
@@ -179,7 +184,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun setStatusFilter(filter: HostStatusFilter) { _state.update { it.copy(statusFilter = filter) } }
     fun toggleAbout() { _state.update { it.copy(showAbout = !it.showAbout) } }
 
-    fun startScan(type: ScanType) {
+    fun startScan(type: ScanType, force: Boolean = false) {
         var target = _state.value.target.trim()
         if (target.isEmpty()) {
             val subnet = NetworkUtils.getLocalSubnet()
@@ -193,6 +198,18 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         if (type == ScanType.MONITOR) { startMonitor(target); return }
+
+        // Scan area luas (banyak subnet) butuh konfirmasi dulu + estimasi
+        if (!force) {
+            val subnets = NetworkUtils.expandTargetSubnets(target)
+            if (subnets.size > WIDE_SCAN_THRESHOLD) {
+                _state.update {
+                    it.copy(pendingWideTarget = target, pendingWideScanType = type,
+                        pendingWideCount = subnets.size * 254L)
+                }
+                return
+            }
+        }
 
         _startTime = System.currentTimeMillis()
         lastNotifyAt = 0L; notifyCount = 0; _lastDeleted = emptyList()
@@ -288,6 +305,19 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Lanjutkan scan area luas setelah konfirmasi pengguna. */
+    fun confirmWideScan() {
+        val st = _state.value
+        val type = st.pendingWideScanType ?: return
+        _state.update { it.copy(pendingWideTarget = null, pendingWideScanType = null, pendingWideCount = 0L) }
+        startScan(type, force = true)
+    }
+
+    /** Batalkan scan area luas. */
+    fun cancelWideScan() {
+        _state.update { it.copy(pendingWideTarget = null, pendingWideScanType = null, pendingWideCount = 0L) }
+    }
+
     fun pauseScan() {
         scannerManager.pause()
         refreshHostsUi(force = true)
@@ -318,14 +348,16 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             startSingleMonitor(target)
             return
         }
-        val ips = hosts.map { it.ip }
         _state.update { it.copy(isScanning = true, scanType = ScanType.MONITOR, error = null,
-            summary = "Monitoring ${ips.size} perangkat...", summaryColor = 0xFF00695C, isSummaryOk = true,
+            summary = "Monitoring ${hosts.size} perangkat...", summaryColor = 0xFF00695C, isSummaryOk = true,
             monitor = MonitorState(isRunning = true)) }
         monitorJob?.cancel()
         monitorJob = viewModelScope.launch {
             var pings = 0
             while (isActive) {
+                // Sinkronkan daftar host tiap siklus: host baru ikut, host dihapus keluar
+                val ips = _hosts.values.map { it.ip }.sorted()
+                if (ips.isEmpty()) break
                 // pingProbe memblokir (ProcessBuilder), jadi jalankan di IO
                 val probes = withContext(Dispatchers.IO) {
                     ips.chunked(8).flatMap { chunk ->
@@ -336,17 +368,15 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 val latUpdates = probes.mapNotNull { (ip, probe) ->
                     if (probe != null) ip to probe.latencyMs else null
                 }.toMap()
-                if (latUpdates.isNotEmpty()) {
-                    val now = System.currentTimeMillis()
-                    val persist = now - lastPingBatchSaveAt >= 10_000
-                    if (persist) lastPingBatchSaveAt = now
-                    _pingHistory = PingStore.recordBatch(getApplication(), _pingHistory, latUpdates, persist)
-                    _state.update { it.copy(pingHistory = _pingHistory) }
-                }
+                val now = System.currentTimeMillis()
+                val persist = now - lastMonitorSaveAt >= 10_000
+                if (persist) lastMonitorSaveAt = now
+                // Batch uptime + ping: satu save untuk semua host per siklus
+                _uptime = UptimeStore.recordBatch(getApplication(), _uptime, statuses, persist)
+                _pingHistory = PingStore.recordBatch(getApplication(), _pingHistory, latUpdates, persist)
                 pings++
                 val prevStatuses = _state.value.monitor.statuses
                 statuses.forEach { (ip, online) ->
-                    recordUptime(ip, online)
                     if (online && ip in _favorites && prevStatuses[ip] == false) {
                         notifyFavoriteBackOnline(ip)
                     } else if (!online && ip in _favorites &&
@@ -358,16 +388,30 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 val onlineCount = statuses.values.count { it }
                 _state.update {
                     it.copy(monitor = MonitorState(isRunning = true, statuses = statuses, pings = pings),
+                        uptime = _uptime,
+                        pingHistory = _pingHistory,
                         summary = "Monitor: $onlineCount/${statuses.size} online",
                         summaryColor = if (onlineCount > 0) 0xFF2E7D32 else 0xFFC62828,
                         isSummaryOk = onlineCount > 0)
                 }
                 delay(3000)
             }
+            // Semua host terhapus saat monitor berjalan → berhenti rapi
+            if (isActive) {
+                _state.update {
+                    it.copy(monitor = MonitorState(), isScanning = false, scanType = null,
+                        summary = "Monitor berhenti — semua host dihapus",
+                        summaryColor = 0xFFC62828, isSummaryOk = false)
+                }
+            }
         }
     }
 
     private fun startSingleMonitor(target: String) {
+        if (target.isBlank()) {
+            _state.update { it.copy(error = "Masukkan IP target untuk monitor") }
+            return
+        }
         val ip = NetworkUtils.resolveDomain(target) ?: target
         _state.update { it.copy(isScanning = true, scanType = ScanType.MONITOR, error = null,
             summary = "Monitoring $ip...", summaryColor = 0xFF00695C, isSummaryOk = true,
@@ -538,23 +582,27 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val host = withContext(Dispatchers.IO) { portScanner.scanHost(ip, speed = _state.value.scanSpeed) }
-                val ports = host?.openPorts?.size ?: 0
-                recordUptime(ip, host != null)
-                host?.latencyMs?.let { recordPing(ip, it) }
                 if (host != null) {
+                    val ports = host.openPorts.size
+                    recordUptime(ip, host.isAlive)
+                    host.latencyMs?.let { recordPing(ip, it) }
                     val existing = _hosts[ip]
                     val conflict = existing?.macAddress != null && host.macAddress != null &&
                         !existing.macAddress.equals(host.macAddress, ignoreCase = true)
                     _hosts[ip] = host.copy(label = existing?.label,
                         ipConflict = conflict || existing?.ipConflict == true)
+                    _state.update {
+                        it.copy(hosts = _hosts.values.toList(),
+                            summary = when {
+                                ports > 0 -> "Rescan $ip: $ports port terbuka"
+                                host.isAlive -> "Rescan $ip: hidup, tidak ada port terbuka"
+                                else -> "Rescan $ip: tidak merespons"
+                            },
+                            summaryColor = if (host.isAlive) 0xFF2E7D32 else 0xFFC62828,
+                            isSummaryOk = host.isAlive)
+                    }
+                    persistResults(force = true)
                 }
-                _state.update {
-                    it.copy(hosts = _hosts.values.toList(),
-                        summary = if (ports > 0) "Rescan $ip: $ports port terbuka"
-                        else "Rescan $ip: tidak ada port terbuka",
-                        summaryColor = 0xFF2E7D32, isSummaryOk = true)
-                }
-                persistResults(force = true)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -825,10 +873,15 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         gatewayJob?.cancel()
         gatewayJob = viewModelScope.launch {
             while (isActive) {
-                checkGateway()
-                checkInternet()
-                updateNetworkQuality()
-                delay(5_000)
+                if (AppForeground.isForeground) {
+                    checkGateway()
+                    checkInternet()
+                    updateNetworkQuality()
+                    delay(5_000)
+                } else {
+                    // App di background: jeda lama biar hemat baterai
+                    delay(60_000)
+                }
             }
         }
     }
@@ -902,7 +955,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val urls = _urls.values.toList()
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) { ResultsStore.save(app, hosts, urls) }
-        NetRadarWidget.pushUpdate(app)
+        // Widget tidak perlu di-refresh tiap host: cukup tiap 15 detik / saat selesai
+        if (force || now - lastWidgetAt >= 15_000) {
+            lastWidgetAt = now
+            NetRadarWidget.pushUpdate(app)
+        }
     }
 
     fun toggleFavorite(ip: String) {

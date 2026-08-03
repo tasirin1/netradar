@@ -105,7 +105,9 @@ fun MainScreen(
     onExpandScan: ((String) -> Unit)? = null,
     onResolveHostname: ((String) -> Unit)? = null,
     onSetHostLabel: ((String, String?) -> Unit)? = null,
-    onDiffDialogShown: (() -> Unit)? = null
+    onDiffDialogShown: (() -> Unit)? = null,
+    onConfirmWideScan: (() -> Unit)? = null,
+    onCancelWideScan: (() -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -257,6 +259,31 @@ fun MainScreen(
             current = state.scanSpeed,
             onSelect = { onSelectScanSpeed?.invoke(it) },
             onDismiss = { showSpeedDialog = false }
+        )
+    }
+
+    // Konfirmasi scan area luas (banyak subnet)
+    state.pendingWideTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { onCancelWideScan?.invoke() },
+            title = { Text("Scan area luas?", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Target '$target' mencakup ${state.pendingWideCount / 254} subnet " +
+                        "(±${state.pendingWideCount} IP).")
+                    Spacer(Modifier.height(6.dp))
+                    Text("Scan bisa berlangsung lama — makin rendah level sensitivitas, makin teliti tapi lambat.",
+                        fontSize = 11.sp, color = TextSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onConfirmWideScan?.invoke() }) {
+                    Text("Lanjutkan", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onCancelWideScan?.invoke() }) { Text("Batal") }
+            }
         )
     }
 

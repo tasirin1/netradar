@@ -2,7 +2,6 @@ package com.tasirin.network.radar.scanner
 
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.util.NetworkUtils
-import com.tasirin.network.radar.util.PingUtil
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -19,41 +18,14 @@ class DiscoverScanner {
             return@channelFlow
         }
 
-        val total = subnets.size * 254L
-        val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
         val arpTable = NetworkUtils.readArpTable()
-        var completed = 0L
-        var found = 0
-        val startMs = System.currentTimeMillis()
 
-        send(ScanEvent.Progress(
-            "Discover ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
-            0, total.toInt()))
-
-        val totalSubnets = subnets.size
-        subnets.forEachIndexed { subnetIndex, subnet ->
-            ScanPause.checkPause()
-            val ips = NetworkUtils.expandSubnetHosts(subnet)
-            val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
-
-            send(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
-
-            // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
-            // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
-            ScanLoop.scanIps(ips, hostConcurrency, scanOne = { ip ->
-                val alive = PingUtil.ping(ip, 500) != null
-                if (alive) {
-                    val services = scanDiscoverPorts(ip, speed.timeoutMs)
-                    if (services.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = services)
-                } else null
-            }) { ip, host ->
-                completed++
-                if (host != null) { found++; send(ScanEvent.HostFound(host)) }
-                val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                send(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
-            }
-        }
+        // Scan SEMUA IP tanpa gate ping: banyak perangkat tidak membalas ICMP
+        // tapi portnya terbuka — port scan jadi penentu host hidup (konsisten dgn PortScanner).
+        ScanLoop.scanSubnets(subnets, speed, "Discover", scanOne = { ip ->
+            val services = scanDiscoverPorts(ip, speed.timeoutMs)
+            if (services.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = services)
+        }) { ev -> send(ev) }
 
         send(ScanEvent.Complete(ScanResult(type = ScanType.DISCOVER, target = target)))
     }

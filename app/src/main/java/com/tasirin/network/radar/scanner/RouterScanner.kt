@@ -23,38 +23,13 @@ class RouterScanner {
             return@flow
         }
 
-        val total = subnets.size * 254L
-        val isWide = subnets.size > 4
-        val hostConcurrency = if (isWide) speed.hostWide else speed.hostLocal
         val arpTable = NetworkUtils.readArpTable()
-        var completed = 0L
-        var found = 0
-        val startMs = System.currentTimeMillis()
 
-        emit(ScanEvent.Progress(
-            "Router scan ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
-            0, total.toInt()))
-
-        val totalSubnets = subnets.size
-        subnets.forEachIndexed { subnetIndex, subnet ->
-            ScanPause.checkPause()
-            val ips = NetworkUtils.expandSubnetHosts(subnet)
-            val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
-
-            emit(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
-
-            // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
-            // (banyak perangkat tidak membalas ICMP tapi portnya terbuka)
-            ScanLoop.scanIps(ips, hostConcurrency, scanOne = { ip ->
-                val foundServices = scanRouterPorts(ip, speed.timeoutMs)
-                if (foundServices.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = foundServices)
-            }) { ip, host ->
-                completed++
-                if (host != null) { found++; emit(ScanEvent.HostFound(host)) }
-                val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
-            }
-        }
+        // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
+        ScanLoop.scanSubnets(subnets, speed, "Router scan", scanOne = { ip ->
+            val foundServices = scanRouterPorts(ip, speed.timeoutMs)
+            if (foundServices.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = foundServices)
+        }) { ev -> emit(ev) }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.ROUTER, target = target)))
     }

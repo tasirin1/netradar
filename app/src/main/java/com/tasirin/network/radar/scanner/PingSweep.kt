@@ -14,37 +14,12 @@ class PingSweep {
             return@flow
         }
 
-        val total = subnets.size * 254L
-        val isWide = subnets.size > 4
-        val batchSize = if (isWide) speed.hostWide else speed.hostLocal
         val arpTable = NetworkUtils.readArpTable()
-        var completed = 0L
-        var found = 0
-        val startMs = System.currentTimeMillis()
-
-        emit(ScanEvent.Progress(
-            "Ping ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
-            0, total.toInt()))
-
-        val totalSubnets = subnets.size
-        subnets.forEachIndexed { subnetIndex, subnet ->
-            ScanPause.checkPause()
-            val ips = NetworkUtils.expandSubnetHosts(subnet)
-            val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
-
-            emit(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
-
-            ScanLoop.scanIps(ips, batchSize, scanOne = { ip ->
-                PingUtil.pingProbe(ip)?.let { probe ->
-                    ScanLoop.hostInfo(ip, arpTable, latencyMs = probe.latencyMs, ttl = probe.ttl)
-                }
-            }) { ip, host ->
-                completed++
-                if (host != null) { found++; emit(ScanEvent.HostFound(host)) }
-                val elapsed = (System.currentTimeMillis() - startMs) / 1000
-                emit(ScanEvent.Progress("$subnetLabel · $ip · $found ditemukan · ${elapsed}s", completed.toInt(), total.toInt()))
+        ScanLoop.scanSubnets(subnets, speed, "Ping", scanOne = { ip ->
+            PingUtil.pingProbe(ip)?.let { probe ->
+                ScanLoop.hostInfo(ip, arpTable, latencyMs = probe.latencyMs, ttl = probe.ttl)
             }
-        }
+        }) { ev -> emit(ev) }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.PING, target = target)))
     }
