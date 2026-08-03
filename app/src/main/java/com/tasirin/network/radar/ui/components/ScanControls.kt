@@ -67,11 +67,11 @@ fun ScanButtonRow(
                 Text(label, fontSize = 10.sp, maxLines = 1)
             }
         }
-        Box {
+        Box(modifier = Modifier.weight(1f)) {
             OutlinedButton(
                 onClick = { moreOpen = true },
                 enabled = !isScanning,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
             ) {
                 Text("Lainnya ▾", fontSize = 10.sp, maxLines = 1)
