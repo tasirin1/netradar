@@ -269,8 +269,8 @@ fun MainScreen(
             title = { Text("Scan area luas?", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
-                    Text("Target '$target' mencakup ${state.pendingWideCount / 254} subnet " +
-                        "(±${state.pendingWideCount} IP).")
+                    Text("Target '$target' mencakup ±${state.pendingWideCount} IP " +
+                        "tersebar di banyak subnet.")
                     Spacer(Modifier.height(6.dp))
                     Text("Scan bisa berlangsung lama — makin rendah level sensitivitas, makin teliti tapi lambat.",
                         fontSize = 11.sp, color = TextSecondary)
@@ -1225,9 +1225,10 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     2 -> {
                         Text("How to Use:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Spacer(Modifier.height(4.dp))
-                        HelpBullet("Enter IP → scans full /24 subnet")
+                        HelpBullet("Enter IP awal → lanjut otomatis (mis. 192.168.15.1 → sampai 192.168.255.x)")
                         HelpBullet("Enter domain → resolves to IP then scans /24")
                         HelpBullet("Enter CIDR → scans that subnet (e.g. 192.168.1.0/24)")
+                        HelpBullet("Enter rentang → mis. 192.168.15.1-192.168.16.1 (lintas subnet)")
                         HelpBullet("Enter URL → extracts host and scans /24")
                         Spacer(Modifier.height(6.dp))
                         Text("Tips:", fontWeight = FontWeight.Bold, fontSize = 12.sp)

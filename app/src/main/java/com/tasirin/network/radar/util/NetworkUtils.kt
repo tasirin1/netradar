@@ -13,19 +13,31 @@ object NetworkUtils {
     const val MAX_SUBNETS = 65536 // max /24 subnets materialized (≈16.7M hosts max)
 
     /**
-     * Expand target to a list of /24 subnet prefixes ("192.168.1").
-     * Supports: full IP, domain, CIDR, range (192.168.0.1-100),
-     * partial prefix ("192.", "192.168.", "192.168.5.").
-     * Partial prefixes expand to ALL matching /24 subnets, continuing
-     * from the given octet up to 255 (e.g. "192.168." → 192.168.0 … 192.255.255).
+     * Target scan per subnet: prefix /24 (3 oktet) + rentang host di dalamnya.
+     * Default host 1..254 (melewati alamat network .0 dan broadcast .255).
      */
-    fun expandTargetSubnets(input: String): List<String> {
+    data class SubnetTarget(
+        val prefix: String,
+        val hostStart: Int = 1,
+        val hostEnd: Int = 254
+    )
+
+    /**
+     * Expand target ke daftar [SubnetTarget].
+     * Mendukung: IP penuh, domain, CIDR, rentang (192.168.0.1-254,
+     * 192.168.15.1-192.168.16.1 lintas subnet), dan awalan parsial
+     * ("192", "192.168.", "192.168.5", "192.168.15.1").
+     * Semua input numerik LANJUT dari titik yang diketik sampai 255, jadi
+     * "192.168.15.1" otomatis meneruskan ke 192.168.16.x … 192.168.255.x
+     * (tidak berhenti di 192.168.15.255).
+     */
+    fun expandTargetSubnets(input: String): List<SubnetTarget> {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return emptyList()
 
         var cleaned = trimmed.replaceFirst("^https?://".toRegex(), "")
 
-        // CIDR → break into /24 subnets
+        // CIDR → pecah menjadi /24
         if (cleaned.contains("/")) {
             val parts = cleaned.split("/")
             val base = parts[0].trim()
@@ -33,63 +45,102 @@ object NetworkUtils {
             return expandCidrSubnets(base, prefix)
         }
 
-        // Range: 192.168.0.1-254 → one /24 subnet
+        // Rentang bertanda "-": "192.168.0.1-254" atau "192.168.15.1-192.168.16.1"
         if (cleaned.contains("-")) {
-            val parts = cleaned.split("-")
-            val startParts = parts[0].trim().split(".")
-            if (startParts.size == 4) {
-                val start = startParts[3].toIntOrNull()
-                val end = parts[1].trim().toIntOrNull()
-                if (start != null && end != null && start in 1..254 && end in 1..254 && start <= end) {
-                    return listOf(startParts.dropLast(1).joinToString("."))
+            val rangeParts = cleaned.split("-")
+            if (rangeParts.size == 2) {
+                val startParts = rangeParts[0].trim().split(".").mapNotNull { it.toIntOrNull() }
+                val endParts = rangeParts[1].trim().split(".").mapNotNull { it.toIntOrNull() }
+                if (startParts.size == 4 && startParts.all { it in 0..255 }) {
+                    // "192.168.0.1-254" → satu subnet dengan rentang host
+                    if (endParts.size == 1 && endParts[0] in 0..255 && startParts[3] <= endParts[0]) {
+                        return listOf(SubnetTarget(
+                            startParts.dropLast(1).joinToString("."),
+                            hostStart = startParts[3], hostEnd = endParts[0]))
+                    }
+                    // "192.168.15.1-192.168.16.1" → rentang penuh lintas subnet
+                    if (endParts.size == 4 && endParts.all { it in 0..255 }) {
+                        return expandIpRange(startParts, endParts)
+                    }
                 }
             }
         }
 
-        // Partial IPv4 prefix (dengan/tanpa titik akhir): "192", "192.16", "192.168.",
-        // "192.168.5" → lanjut sampai 255 (mis. 192.16 → 192.16.x … 192.255.x)
+        // Awalan numerik (dengan/tanpa titik akhir): "192", "192.16", "192.168.",
+        // "192.168.5", "192.168.15.1" → lanjut dari titik yang diketik sampai 255
         cleaned = cleaned.substringBefore(":").trimEnd('.')
         val parts = cleaned.split(".")
-        if (parts.size in 1..3 && parts.all { it.isNotEmpty() && it.all(Char::isDigit) }) {
+        if (parts.size in 1..4 && parts.all { it.isNotEmpty() && it.all(Char::isDigit) }) {
             val octets = parts.map { it.toInt() }
             if (octets.any { it > 255 }) return emptyList()
             return when (parts.size) {
-                1 -> expandSubnetRange(octets[0], 0, 255)          // "192" → 192.0.x … 192.255.x
-                2 -> expandSubnetRange(octets[0], octets[1], 255)  // "192.16" → 192.16.x … 192.255.x
-                else -> listOf("${octets[0]}.${octets[1]}.${octets[2]}")  // "192.168.5" → satu subnet
+                1 -> expandSubnets(octets[0], 0, 255)              // "192" → 192.0.x … 192.255.x
+                2 -> expandSubnets(octets[0], octets[1], 255)      // "192.16" → 192.16.x … 192.255.x
+                3 -> expandSubnets(octets[0], octets[1], octets[1], octets[2], 255)
+                    // "192.168.5" → 192.168.5 … 192.168.255
+                4 -> expandSubnets(octets[0], octets[1], octets[1], octets[2], 255)
+                    .mapIndexed { i, t -> if (i == 0) t.copy(hostStart = octets[3]) else t }
+                    // "192.168.15.1" → 192.168.15.1 … 192.168.255.254
+                else -> emptyList()
             }
         }
 
-        // Full IP / domain → one /24 subnet
+        // Domain → satu subnet /24
         val ip = resolveDomain(cleaned) ?: return emptyList()
-        return listOf(ip.substringBeforeLast("."))
+        return listOf(SubnetTarget(ip.substringBeforeLast(".")))
     }
 
-    /** Generate /24 subnets for 1 octet + second-octet range. */
-    private fun expandSubnetRange(a: Int, bStart: Int, bEnd: Int): List<String> {
-        if (a !in 0..255 || bStart !in 0..255 || bEnd !in 0..255 || bStart > bEnd) return emptyList()
-        val result = mutableListOf<String>()
-        val count = (bEnd - bStart + 1) * 256
+    /** Bangun daftar subnet /24 dari rentang oktet-2 dan oktet-3. */
+    private fun expandSubnets(a: Int, bFrom: Int, bTo: Int, cFrom: Int = 0, cTo: Int = 255): List<SubnetTarget> {
+        if (a !in 0..255 || bFrom !in 0..255 || bTo !in 0..255 || bFrom > bTo ||
+            cFrom !in 0..255 || cTo !in 0..255 || cFrom > cTo) return emptyList()
+        val count = (bTo - bFrom + 1) * (cTo - cFrom + 1)
         if (count > MAX_SUBNETS) return emptyList()
-        for (b in bStart..bEnd) {
-            for (c in 0..255) result.add("$a.$b.$c")
+        val result = mutableListOf<SubnetTarget>()
+        for (b in bFrom..bTo) {
+            for (c in cFrom..cTo) result.add(SubnetTarget("$a.$b.$c"))
         }
         return result
     }
 
-    private fun expandCidrSubnets(baseIp: String, prefix: Int): List<String> {
+    /** Rentang dua IP penuh → subnet antara (boleh lintas subnet), host dibatasi ujung-ujungnya. */
+    private fun expandIpRange(start: List<Int>, end: List<Int>): List<SubnetTarget> {
+        val startInt = ipToLong(start)
+        val endInt = ipToLong(end)
+        if (startInt > endInt) return emptyList()
+        val startSub = startInt and 0xFFFFFF00L
+        val endSub = endInt and 0xFFFFFF00L
+        val subnetCount = ((endSub - startSub) / 256 + 1).toInt()
+        if (subnetCount > MAX_SUBNETS) return emptyList()
+        val result = mutableListOf<SubnetTarget>()
+        for (i in 0 until subnetCount) {
+            val prefix = intToIp((startSub + i * 256L).toInt()).substringBeforeLast(".")
+            result.add(SubnetTarget(
+                prefix,
+                hostStart = if (i == 0) start[3] else 1,
+                hostEnd = if (i == subnetCount - 1) end[3] else 254
+            ))
+        }
+        return result
+    }
+
+    private fun ipToLong(parts: List<Int>): Long =
+        (parts[0].toLong() shl 24) or (parts[1].toLong() shl 16) or
+                (parts[2].toLong() shl 8) or parts[3].toLong()
+
+    private fun expandCidrSubnets(baseIp: String, prefix: Int): List<SubnetTarget> {
         try {
             val addr = InetAddress.getByName(baseIp)
             val ipInt = bytesToInt(addr.address)
             val hostBits = 32 - prefix
-            if (hostBits < 8) return listOf(intToIp(ipInt).substringBeforeLast("."))
+            if (hostBits < 8) return listOf(SubnetTarget(intToIp(ipInt).substringBeforeLast(".")))
             val totalSubnets = 1 shl (hostBits - 8)
             if (totalSubnets > MAX_SUBNETS) return emptyList()
             val mask = if (hostBits >= 32) 0 else (-1 shl hostBits)
             val start = ipInt and mask
-            val result = mutableListOf<String>()
+            val result = mutableListOf<SubnetTarget>()
             for (i in 0 until totalSubnets) {
-                result.add(intToIp(start + (i shl 8)).substringBeforeLast("."))
+                result.add(SubnetTarget(intToIp(start + (i shl 8)).substringBeforeLast(".")))
             }
             return result
         } catch (_: Exception) { return emptyList() }
@@ -104,9 +155,12 @@ object NetworkUtils {
         } catch (_: Exception) { null }
     }
 
-    /** Expand a /24 subnet prefix to its 254 host IPs. */
-    fun expandSubnetHosts(subnet: String): List<String> {
-        return (1..254).map { "$subnet.$it" }
+    /** Expand satu subnet ke daftar IP host sesuai rentang [SubnetTarget]. */
+    fun expandSubnetHosts(subnet: SubnetTarget): List<String> {
+        val start = subnet.hostStart.coerceIn(0, 255)
+        val end = subnet.hostEnd.coerceIn(0, 255)
+        if (start > end) return emptyList()
+        return (start..end).map { "${subnet.prefix}.$it" }
     }
 
     private fun bytesToInt(bytes: ByteArray): Int {

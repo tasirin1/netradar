@@ -205,7 +205,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             if (subnets.size > WIDE_SCAN_THRESHOLD) {
                 _state.update {
                     it.copy(pendingWideTarget = target, pendingWideScanType = type,
-                        pendingWideCount = subnets.size * 254L)
+                        pendingWideCount = subnets.sumOf { (it.hostEnd - it.hostStart + 1).toLong() })
                 }
                 return
             }

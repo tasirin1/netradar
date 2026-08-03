@@ -71,13 +71,13 @@ object ScanLoop {
      * [label] dipakai di teks progress (mis. "Port scan", "Discover").
      */
     suspend fun scanSubnets(
-        subnets: List<String>,
+        subnets: List<NetworkUtils.SubnetTarget>,
         speed: ScanSpeed,
         label: String,
         scanOne: suspend (String) -> HostInfo?,
         onEvent: suspend (ScanEvent) -> Unit
     ) {
-        val total = subnets.size * 254L
+        val total = subnets.sumOf { (it.hostEnd - it.hostStart + 1).toLong() }
         val isWide = subnets.size > 4
         val batchSize = if (isWide) speed.hostWide else speed.hostLocal
         var completed = 0L
@@ -85,7 +85,7 @@ object ScanLoop {
         val startMs = System.currentTimeMillis()
 
         onEvent(ScanEvent.Progress(
-            "$label ${subnets.size} subnet — ${subnets.first()} … ${subnets.last()} (${total} IP)",
+            "$label ${subnets.size} subnet — ${subnets.first().prefix} … ${subnets.last().prefix} (${total} IP)",
             0, total.toInt()))
 
         val totalSubnets = subnets.size
@@ -94,7 +94,7 @@ object ScanLoop {
             val ips = NetworkUtils.expandSubnetHosts(subnet)
             val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
 
-            onEvent(ScanEvent.Progress("$subnetLabel — $subnet.0/24", completed.toInt(), total.toInt()))
+            onEvent(ScanEvent.Progress("$subnetLabel — ${subnet.prefix}.0/24", completed.toInt(), total.toInt()))
 
             scanIps(ips, batchSize, scanOne) { ip, host ->
                 completed++
