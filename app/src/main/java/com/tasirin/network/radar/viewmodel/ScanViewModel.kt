@@ -17,6 +17,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.ScanService
+import com.tasirin.network.radar.scanner.ScanCheckpoint
 import com.tasirin.network.radar.scanner.ScanLoop
 import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.FavoritesStore
@@ -25,6 +26,7 @@ import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.PingUtil
 import com.tasirin.network.radar.util.PingStore
 import com.tasirin.network.radar.util.ResultsStore
+import com.tasirin.network.radar.util.ScanCheckpointStore
 import com.tasirin.network.radar.util.ScanHistoryStore
 import com.tasirin.network.radar.util.AppSettings
 import com.tasirin.network.radar.util.SettingsStore
@@ -85,7 +87,12 @@ data class ScanUiState(
     val openDiffDialog: Boolean = false,
     val pendingWideTarget: String? = null,
     val pendingWideScanType: ScanType? = null,
-    val pendingWideCount: Long = 0L
+    val pendingWideCount: Long = 0L,
+    val canResumeScan: Boolean = false,
+    val resumeInfo: String = "",
+    val recentTargets: List<String> = emptyList(),
+    val monitorFavoritesOnly: Boolean = false,
+    val staleIps: Set<String> = emptySet()
 )
 
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
@@ -119,6 +126,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val gatewayLatencies = ArrayDeque<Long>()
     private var lastMonitorSaveAt = 0L
     private var lastWidgetAt = 0L
+    private var _checkpoint: ScanCheckpointStore.Checkpoint? = null
+    private var lastCheckpointSaveAt = 0L
+    private var _scanCount = 0L
 
     private companion object {
         const val CHANNEL_NEW_DEVICE = "new_device"
@@ -137,7 +147,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _uptime = UptimeStore.load(getApplication())
         _pingHistory = PingStore.load(getApplication())
         _history = ScanHistoryStore.load(getApplication())
+        _scanCount = ResultsStore.loadScanCount(getApplication())
+        _checkpoint = ScanCheckpointStore.load(getApplication())
         val settings = SettingsStore.load(getApplication())
+        val recent = buildRecentTargets(_history, _checkpoint)
+        val cp = _checkpoint
         _state.update {
             it.copy(
                 hosts = _hosts.values.toList(),
@@ -154,9 +168,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 soundEnabled = settings.soundEnabled,
                 autoDiffDialog = settings.autoDiffDialog,
                 compactMode = settings.compactMode,
+                monitorFavoritesOnly = settings.monitorFavoritesOnly,
+                recentTargets = recent,
+                canResumeScan = cp != null,
+                resumeInfo = cp?.let { resumeInfoText(it) } ?: "",
                 summary = if (_hosts.isEmpty()) "Ready" else "Riwayat: ${_hosts.size} host(s), ${_urls.size} URL(s)"
             )
         }
+        updateStaleIps()
         startGatewayMonitor()
     }
 
@@ -233,31 +252,31 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             val pctText = if (event.total > 0) " (${event.current}/${event.total})" else ""
                             val eta = estimateEta(event.current, event.total)
                             _state.update { it.copy(progress = "${event.ip}$pctText$eta", progressPercent = pct) }
+                            // Simpan posisi terakhir (subnet + host) untuk fitur lanjutkan scan
+                            if (event.subnetIndex >= 0) saveCheckpoint(type, target, event)
                             updateScanNotification(event)
                         }
                         is ScanEvent.HostFound -> {
                             _foundThisScan[event.host.ip] = event.host.openPorts.map { it.port }
                             val existing = _hosts[event.host.ip]
                             val isNew = existing == null
-                            val conflict = existing != null && existing.macAddress != null &&
-                                event.host.macAddress != null &&
-                                !existing.macAddress.equals(event.host.macAddress, ignoreCase = true)
                             val host = if (existing != null) {
-                                event.host.copy(isNew = false, label = existing.label ?: event.host.label,
-                                    ipConflict = conflict || existing.ipConflict)
+                                mergeHost(existing, event.host).copy(isNew = false)
                             } else event.host.copy(isNew = true)
-                            _hosts[host.ip] = host
+                            // Gabungkan data lintas scan + tandai scan terakhir terlihat
+                            val merged = host.copy(lastSeenScan = _scanCount)
+                            _hosts[merged.ip] = merged
                             refreshHostsUi()
-                            if (isNew && type != ScanType.TRACE) notifyNewDevice(host)
+                            if (isNew && type != ScanType.TRACE) notifyNewDevice(merged)
                             if (_state.value.soundEnabled) {
                                 SoundFeedback.playForPort(event.host.openPorts.firstOrNull()?.port ?: 0)
                             }
-                            if (host.ip in _favorites && !isNew &&
-                                _uptime[host.ip]?.lastOrNull()?.online == false) {
-                                notifyFavoriteBackOnline(host.ip)
+                            if (merged.ip in _favorites && !isNew &&
+                                _uptime[merged.ip]?.lastOrNull()?.online == false) {
+                                notifyFavoriteBackOnline(merged.ip)
                             }
                             recordUptime(event.host.ip, true)
-                            event.host.latencyMs?.let { recordPing(host.ip, it) }
+                            event.host.latencyMs?.let { recordPing(merged.ip, it) }
                             persistResults()
                         }
                         is ScanEvent.UrlFound -> {
@@ -293,6 +312,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                                 hostSummary = buildHostSummary(result), scanResult = result,
                                 openDiffDialog = openDiff) }
                             if (gen == scanGeneration) stopScanService()
+                            // Scan tuntas → posisi resume tidak diperlukan lagi
+                            clearCheckpoint(keepState = false)
+                            _scanCount++
+                            ResultsStore.saveScanCount(getApplication(), _scanCount)
+                            updateStaleIps()
+                            refreshRecentTargets()
                         }
                         else -> {}
                     }
@@ -335,6 +360,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         monitorJob?.cancel(); monitorJob = null
         _deepScanJob?.cancel(); _deepScanJob = null
         stopScanService()
+        persistCheckpoint(force = true)  // simpan posisi agar bisa dilanjutkan nanti
         persistResults(force = true)
         refreshHostsUi(force = true)
         _state.update { it.copy(isScanning = false, isPaused = false, deepScanning = null, deepScanProgress = 0,
@@ -342,25 +368,139 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             summaryColor = 0xFFC62828, isSummaryOk = false, monitor = MonitorState(), selectedHosts = emptySet()) }
     }
 
+    /** Lanjutkan scan terakhir dari posisi yang tersimpan (banner "Lanjutkan"). */
+    fun resumeLastScan() {
+        val cp = _checkpoint ?: return
+        val type = ScanType.entries.firstOrNull { it.label == cp.type } ?: return
+        ScanCheckpoint.setResume(cp.subnetIndex, cp.hostOffset)
+        _state.update { it.copy(target = cp.target) }
+        startScan(type, force = true)
+    }
+
+    /** Hapus posisi scan tersimpan (tombol "Mulai baru" / X di banner). */
+    fun clearCheckpoint() {
+        clearCheckpoint(keepState = false)
+    }
+
+    private fun clearCheckpoint(keepState: Boolean) {
+        ScanCheckpoint.reset()
+        _checkpoint = null
+        ScanCheckpointStore.save(getApplication(), null)
+        if (!keepState) {
+            _state.update { it.copy(canResumeScan = false, resumeInfo = "") }
+        }
+    }
+
+    private fun saveCheckpoint(type: ScanType, target: String, event: ScanEvent.Progress) {
+        // Traceroute & URL Path tidak pakai scanSubnets → tidak bisa di-resume
+        if (type == ScanType.TRACE || type == ScanType.URL_PATH) return
+        val cp = ScanCheckpointStore.Checkpoint(
+            target = target,
+            type = type.label,
+            subnetIndex = event.subnetIndex,
+            hostOffset = event.hostOffset,
+            total = event.total.toLong(),
+            lastIp = event.ip,
+            updatedAt = System.currentTimeMillis()
+        )
+        _checkpoint = cp
+        persistCheckpoint()
+    }
+
+    private fun persistCheckpoint(force: Boolean = false) {
+        val cp = _checkpoint ?: return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastCheckpointSaveAt < 3_000) return
+        lastCheckpointSaveAt = now
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) { ScanCheckpointStore.save(app, cp) }
+    }
+
+    /** Gabungkan data host lama + baru lintas scan agar tidak ada data yang hilang. */
+    private fun mergeHost(existing: HostInfo, fresh: HostInfo): HostInfo {
+        val mac = fresh.macAddress ?: existing.macAddress
+        val mergedPorts = (fresh.openPorts + existing.openPorts).distinctBy { it.port }
+        return HostInfo(
+            ip = fresh.ip,
+            hostname = fresh.hostname ?: existing.hostname,
+            label = existing.label ?: fresh.label,
+            macAddress = mac,
+            macVendor = fresh.macVendor ?: existing.macVendor ?: mac?.let { NetworkUtils.lookupMacVendor(it) },
+            latencyMs = fresh.latencyMs ?: existing.latencyMs,
+            osGuess = fresh.osGuess ?: existing.osGuess,
+            isAlive = fresh.isAlive || existing.isAlive,
+            openPorts = mergedPorts,
+            isNew = false,
+            ipConflict = existing.ipConflict || (fresh.macAddress != null && existing.macAddress != null &&
+                !fresh.macAddress.equals(existing.macAddress, ignoreCase = true)),
+            lastSeenScan = fresh.lastSeenScan
+        )
+    }
+
+    private fun resumeInfoText(cp: ScanCheckpointStore.Checkpoint): String {
+        val type = ScanType.entries.firstOrNull { it.label == cp.type }?.label ?: cp.type
+        val remaining = (cp.total - (cp.subnetIndex.toLong() * 254 + cp.hostOffset)).coerceAtLeast(0)
+        val last = cp.lastIp.ifBlank { cp.target }
+        return "$type · berhenti di $last · sisa ±$remaining IP"
+    }
+
+    private fun buildRecentTargets(
+        history: List<ScanHistoryEntry>,
+        cp: ScanCheckpointStore.Checkpoint?
+    ): List<String> {
+        val list = mutableListOf<String>()
+        cp?.target?.takeIf { it.isNotBlank() }?.let { if (it !in list) list.add(it) }
+        history.forEach { h ->
+            val t = h.target.trim()
+            if (t.isNotEmpty() && t !in list) list.add(t)
+        }
+        return list.take(8)
+    }
+
+    private fun refreshRecentTargets() {
+        _state.update { it.copy(recentTargets = buildRecentTargets(_history, _checkpoint)) }
+    }
+
+    /** Tandai host yang tidak muncul dalam 2 scan terakhir sebagai "Lama". */
+    private fun updateStaleIps() {
+        val stale = _hosts.values
+            .filter { it.lastSeenScan > 0 && _scanCount - it.lastSeenScan >= 2 }
+            .map { it.ip }
+            .toSet()
+        _state.update { it.copy(staleIps = stale) }
+    }
+
+    fun setMonitorFavoritesOnly(enabled: Boolean) {
+        _state.update { it.copy(monitorFavoritesOnly = enabled) }
+        persistSettings()
+    }
+
     private fun startMonitor(target: String) {
-        val hosts = _hosts.values.toList().sortedBy { it.ip }
-        if (hosts.isEmpty()) {
+        val favoritesOnly = _state.value.monitorFavoritesOnly
+        val ips = if (favoritesOnly) _favorites.toList().sorted()
+        else _hosts.values.map { it.ip }.sorted()
+        if (ips.isEmpty()) {
+            if (favoritesOnly) {
+                _state.update { it.copy(error = "Belum ada favorit — bintangi perangkat dulu (⭐)") }
+                return
+            }
             startSingleMonitor(target)
             return
         }
         _state.update { it.copy(isScanning = true, scanType = ScanType.MONITOR, error = null,
-            summary = "Monitoring ${hosts.size} perangkat...", summaryColor = 0xFF00695C, isSummaryOk = true,
+            summary = "Monitoring ${ips.size} perangkat...", summaryColor = 0xFF00695C, isSummaryOk = true,
             monitor = MonitorState(isRunning = true)) }
         monitorJob?.cancel()
         monitorJob = viewModelScope.launch {
             var pings = 0
             while (isActive) {
                 // Sinkronkan daftar host tiap siklus: host baru ikut, host dihapus keluar
-                val ips = _hosts.values.map { it.ip }.sorted()
-                if (ips.isEmpty()) break
+                val currentIps = if (favoritesOnly) _favorites.toList().sorted()
+                else _hosts.values.map { it.ip }.sorted()
+                if (currentIps.isEmpty()) break
                 // pingProbe memblokir (ProcessBuilder), jadi jalankan di IO
                 val probes = withContext(Dispatchers.IO) {
-                    ips.chunked(8).flatMap { chunk ->
+                    currentIps.chunked(8).flatMap { chunk ->
                         chunk.map { ip -> async { ip to PingUtil.pingProbe(ip) } }.map { it.await() }
                     }
                 }
@@ -701,7 +841,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             keepScreenOn = s.keepScreenOn,
             soundEnabled = s.soundEnabled,
             autoDiffDialog = s.autoDiffDialog,
-            compactMode = s.compactMode
+            compactMode = s.compactMode,
+            monitorFavoritesOnly = s.monitorFavoritesOnly
         ))
     }
 
@@ -819,7 +960,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         if (now - lastScanNotifAt < 1_000) return
         lastScanNotifAt = now
         val pct = if (event.total > 0) event.current * 100 / event.total else 0
-        postProgressNotification("NetRadar — scan berjalan", event.ip, pct)
+        val eta = estimateEta(event.current, event.total)
+        postProgressNotification("NetRadar — scan berjalan ($pct%)", "${event.ip}$eta", pct)
     }
 
     /** Notifikasi ringkas saat scan selesai (hanya jika app di background). */
@@ -1129,9 +1271,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun estimateEta(current: Int, total: Int): String {
         if (total <= 0 || current <= 0) return ""
-        val elapsed = System.currentTimeMillis() - _startTime
-        val remainMs = (total - current).toDouble() * elapsed / current
-        val remainSec = (remainMs / 1000).toInt()
+        val elapsedMs = System.currentTimeMillis() - _startTime
+        if (elapsedMs <= 0) return ""
+        // Kecepatan aktual (IP/detik) dari progres yang sudah lewat
+        val rate = current.toDouble() * 1000 / elapsedMs
+        val remainSec = ((total - current) / rate).toInt()
         val m = remainSec / 60
         val s = remainSec % 60
         return " · sisa ±${m}m ${s}s"
@@ -1144,6 +1288,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         gatewayJob?.cancel()
         _deepScanJob?.cancel()
         stopScanService()
+        ScanCheckpointStore.save(getApplication(), _checkpoint)  // sinkron: viewModelScope sudah batal
         ResultsStore.save(getApplication(), _hosts.values.toList(), _urls.values.toList())
+        ResultsStore.saveScanCount(getApplication(), _scanCount)
     }
 }

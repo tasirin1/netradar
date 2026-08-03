@@ -69,6 +69,7 @@ class MainActivity : AppCompatActivity() {
                         onSetSoundEnabled = { v -> viewModel.setSoundEnabled(v) },
                         onSetAutoDiffDialog = { v -> viewModel.setAutoDiffDialog(v) },
                         onSetCompactMode = { v -> viewModel.setCompactMode(v) },
+                        onSetMonitorFavoritesOnly = { v -> viewModel.setMonitorFavoritesOnly(v) },
                         onCopyIp = { ip -> viewModel.copyToClipboard("IP", ip) },
                         onCopyAll = {
                             viewModel.copyToClipboard("Scan Results", viewModel.copyAllText())
@@ -98,7 +99,9 @@ class MainActivity : AppCompatActivity() {
                         onSetHostLabel = { ip, label -> viewModel.setHostLabel(ip, label) },
                         onDiffDialogShown = { viewModel.diffDialogShown() },
                         onConfirmWideScan = { viewModel.confirmWideScan() },
-                        onCancelWideScan = { viewModel.cancelWideScan() }
+                        onCancelWideScan = { viewModel.cancelWideScan() },
+                        onResumeScan = { viewModel.resumeLastScan() },
+                        onClearCheckpoint = { viewModel.clearCheckpoint() }
                     )
                 }
             }

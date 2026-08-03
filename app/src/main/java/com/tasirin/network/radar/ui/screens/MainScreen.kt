@@ -107,7 +107,10 @@ fun MainScreen(
     onSetHostLabel: ((String, String?) -> Unit)? = null,
     onDiffDialogShown: (() -> Unit)? = null,
     onConfirmWideScan: (() -> Unit)? = null,
-    onCancelWideScan: (() -> Unit)? = null
+    onCancelWideScan: (() -> Unit)? = null,
+    onResumeScan: (() -> Unit)? = null,
+    onClearCheckpoint: (() -> Unit)? = null,
+    onSetMonitorFavoritesOnly: ((Boolean) -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -148,6 +151,7 @@ fun MainScreen(
             soundEnabled = state.soundEnabled,
             autoDiffDialog = state.autoDiffDialog,
             compactMode = state.compactMode,
+            monitorFavoritesOnly = state.monitorFavoritesOnly,
             onTheme = { onSetTheme?.invoke(it) },
             onNotifyNewDevices = { onSetNotifyNewDevices?.invoke(it) },
             onNotifyImportantOffline = { onSetNotifyImportantOffline?.invoke(it) },
@@ -156,6 +160,7 @@ fun MainScreen(
             onSoundEnabled = { onSetSoundEnabled?.invoke(it) },
             onAutoDiffDialog = { onSetAutoDiffDialog?.invoke(it) },
             onCompactMode = { onSetCompactMode?.invoke(it) },
+            onMonitorFavoritesOnly = { onSetMonitorFavoritesOnly?.invoke(it) },
             onDismiss = { onToggleSettings?.invoke() }
         )
     }
@@ -306,7 +311,8 @@ fun MainScreen(
         )
     }
 
-    val filteredHosts = remember(state.hosts, state.searchQuery, state.deviceFilter, state.statusFilter, state.uptime) {
+    val filteredHosts = remember(state.hosts, state.searchQuery, state.deviceFilter, state.statusFilter,
+        state.uptime, state.staleIps) {
         val q = state.searchQuery.trim()
         state.hosts.filter { host ->
             val okQuery = q.isEmpty() || host.ip.contains(q, true) ||
@@ -331,6 +337,7 @@ fun MainScreen(
                 HostStatusFilter.ALL -> true
                 HostStatusFilter.ONLINE -> lastOnline == true
                 HostStatusFilter.OFFLINE -> lastOnline == false
+                HostStatusFilter.LAMA -> host.ip in state.staleIps
             }
             okQuery && okFilter && okStatus
         }
@@ -453,6 +460,58 @@ fun MainScreen(
                         Icon(Icons.Default.Speed, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(4.dp))
                         Text(state.scanSpeed.label, fontSize = 11.sp)
+                    }
+                }
+            }
+            // Banner lanjutkan scan terakhir (posisi tersimpan saat stop / app ditutup)
+            if (state.canResumeScan && !state.isScanning) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(state.resumeInfo, fontSize = 10.sp, color = TextSecondary,
+                                modifier = Modifier.weight(1f), maxLines = 2)
+                            TextButton(
+                                onClick = { onResumeScan?.invoke() },
+                                contentPadding = PaddingValues(horizontal = 6.dp)
+                            ) {
+                                Text("Lanjutkan", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            TextButton(
+                                onClick = { onClearCheckpoint?.invoke() },
+                                contentPadding = PaddingValues(horizontal = 6.dp)
+                            ) {
+                                Text("Mulai baru", fontSize = 10.sp, color = TextSecondary)
+                            }
+                        }
+                    }
+                }
+            }
+            // Chip target terakhir agar cepat mengulang scan
+            if (state.recentTargets.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        state.recentTargets.forEach { target ->
+                            AssistChip(
+                                onClick = { onTargetChange(target) },
+                                label = { Text(target, fontSize = 10.sp, maxLines = 1) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.History, null, Modifier.size(12.dp), tint = TextSecondary)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -666,6 +725,7 @@ fun MainScreen(
                     items(filteredHosts, key = { it.ip }) { host ->
                         HostCard(
                             host = host,
+                            isStale = host.ip in state.staleIps,
                             pingHistory = state.pingHistory[host.ip] ?: emptyList(),
                             compact = state.compactMode,
                             isFavorite = host.ip in state.favoriteIps,
@@ -954,6 +1014,7 @@ private fun SettingsDialog(
     soundEnabled: Boolean,
     autoDiffDialog: Boolean,
     compactMode: Boolean,
+    monitorFavoritesOnly: Boolean,
     onTheme: (Boolean?) -> Unit,
     onNotifyNewDevices: (Boolean) -> Unit,
     onNotifyImportantOffline: (Boolean) -> Unit,
@@ -962,6 +1023,7 @@ private fun SettingsDialog(
     onSoundEnabled: (Boolean) -> Unit,
     onAutoDiffDialog: (Boolean) -> Unit,
     onCompactMode: (Boolean) -> Unit,
+    onMonitorFavoritesOnly: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -986,6 +1048,7 @@ private fun SettingsDialog(
                 }
                 SettingsSwitch("Mode ringkas (sembunyikan sparkline & detail)", compactMode, onCompactMode)
                 SettingsSwitch("Cegah layar mati saat scan", keepScreenOn, onKeepScreenOn)
+                SettingsSwitch("Monitor hanya perangkat favorit (⭐)", monitorFavoritesOnly, onMonitorFavoritesOnly)
                 Spacer(Modifier.height(12.dp))
                 Text("Notifikasi", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 SettingsSwitch("Perangkat baru terdeteksi", notifyNewDevices, onNotifyNewDevices)

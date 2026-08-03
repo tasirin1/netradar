@@ -41,7 +41,8 @@ fun HostCard(
     selectionMode: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
     pingHistory: List<PingEvent> = emptyList(),
-    compact: Boolean = false
+    compact: Boolean = false,
+    isStale: Boolean = false
 ) {
     val uriHandler = LocalUriHandler.current
     var showPortInfo by remember { mutableStateOf<PortInfo?>(null) }
@@ -96,6 +97,13 @@ fun HostCard(
                 if (host.isNew) {
                     Spacer(Modifier.width(6.dp))
                     Text("NEW", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AccentGreen)
+                }
+                if (isStale) {
+                    Spacer(Modifier.width(6.dp))
+                    Surface(shape = MaterialTheme.shapes.small, color = StatusOrange.copy(alpha = 0.15f)) {
+                        Text("Lama", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = StatusOrange,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                    }
                 }
                 if (kinds.isNotEmpty()) {
                     Spacer(Modifier.width(6.dp))

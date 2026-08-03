@@ -17,7 +17,8 @@ data class HostInfo(
     val isAlive: Boolean = true,
     val openPorts: List<PortInfo> = emptyList(),
     val isNew: Boolean = false,
-    val ipConflict: Boolean = false
+    val ipConflict: Boolean = false,
+    val lastSeenScan: Long = 0
 )
 
 data class NetworkInfo(
@@ -58,7 +59,8 @@ enum class SortMode(val label: String) {
 enum class HostStatusFilter(val label: String) {
     ALL("Semua"),
     ONLINE("Online"),
-    OFFLINE("Offline")
+    OFFLINE("Offline"),
+    LAMA("Lama")
 }
 
 /** Jenis perangkat yang terdeteksi dari service/port yang terbuka. */
@@ -167,7 +169,13 @@ data class ScanDiff(
 )
 
 sealed class ScanEvent {
-    data class Progress(val ip: String, val current: Int, val total: Int) : ScanEvent()
+    data class Progress(
+        val ip: String,
+        val current: Int,
+        val total: Int,
+        val subnetIndex: Int = 0,
+        val hostOffset: Int = 0
+    ) : ScanEvent()
     data class HostFound(val host: HostInfo) : ScanEvent()
     data class UrlFound(val url: UrlDiscovery) : ScanEvent()
     data class Error(val message: String) : ScanEvent()

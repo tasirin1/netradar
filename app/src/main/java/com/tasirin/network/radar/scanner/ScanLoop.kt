@@ -69,6 +69,8 @@ object ScanLoop {
      * Loop scan antar subnet yang dipakai semua scanner: progres per subnet,
      * pause antar subnet, dan hitung total IP + temuan secara terpusat.
      * [label] dipakai di teks progress (mis. "Port scan", "Discover").
+     * Mendukung resume dari posisi terakhir (ScanCheckpoint) dan retry sekali
+     * untuk host yang tidak merespons agar risiko skip mengecil.
      */
     suspend fun scanSubnets(
         subnets: List<NetworkUtils.SubnetTarget>,
@@ -80,30 +82,64 @@ object ScanLoop {
         val total = subnets.sumOf { (it.hostEnd - it.hostStart + 1).toLong() }
         val isWide = subnets.size > 4
         val batchSize = if (isWide) speed.hostWide else speed.hostLocal
-        var completed = 0L
+        val resume = ScanCheckpoint.takeIfResume()
+        val preDone = if (resume != null) {
+            subnets.take(resume.first).sumOf { (it.hostEnd - it.hostStart + 1).toLong() } + resume.second
+        } else 0L
+        var completed = preDone
         var found = 0
         val startMs = System.currentTimeMillis()
 
-        onEvent(ScanEvent.Progress(
-            "$label ${subnets.size} subnet — ${subnets.first().prefix} … ${subnets.last().prefix} (${total} IP)",
-            0, total.toInt()))
+        val intro = if (resume != null) "Lanjut $label dari posisi terakhir"
+        else "$label ${subnets.size} subnet — ${subnets.first().prefix} … ${subnets.last().prefix} (${total} IP)"
+        onEvent(ScanEvent.Progress(intro, completed.toInt(), total.toInt()))
 
         val totalSubnets = subnets.size
+        val missed = mutableListOf<String>()
         subnets.forEachIndexed { subnetIndex, subnet ->
             ScanPause.checkPause()
             val ips = NetworkUtils.expandSubnetHosts(subnet)
+            if (resume != null && subnetIndex < resume.first) {
+                // Subnet yang sudah tuntas sebelum resume: cukup dihitung, tidak discan ulang
+                return@forEachIndexed
+            }
+            val startOffset = if (resume != null && subnetIndex == resume.first) resume.second else 0
             val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
+            var subnetDone = 0
 
-            onEvent(ScanEvent.Progress("$subnetLabel — ${subnet.prefix}.0/24", completed.toInt(), total.toInt()))
+            onEvent(ScanEvent.Progress(
+                "$subnetLabel — ${subnet.prefix}.0/24", completed.toInt(), total.toInt(),
+                subnetIndex, startOffset))
 
-            scanIps(ips, batchSize, scanOne) { ip, host ->
-                completed++
-                if (host != null) { found++; onEvent(ScanEvent.HostFound(host)) }
+            val toScan = if (startOffset > 0) ips.drop(startOffset) else ips
+            scanIps(toScan, batchSize, scanOne) { ip, host ->
+                if (host == null) missed.add(ip)
+                else { found++; onEvent(ScanEvent.HostFound(host)) }
+                completed++; subnetDone++
                 val elapsed = (System.currentTimeMillis() - startMs) / 1000
                 onEvent(ScanEvent.Progress(
                     "$subnetLabel · $ip · $found ditemukan · ${elapsed}s",
-                    completed.toInt(), total.toInt()))
+                    completed.toInt(), total.toInt(), subnetIndex, startOffset + subnetDone))
+            }
+        }
+
+        // Retry sekali host yang tidak merespons (mis. timeout karena paralel padat).
+        // Batasi jumlahnya agar scan luas tidak melambat berlebihan.
+        if (missed.isNotEmpty() && missed.size <= MAX_RETRY_HOSTS) {
+            ScanPause.checkPause()
+            onEvent(ScanEvent.Progress("Retry ${missed.size} host yang tidak merespons...",
+                completed.toInt(), total.toInt()))
+            scanIps(missed, batchSize, scanOne) { ip, host ->
+                if (host != null) {
+                    found++
+                    onEvent(ScanEvent.HostFound(host))
+                    onEvent(ScanEvent.Progress(
+                        "Retry · $ip ditemukan · $found total", completed.toInt(), total.toInt(),
+                        subnetIndex = -1))
+                }
             }
         }
     }
+
+    private const val MAX_RETRY_HOSTS = 2000
 }

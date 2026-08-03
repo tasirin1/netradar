@@ -13,6 +13,7 @@ object ResultsStore {
     private const val PREFS = "netradar_results"
     private const val KEY_HOSTS = "hosts"
     private const val KEY_URLS = "urls"
+    private const val KEY_SCAN_COUNT = "scanCount"
 
     fun save(context: Context, hosts: Collection<HostInfo>, urls: Collection<UrlDiscovery>) {
         try {
@@ -36,6 +37,16 @@ object ResultsStore {
         }
     }
 
+    fun loadScanCount(context: Context): Long =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_SCAN_COUNT, 0L)
+
+    fun saveScanCount(context: Context, count: Long) {
+        try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putLong(KEY_SCAN_COUNT, count).apply()
+        } catch (_: Exception) { }
+    }
+
     private fun hostToJson(host: HostInfo): JSONObject = JSONObject().apply {
         put("ip", host.ip)
         host.hostname?.let { put("hostname", it) }
@@ -45,6 +56,7 @@ object ResultsStore {
         host.latencyMs?.let { put("latency", it) }
         put("alive", host.isAlive)
         if (host.ipConflict) put("conflict", true)
+        if (host.lastSeenScan > 0) put("seen", host.lastSeenScan)
         val ports = JSONArray()
         host.openPorts.forEach { p ->
             ports.put(JSONObject().apply {
@@ -88,6 +100,7 @@ object ResultsStore {
                     latencyMs = if (o.has("latency")) o.optLong("latency") else null,
                     isAlive = o.optBoolean("alive", true),
                     ipConflict = o.optBoolean("conflict", false),
+                    lastSeenScan = o.optLong("seen", 0),
                     openPorts = ports
                 ))
             }
