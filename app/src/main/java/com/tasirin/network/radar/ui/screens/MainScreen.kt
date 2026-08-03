@@ -558,6 +558,8 @@ fun MainScreen(
             if (state.hosts.isNotEmpty()) {
                 item {
                     Column {
+                        val filterActive =
+                            state.deviceFilter != DeviceFilter.ALL || state.statusFilter != HostStatusFilter.ALL
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 if (filteredHosts.size == state.hosts.size) "Hosts (${state.hosts.size})"
@@ -565,8 +567,6 @@ fun MainScreen(
                                 fontWeight = FontWeight.Bold, fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f)
                             )
-                            val filterActive =
-                                state.deviceFilter != DeviceFilter.ALL || state.statusFilter != HostStatusFilter.ALL
                             IconButton(onClick = { showFilterDialog = true }, modifier = Modifier.size(32.dp)) {
                                 Icon(Icons.Default.FilterList, null, Modifier.size(18.dp),
                                     tint = if (filterActive) MaterialTheme.colorScheme.primary else TextSecondary)
