@@ -40,9 +40,12 @@ Detail kemampuan:
   lintas subnet otomatis, expand subnet satu ketukan.
 - **Resume scan**: scan yang terhenti bisa dilanjutkan dari checkpoint
   (bukan mulai dari nol) + **ETA aktual** & retry host timeout.
-- **Informasi host kaya**: hostname, MAC + vendor, latensi (sparkline),
-  tebakan OS, IP conflict, penanda host lama (`lastSeen`), deteksi perangkat
-  baru.
+- **Informasi host kaya**: hostname (reverse DNS + fallback mDNS/SSDP),
+  MAC + vendor, latensi (sparkline), tebakan OS, IP conflict, penanda host
+  lama (`lastSeen`), deteksi perangkat baru.
+- **Risiko port**: badge tingkat bahaya (Kritis/Tinggi/Sedang/Rendah) di
+  dialog detail port — bantu kenali layanan berbahaya (ADB, Telnet, Hikvision,
+  Docker tanpa TLS).
 - **Merge data hasil scan** dari beberapa sumber/putaran; ARP/DNS disimpan
   saat rescan.
 - **Gateway dari tabel routing**, status internet WAN di header, indikator
@@ -104,6 +107,11 @@ Detail kemampuan:
 ## Build
 
 ### Resmi (GitHub Actions)
+
+Versi toolchain (jangan diubah sembarangan — sudah disamakan dengan repo
+Tasirin Download Manager): AGP `8.5.2`, Kotlin `1.9.24`, Compose Compiler
+`1.5.8`, Gradle `8.9`. CI juga menjalankan `testDebugUnitTest` sebelum
+`assembleRelease`.
 
 Workflow `.github/workflows/build.yml` berjalan otomatis **setiap push** ke
 branch mana pun: install Android SDK, jalankan unit test
@@ -266,8 +274,16 @@ sesuai namanya.
   `ScanPause.kt`, `ScannerManager.kt`.
 - **Target/network helper** → `util/NetworkUtils.kt` (+ test di
   `NetworkUtilsTest.kt`).
-- **UI hasil/filter/sort** → `ui/screens/MainScreen.kt`,
+- **Resolusi nama perangkat (mDNS/SSDP)** → `scanner/MdnsNameResolver.kt`
+  (cache dibangun sekali per scan di `ScannerManager`; fallback hostname di
+  `ScanLoop`).
+- **Risiko/deskripsi port** → `model/ScanModels.kt` (`PortRisk`/`PortRisks`),
+  badge di `ui/components/ResultsList.kt` (`PortInfoDialog`).
+- **UI hasil/filter/sort** → `ui/screens/ResultsTab.kt`, `Pages.kt`,
   `ui/components/ResultsList.kt`, `viewmodel/ScanViewModel.kt`.
+- **Logika murni (diff scan, parser, tebakan OS)** → taruh fungsi di
+  `model/`/`util/`/`scanner/` dan tulis unit test JVM di `app/src/test/`
+  (tanpa Context — dilarang Robolectric).
 - **Pengaturan baru** → `util/SettingsStore.kt` (kunci baru) + UI di
   `MainScreen.kt`/halaman Pengaturan.
 - **Widget** → `widget/NetRadarWidget.kt` + `res/layout/widget_netradar.xml`.
