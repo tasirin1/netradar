@@ -175,7 +175,7 @@ object MdnsNameResolver {
 
     private class DnsCursor(private val data: ByteArray, private val limit: Int) {
         var pos = 0
-        fun u8(): Int = if (pos < limit) data[pos++] and 0xFF else 0
+        fun u8(): Int = if (pos < limit) data[pos++].toInt() and 0xFF else 0
         fun u16(): Int = (u8() shl 8) or u8()
         fun skip(n: Int) { pos += n }
 
@@ -186,19 +186,19 @@ object MdnsNameResolver {
             var broken = false
             while (true) {
                 if (p >= limit) { broken = true; break }
-                val b = data[p] and 0xFF
+                val b = data[p].toInt() and 0xFF
                 when {
                     b == 0 -> { if (jumps == 0) pos = p + 1; break }
                     b and 0xC0 == 0xC0 -> {
                         if (p + 1 >= limit) { broken = true; break }
                         if (jumps == 0) pos = p + 2
-                        p = ((b and 0x3F) shl 8) or (data[p + 1] and 0xFF)
+                        p = ((b and 0x3F) shl 8) or (data[p + 1].toInt() and 0xFF)
                         if (++jumps > 24) { broken = true; break }
                     }
                     else -> {
                         if (p + 1 + b > limit) { broken = true; break }
                         if (sb.isNotEmpty()) sb.append('.')
-                        for (i in 0 until b) sb.append((data[p + 1 + i] and 0xFF).toChar())
+                        for (i in 0 until b) sb.append((data[p + 1 + i].toInt() and 0xFF).toChar())
                         p += 1 + b
                     }
                 }
