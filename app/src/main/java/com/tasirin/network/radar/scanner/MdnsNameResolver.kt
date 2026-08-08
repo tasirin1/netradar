@@ -151,7 +151,8 @@ object MdnsNameResolver {
         if (!text.startsWith("HTTP/1.1 200", ignoreCase = true)) return null
         val server = headerValue(text, "SERVER:") ?: return null
         val usn = headerValue(text, "USN:")
-        val vendor = server.substringBefore("/").substringBefore(" ").trim()
+        val serverName = server.substringBefore("/").trim()
+        val vendor = if (serverName.endsWith(" UPnP", ignoreCase = true)) serverName.dropLast(5).trim() else serverName
             .takeIf { it.isNotBlank() && !it.equals("UPnP", true) && !it.equals("Linux", true) &&
                 !it.startsWith("http", true) && !it.equals("Windows", true) }
         val type = usn?.let { Regex("device:([^:]+)").find(it)?.groupValues?.get(1) }

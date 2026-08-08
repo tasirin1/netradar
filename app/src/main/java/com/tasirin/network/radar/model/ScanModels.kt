@@ -86,11 +86,11 @@ fun HostInfo.deviceKinds(): Set<DeviceKind> = buildSet {
     if (openPorts.any { p ->
             p.service?.contains("Camera", true) == true || p.service?.contains("Hikvision", true) == true ||
             p.service?.contains("Dahua", true) == true || p.service?.contains("ONVIF", true) == true ||
-            p.service?.contains("RTSP", true) == true }) add(DeviceKind.CAMERA)
+            p.service?.contains("RTSP", true) == true || p.port in CAMERA_PORTS }) add(DeviceKind.CAMERA)
     if (openPorts.any { p ->
             p.service?.contains("Router", true) == true || p.service?.contains("MikroTik", true) == true ||
             p.service?.contains("Winbox", true) == true || p.service?.contains("TR-069", true) == true ||
-            p.service?.contains("UPnP", true) == true }) add(DeviceKind.ROUTER)
+            p.service?.contains("UPnP", true) == true || p.port in ROUTER_PORTS }) add(DeviceKind.ROUTER)
     if (openPorts.any { p -> p.port in listOf(445, 139, 2049, 21, 111, 135) }) add(DeviceKind.SHARE)
     if (openPorts.any { p ->
             p.port in PRINTER_PORTS ||
@@ -107,6 +107,8 @@ fun HostInfo.deviceKinds(): Set<DeviceKind> = buildSet {
     if (openPorts.any { p -> p.port in PHONE_PORTS }) add(DeviceKind.PHONE)
 }
 
+private val CAMERA_PORTS = setOf(554, 8554, 34567, 37777, 37215, 8899, 7070, 6666)
+private val ROUTER_PORTS = setOf(8291, 7547, 5000)
 private val PRINTER_PORTS = setOf(515, 631, 9100)
 private val NAS_PORTS = setOf(548, 873, 3260)
 private val TV_PORTS = setOf(55000, 9197, 8060, 56789, 1926, 49000)
