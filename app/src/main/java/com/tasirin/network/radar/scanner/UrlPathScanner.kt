@@ -229,17 +229,17 @@ class UrlPathScanner {
                         val buf = CharArray(500); val n = it.read(buf, 0, 500)
                         if (n > 0) String(buf, 0, n) else ""
                     }
-                    title = Regex("""<title>(.*?)</title>""", RegexOption.IGNORE_CASE)
+                    title = TITLE_REGEX
                         .find(body)?.groupValues?.get(1)?.take(80)?.trim()
                 } catch (_: Exception) { }
-            } else if (code in listOf(401, 403)) {
+            } else if (code in AUTH_CODES) {
                 try {
                     val body = conn.errorStream?.bufferedReader()?.use {
                         val buf = CharArray(300); val n = it.read(buf, 0, 300)
                         if (n > 0) String(buf, 0, n) else ""
                     }
                     title = body?.let {
-                        Regex("""<title>(.*?)</title>""", RegexOption.IGNORE_CASE)
+                        TITLE_REGEX
                             .find(it)?.groupValues?.get(1)?.take(60)?.trim()
                     }
                 } catch (_: Exception) { }
@@ -248,7 +248,7 @@ class UrlPathScanner {
             conn.disconnect()
 
             // Report interesting status codes (exclude not-found)
-            if (code in listOf(200, 301, 302, 303, 307, 308, 401, 403, 500, 502, 503)) {
+            if (code in INTERESTING_CODES) {
                 UrlDiscovery(url = url, statusCode = code, title = title)
             } else null
         } catch (_: Exception) { null }
@@ -268,5 +268,12 @@ class UrlPathScanner {
         } catch (_: Exception) {
             t.trimEnd('/')
         }
+    }
+
+    private companion object {
+        /** Kode status yang dianggap menarik untuk dilaporkan (selain 404). */
+        val INTERESTING_CODES = setOf(200, 301, 302, 303, 307, 308, 401, 403, 500, 502, 503)
+        val AUTH_CODES = setOf(401, 403)
+        val TITLE_REGEX = Regex("""<title>(.*?)</title>""", RegexOption.IGNORE_CASE)
     }
 }

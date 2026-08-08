@@ -71,17 +71,20 @@ class TracerouteScanner {
 
     /** Baca output ping: balasan akhir "bytes from <ip> ... time=X ms" atau TTL habis "From <ip> ... exceeded". */
     private fun parseHop(output: String): Hop {
-        Regex("""bytes from ([0-9.]+)[^\n]*?time[=:]\s*([0-9.]+)\s*ms""")
-            .find(output)?.let { m ->
-                val time = m.groupValues[2].toFloatOrNull()?.let { (it * 10).toLong() / 10 }
-                return Hop(m.groupValues[1], time)
-            }
-        Regex("""(?i)\bfrom ([0-9.]+)\s*:.*(?:exceeded|time to live)""")
-            .find(output)?.let { m -> return Hop(m.groupValues[1], null) }
+        REPLY_REGEX.find(output)?.let { m ->
+            val time = m.groupValues[2].toFloatOrNull()?.let { (it * 10).toLong() / 10 }
+            return Hop(m.groupValues[1], time)
+        }
+        EXCEEDED_REGEX.find(output)?.let { m -> return Hop(m.groupValues[1], null) }
         return Hop(null, null)
     }
 
     private suspend fun reverseLookup(ip: String): String? = try {
         withTimeout(300) { InetAddress.getByName(ip).hostName }.let { if (it != ip) it else null }
     } catch (_: Exception) { null }
+
+    private companion object {
+        val REPLY_REGEX = Regex("""bytes from ([0-9.]+)[^\n]*?time[=:]\s*([0-9.]+)\s*ms""")
+        val EXCEEDED_REGEX = Regex("""(?i)\bfrom ([0-9.]+)\s*:.*(?:exceeded|time to live)""")
+    }
 }

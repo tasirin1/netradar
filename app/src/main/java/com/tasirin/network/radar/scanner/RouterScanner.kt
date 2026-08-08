@@ -48,7 +48,7 @@ class RouterScanner {
             sock.connect(InetSocketAddress(ip, port), timeoutMs)
             sock.soTimeout = timeoutMs
 
-            if (port in listOf(80, 443, 8080, 8443)) {
+            if (port in WEB_PORTS) {
                 try {
                     val req = "GET / HTTP/1.1\r\nHost: $ip\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
@@ -109,5 +109,9 @@ class RouterScanner {
             }
             return@withContext service?.let { PortInfo(port, it) }
         } catch (_: Exception) { null }
+    }
+
+    private companion object {
+        val WEB_PORTS = setOf(80, 443, 8080, 8443)
     }
 }
