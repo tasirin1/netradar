@@ -306,3 +306,29 @@ object PortDescriptions {
 
     fun get(port: Int): String? = map[port]
 }
+
+/** Tingkat bahaya bila port terbuka ke jaringan — dipakai untuk badge risiko di detail host. */
+enum class PortRisk(val label: String, val description: String) {
+    KRITIS("Kritis", "Akses jarak jauh tanpa autentikasi aman — pintu masuk umum peretas."),
+    TINGGI("Tinggi", "Protokol teks-biasa atau autentikasi lemah — ganti kredensial & batasi akses."),
+    SEDANG("Sedang", "Layanan umum rumah/kantor — pastikan tidak terbuka ke internet."),
+    RENDAH("Rendah", "Port standar yang relatif aman bila dikonfigurasi benar.")
+}
+
+object PortRisks {
+    val map = mapOf(
+        23 to PortRisk.TINGGI, 21 to PortRisk.TINGGI, 2323 to PortRisk.TINGGI,
+        5555 to PortRisk.KRITIS, 34567 to PortRisk.KRITIS, 37215 to PortRisk.KRITIS,
+        2375 to PortRisk.KRITIS, 8291 to PortRisk.TINGGI,
+        5000 to PortRisk.SEDANG, 7547 to PortRisk.SEDANG, 2376 to PortRisk.SEDANG,
+        3306 to PortRisk.TINGGI, 5432 to PortRisk.TINGGI, 6379 to PortRisk.TINGGI,
+        27017 to PortRisk.TINGGI, 3389 to PortRisk.TINGGI, 5900 to PortRisk.TINGGI,
+        445 to PortRisk.TINGGI, 139 to PortRisk.SEDANG, 135 to PortRisk.TINGGI,
+        53 to PortRisk.SEDANG, 25 to PortRisk.SEDANG, 161 to PortRisk.SEDANG,
+        5060 to PortRisk.SEDANG, 22 to PortRisk.SEDANG,
+        80 to PortRisk.RENDAH, 443 to PortRisk.RENDAH,
+        8080 to PortRisk.SEDANG, 8888 to PortRisk.SEDANG, 9090 to PortRisk.SEDANG
+    )
+
+    fun riskOf(port: Int): PortRisk = map[port] ?: PortRisk.RENDAH
+}

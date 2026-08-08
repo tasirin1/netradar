@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import com.tasirin.network.radar.model.HostInfo
 import com.tasirin.network.radar.model.PingEvent
 import com.tasirin.network.radar.model.PortDescriptions
+import com.tasirin.network.radar.model.PortRisk
+import com.tasirin.network.radar.model.PortRisks
 import com.tasirin.network.radar.model.PortInfo
 import com.tasirin.network.radar.model.UrlDiscovery
 import com.tasirin.network.radar.model.deviceKinds
@@ -307,12 +309,25 @@ private const val MAX_PORT_CHIPS = 120
 @Composable
 fun PortInfoDialog(port: PortInfo, onDismiss: () -> Unit) {
     val description = PortDescriptions.get(port.port)
+    val risk = PortRisks.riskOf(port.port)
+    val riskColor = when (risk) {
+        PortRisk.KRITIS -> StatusRed
+        PortRisk.TINGGI -> StatusOrange
+        PortRisk.SEDANG -> Color(0xFFE6A23C)
+        PortRisk.RENDAH -> StatusGreen
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Port ${port.port}", fontWeight = FontWeight.Bold) },
         text = {
             Column {
                 Text("Service: ${port.service ?: PortDescriptions.get(port.port) ?: "Unknown"}", fontSize = 14.sp)
+                Spacer(Modifier.height(10.dp))
+                Surface(shape = MaterialTheme.shapes.small, color = riskColor.copy(alpha = 0.15f)) {
+                    Text("${risk.label} — ${risk.description}", fontSize = 12.sp,
+                        color = riskColor, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                }
                 if (description != null) {
                     Spacer(Modifier.height(8.dp))
                     Text("Info: $description", fontSize = 13.sp, color = TextSecondary)
