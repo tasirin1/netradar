@@ -1,6 +1,7 @@
 package com.tasirin.network.radar.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
@@ -240,7 +241,6 @@ fun ResultsTab(
         LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(padding)
             .padding(horizontal = 12.dp),
         contentPadding = PaddingValues(bottom = 12.dp)
     ) {
