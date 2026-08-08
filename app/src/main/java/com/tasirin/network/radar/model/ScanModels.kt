@@ -166,7 +166,24 @@ data class ScanDiff(
     val added: List<HostInfo> = emptyList(),
     val removed: List<HostInfo> = emptyList(),
     val changed: List<HostInfo> = emptyList()
-)
+) {
+    companion object {
+        /** Bandingkan dua peta ip -> daftar port; host baru, hilang, dan yang portnya berubah. */
+        fun compute(
+            current: Map<String, List<Int>>,
+            previous: Map<String, List<Int>>,
+            resolve: (String) -> HostInfo?
+        ): ScanDiff {
+            val added = current.keys.filter { it !in previous }.mapNotNull { resolve(it) }
+            val removed = previous.keys.filter { it !in current }.mapNotNull { resolve(it) }
+            val changed = current.filterKeys { ip ->
+                val prev = previous[ip]
+                prev != null && prev.toSet() != current[ip]?.toSet()
+            }.keys.mapNotNull { resolve(it) }
+            return ScanDiff(added, removed, changed)
+        }
+    }
+}
 
 sealed class ScanEvent {
     data class Progress(
