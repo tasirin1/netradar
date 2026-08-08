@@ -8,3 +8,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Keystore signing - jangan pernah di-commit
+*.jks
+keystore.b64
