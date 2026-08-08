@@ -67,10 +67,12 @@ Detail kemampuan:
 
 ## Unduh
 
-- **GitHub Actions** → run terbaru → artifact `NetScan-APK`
-  (belum ada halaman Release otomatis — lihat catatan keystore di
-  [Panduan pengelolaan](#panduan-pengelolaan-repo-untuk-manusia--ai)).
-- APK di-build & ditandatangani otomatis oleh CI (Android 5.0+).
+- **GitHub Release** → halaman [Release](https://github.com/tasirin1/netradar/releases)
+  → APK `netradar-v2.0-<build>.apk` (rilis otomatis tiap push ke `master`).
+- Alternatif: GitHub Actions → run terbaru → artifact `NetScan-APK`.
+- APK di-build & ditandatangani otomatis oleh CI dengan **keystore resmi
+  Tasirin** (sama dengan Tasirin Download Manager & Vaultwarden Host) —
+  update-over-install mulus. Mendukung Android 5.0+.
 
 ## Widget, notifikasi & pengaturan
 
@@ -105,14 +107,12 @@ Detail kemampuan:
 
 Workflow `.github/workflows/build.yml` berjalan otomatis **setiap push** ke
 branch mana pun: install Android SDK, jalankan unit test
-(`testDebugUnitTest`), `assembleRelease` (signed), lalu unggah APK sebagai
-artifact `NetScan-APK`.
+(`testDebugUnitTest`), `assembleRelease` (signed), unggah APK sebagai artifact
+`NetScan-APK`, lalu publish GitHub Release `v2.0` untuk push ke `master`.
 
-> ⚠️ **Catatan keystore**: CI membuat keystore sementara (`scanner.keystore`)
-> dengan password `scanner123` **di setiap build** — jadi tanda tangan APK
-> berbeda tiap build dan update antar build butuh *uninstall* dulu. Untuk rilis
-> yang bisa di-update di atas instalasi lama, gunakan keystore tetap (lihat
-> [Panduan pengelolaan](#panduan-pengelolaan-repo-untuk-manusia--ai)).
+APK release ditandatangani dengan **keystore resmi Tasirin** yang sama dengan
+Tasirin Download Manager & Vaultwarden Host — tanda tangan konsisten sehingga
+update di atas instalasi lama berjalan mulus tanpa uninstall.
 
 ### Lokal (debug/testing)
 
@@ -136,7 +136,7 @@ mengelola repository ini dengan benar.
 
 ```
 .
-├── .github/workflows/build.yml       # CI: SDK → unit test → assembleRelease → artifact
+├── .github/workflows/build.yml       # CI: SDK → test → assembleRelease (keystore resmi) → release
 ├── app/build.gradle.kts              # minSdk 21 / targetSdk 35, Compose, signing via env
 ├── app/src/main/
 │   ├── AndroidManifest.xml           # permission jaringan/notifikasi + service & widget
@@ -228,33 +228,30 @@ sesuai namanya.
 9. **Unit test**: logika murni (subnet, target expansion, ping) wajib punya
    test JVM di `app/src/test/` — jalankan lewat CI (`testDebugUnitTest`).
 10. **Jangan commit keystore** — `.gitignore` sudah menutup `*.jks` &
-    `keystore.b64`; build lokal memakai `scanner.keystore` di root repo dan
-    CI membuat keystore sendiri di tiap build.
+    `keystore.b64`. CI menandatangani dengan keystore resmi Tasirin dari
+    secrets repo (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`,
+    `KEY_PASSWORD`); fallback `scanner.keystore` hanya untuk build lokal.
 
 ## Cara memicu build
 
 - **Push ke branch mana pun** → workflow `build.yml` jalan (trigger `on: push`).
 - **Manual**: GitHub → Actions → *Build* → *Run workflow*
   (atau `gh workflow run build.yml -R tasirin1/netradar`).
-- Hasil: unit test + APK release signed → artifact **`NetScan-APK`**.
-- **Belum ada** publish ke GitHub Release otomatis — rilis dipublikasikan manual
-  atau menyusul (lihat rekomendasi keystore di bawah).
+- Hasil: unit test + APK release signed (keystore resmi Tasirin) → artifact
+  **`NetScan-APK`**; push ke `master` sekaligus publish GitHub Release
+  **`v2.0`** (tag diupdate tiap build).
 
 ## Catatan penting & rekomendasi (keystore & release)
 
-1. **CI memakai keystore sementara** (`scanner.keystore`, password `scanner123`,
-   dibuat ulang tiap build). Artinya:
-   - Setiap APK artefak punya tanda tangan **berbeda** → update antar build
-     harus *uninstall dulu* (data lokal hilang).
-   - Untuk update mulus & Play Protect lebih percaya, ganti ke **keystore tetap**
-     lewat secrets repo `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`,
-     `KEY_PASSWORD` (pola yang sama dengan repo Tasirin lain), lalu
-     `signingConfigs` membaca dari env tanpa fallback publik.
-2. **Pertimbangkan publish release otomatis** di workflow (tag versi + APK),
-   supaya "Unduh APK terbaru" bisa lewat halaman Release — seperti repo
-   Tasirin Download Manager / Vaultwarden Host.
-3. Bila keystore tetap dipakai, **backup selamanya** — hilang = tidak bisa
-   update-over-install, dan kunci baru bikin Play Protect curiga.
+1. **NetRadar memakai keystore resmi Tasirin** — keystore yang sama dengan
+   Tasirin Download Manager & Vaultwarden Host, disimpan sebagai secrets repo
+   `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+   Tanda tangan konsisten → update-over-install mulus dan Play Protect tidak
+   menganggap app baru/asing.
+2. **Release otomatis aktif**: setiap push ke `master`, workflow publish
+   GitHub Release `v2.0` berisi APK `netradar-v2.0-<build>.apk`.
+3. **Backup keystore selamanya** — hilang = tidak bisa update-over-install,
+   dan kunci baru bikin Play Protect curiga.
 
 ## Menambah/mengubah fitur — file mana yang disentuh
 
@@ -279,6 +276,7 @@ sesuai namanya.
 gh run watch <run-id> --exit-status
 gh run view <run-id> --json status,conclusion
 gh run download <run-id> -n NetScan-APK
+keytool -printcert -jarfile app-release.apk   # pastikan SHA256 C2:78:5A:... (keystore Tasirin)
 ```
 
 Pastikan conclusion `success` dan artifact `NetScan-APK` ada. Uji manual: pasang
