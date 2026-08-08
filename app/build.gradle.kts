@@ -22,6 +22,9 @@ android {
         targetSdk = 35
         versionCode = buildNumber
         versionName = "2.0"
+        // Hanya string default (+id) yang dipertahankan — buang resource
+        // locale library (appcompat/material) yang tidak dipakai.
+        resConfigs("id")
     }
 
     signingConfigs {
@@ -35,7 +38,14 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: buang kode mati (ribuan ikon material yang tak terpakai,
+            // kotlin-reflect, dll) + hapus resource tak terpakai.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("release")
         }
     }

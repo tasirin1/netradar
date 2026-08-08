@@ -114,6 +114,10 @@ APK release ditandatangani dengan **keystore resmi Tasirin** yang sama dengan
 Tasirin Download Manager & Vaultwarden Host — tanda tangan konsisten sehingga
 update di atas instalasi lama berjalan mulus tanpa uninstall.
 
+Release juga di-**minify R8** (`isMinifyEnabled` + `shrinkResources`) sehingga
+APK jauh lebih kecil: kode ikon material yang tak terpakai, resource locale
+library, dan kode mati lain otomatis dibuang tiap build.
+
 ### Lokal (debug/testing)
 
 ```bash
