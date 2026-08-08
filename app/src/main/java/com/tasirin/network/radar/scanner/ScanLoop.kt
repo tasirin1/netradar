@@ -29,7 +29,7 @@ object ScanLoop {
         openPorts: List<PortInfo> = emptyList()
     ): HostInfo {
         val mac = arpTable[ip]
-        val hostname = hostname(ip)
+        val hostname = hostname(ip) ?: MdnsNameResolver.nameFor(ip)
         return HostInfo(
             ip = ip,
             hostname = hostname,

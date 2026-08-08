@@ -29,6 +29,8 @@ class ScannerManager {
 
         val scanJob = launch(Dispatchers.IO) {
             try {
+                // Kumpulkan nama perangkat mDNS/SSDP sekali per scan (best-effort).
+                withTimeoutOrNull(2500) { MdnsNameResolver.refreshIfStale() }
                 val scannerFlow = when (type) {
                     ScanType.PORT_SCAN -> portScanner.scan(target, speed)
                     ScanType.CAMERA -> cameraScanner.scan(target, speed)
