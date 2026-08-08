@@ -29,7 +29,7 @@ class MdnsNameResolverTest {
         pkt.write(nameToBytes("_airplay._tcp.local"))
         pkt.write(byteArrayOf(0, 12, 0, 1, 0, 0, 0, 120))
         val ptrRdata = nameToBytes("Ruang TV._airplay._tcp.local")
-        pkt.write(byteArrayOf(0, ptrRdata.size.toByte().toInt()))
+        pkt.write(byteArrayOf(0, ptrRdata.size.toByte()))
         pkt.write(ptrRdata)
 
         // SRV: instance -> target "Ruang-TV.local" port 7000
@@ -39,7 +39,7 @@ class MdnsNameResolverTest {
         srvRdata.write(byteArrayOf(0, 0, 0, 0, 0x1B, 0x58)) // priority, weight, port 7000
         srvRdata.write(nameToBytes("Ruang-TV.local"))
         val srvBytes = srvRdata.toByteArray()
-        pkt.write(byteArrayOf(0, srvBytes.size.toByte().toInt()))
+        pkt.write(byteArrayOf(0, srvBytes.size.toByte()))
         pkt.write(srvBytes)
 
         // A: Ruang-TV.local -> 192.168.1.50
