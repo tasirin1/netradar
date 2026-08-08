@@ -108,4 +108,23 @@ class NetworkUtilsTest {
         assertEquals(listOf(NetworkUtils.SubnetTarget("127.0.0")),
             NetworkUtils.expandTargetSubnets("localhost"))
     }
+
+    @Test
+    fun `CIDR /23 dipecah menjadi dua subnet`() {
+        val subnets = NetworkUtils.expandTargetSubnets("192.168.1.0/23")
+        assertEquals(listOf("192.168.0", "192.168.1"), subnets.map { it.prefix })
+    }
+
+    @Test
+    fun `CIDR terlalu lebar ditolak`() {
+        assertTrue(NetworkUtils.expandTargetSubnets("10.0.0.0/7").isEmpty())
+    }
+
+    @Test
+    fun `CIDR /8 berukuran batas maksimal`() {
+        val subnets = NetworkUtils.expandTargetSubnets("10.0.0.0/8")
+        assertEquals(NetworkUtils.MAX_SUBNETS, subnets.size)
+        assertEquals("10.0.0", subnets.first().prefix)
+        assertEquals("10.255.255", subnets.last().prefix)
+    }
 }
