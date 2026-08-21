@@ -1,0 +1,21 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "README.md"
+      - "README.en.md"
+
+jobs:
+  sync-heading:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Sinkronkan judul utama README
+        run: |
+          ID_TITLE=$(grep -m1 '^# ' README.md | cut -d' ' -f2-)
+          EN_TITLE=$(grep -m1 '^# ' README.en.md | cut -d' ' -f2-)
+          if [ "$ID_TITLE" != "$EN_TITLE" ]; then
+            echo "::error::Judul utama README.md dan README.en.md harus sama: '$ID_TITLE' vs '$EN_TITLE'"
+            exit 1
+          fi

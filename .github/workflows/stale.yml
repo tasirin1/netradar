@@ -1,0 +1,19 @@
+name: Stale
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-message: 'Issue ini tidak aktif 60 hari. Akan ditutup dalam 14 hari jika tidak ada respons.'
+          stale-pr-message: 'PR ini tidak aktif 60 hari. Akan ditutup dalam 14 hari jika tidak ada respons.'
+          exempt-issue-labels: dependencies,pinned,security
+          exempt-pr-labels: dependencies,pinned,security

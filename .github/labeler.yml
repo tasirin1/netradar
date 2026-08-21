@@ -1,0 +1,32 @@
+scanner:
+  - changed-files:
+      - any-glob-to-any-file: 'app/src/main/java/**/scanner/**'
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file: 'app/src/main/java/**/ui/**'
+      - any-glob-to-any-file: 'app/src/main/res/**'
+
+viewmodel:
+  - changed-files:
+      - any-glob-to-any-file: 'app/src/main/java/**/viewmodel/**'
+
+util:
+  - changed-files:
+      - any-glob-to-any-file: 'app/src/main/java/**/util/**'
+
+widget:
+  - changed-files:
+      - any-glob-to-any-file: 'app/src/main/java/**/widget/**'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: '.github/**'
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file: '*.md'
+
+test:
+  - changed-files:
+      - any-glob-to-any-file: 'app/src/test/**'
