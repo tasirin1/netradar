@@ -67,4 +67,11 @@ object UptimeStore {
                 .putString(KEY_EVENTS, obj.toString()).apply()
         } catch (_: Exception) { }
     }
+
+    fun clear(context: Context) {
+        try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().remove(KEY_EVENTS).apply()
+        } catch (_: Exception) { }
+    }
 }

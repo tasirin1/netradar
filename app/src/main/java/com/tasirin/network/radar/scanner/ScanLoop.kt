@@ -129,7 +129,9 @@ object ScanLoop {
             ScanPause.checkPause()
             onEvent(ScanEvent.Progress("Retry ${missed.size} host yang tidak merespons...",
                 completed.toInt(), total.toInt()))
+            var retried = 0
             scanIps(missed, batchSize, scanOne) { ip, host ->
+                retried++
                 if (host != null) {
                     found++
                     onEvent(ScanEvent.HostFound(host))
@@ -137,6 +139,10 @@ object ScanLoop {
                         "Retry · $ip ditemukan · $found total", completed.toInt(), total.toInt(),
                         subnetIndex = -1))
                 }
+                completed++
+                onEvent(ScanEvent.Progress(
+                    "Retry ${retried}/${missed.size} · $ip", completed.toInt(), total.toInt(),
+                    subnetIndex = -1))
             }
         }
     }

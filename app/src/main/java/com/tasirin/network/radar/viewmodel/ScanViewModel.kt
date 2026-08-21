@@ -19,6 +19,7 @@ import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.ScanService
 import com.tasirin.network.radar.scanner.ScanCheckpoint
 import com.tasirin.network.radar.scanner.ScanLoop
+import com.tasirin.network.radar.scanner.MdnsNameResolver
 import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.FavoritesStore
 import com.tasirin.network.radar.util.AppForeground
@@ -114,6 +115,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var scanGeneration = 0L
     private var lastScanNotifAt = 0L
     private var lastFavoriteAlertAt = 0L
+    private val lastBackOnlineAtByIp = mutableMapOf<String, Long>()
     private var _favorites = mutableSetOf<String>()
     private var _uptime = emptyMap<String, List<UptimeEvent>>()
     private var _pingHistory = emptyMap<String, List<PingEvent>>()
@@ -122,7 +124,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var _previousScanHosts: Map<String, List<Int>>? = null
     private var lastHostUiAt = 0L
     private var gatewayJob: Job? = null
-    private var lastBackOnlineAt = 0L
     private val gatewayLatencies = ArrayDeque<Long>()
     private var lastMonitorSaveAt = 0L
     private var lastWidgetAt = 0L
@@ -723,13 +724,16 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val host = withContext(Dispatchers.IO) { portScanner.scanHost(ip, speed = _state.value.scanSpeed) }
                 if (host != null) {
+                    // Pertahankan hostname mDNS/SSDP dari cache jika reverse DNS kosong
+                    val mdnsName = MdnsNameResolver.nameFor(ip)
+                    val enrichedHost = host.copy(hostname = host.hostname ?: mdnsName)
                     val ports = host.openPorts.size
-                    recordUptime(ip, host.isAlive)
-                    host.latencyMs?.let { recordPing(ip, it) }
+                    recordUptime(ip, enrichedHost.isAlive)
+                    enrichedHost.latencyMs?.let { recordPing(ip, it) }
                     val existing = _hosts[ip]
                     val conflict = existing?.macAddress != null && host.macAddress != null &&
                         !existing.macAddress.equals(host.macAddress, ignoreCase = true)
-                    _hosts[ip] = host.copy(label = existing?.label,
+                    _hosts[ip] = enrichedHost.copy(label = existing?.label,
                         ipConflict = conflict || existing?.ipConflict == true)
                     _state.update {
                         it.copy(hosts = _hosts.values.toList(),
@@ -763,10 +767,15 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearResults() {
         _hosts.clear(); _urls.clear(); _lastDeleted = emptyList()
+        _uptime = emptyMap()
+        _pingHistory = emptyMap()
+        UptimeStore.clear(getApplication())
+        PingStore.clear(getApplication())
         _state.update {
             it.copy(hosts = emptyList(), discoveredUrls = emptyList(), hostSummary = "", scanResult = null,
                 selectedHosts = emptySet(), searchQuery = "", deviceFilter = DeviceFilter.ALL,
                 statusFilter = HostStatusFilter.ALL,
+                uptime = emptyMap(), pingHistory = emptyMap(),
                 summary = "Results cleared", summaryColor = 0xFF00695C, isSummaryOk = true)
         }
         persistResults(force = true)
@@ -1231,8 +1240,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private fun notifyFavoriteBackOnline(ip: String) {
         if (!_state.value.notifyImportantOffline) return
         val now = System.currentTimeMillis()
-        if (now - lastBackOnlineAt < 30_000) return
-        lastBackOnlineAt = now
+        val lastAt = lastBackOnlineAtByIp[ip] ?: 0L
+        if (now - lastAt < 30_000) return
+        lastBackOnlineAtByIp[ip] = now
         try {
             val ctx = getApplication<Application>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
