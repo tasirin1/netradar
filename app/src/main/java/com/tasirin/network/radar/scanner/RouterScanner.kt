@@ -8,6 +8,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.Semaphore
 
 class RouterScanner {
 
@@ -24,25 +25,27 @@ class RouterScanner {
         }
 
         val arpTable = NetworkUtils.readArpTable()
+        val permits = Semaphore(speed.socketPermits)
 
         // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
         ScanLoop.scanSubnets(subnets, speed, "Router scan", scanOne = { ip ->
-            val foundServices = scanRouterPorts(ip, speed.timeoutMs)
+            val foundServices = scanRouterPorts(ip, speed.timeoutMs, permits)
             if (foundServices.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = foundServices)
         }) { ev -> emit(ev) }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.ROUTER, target = target)))
     }
 
-    private suspend fun scanRouterPorts(ip: String, timeoutMs: Int): List<PortInfo> = withContext(Dispatchers.IO) {
+    private suspend fun scanRouterPorts(ip: String, timeoutMs: Int, permits: Semaphore): List<PortInfo> = withContext(Dispatchers.IO) {
         coroutineScope {
             routerPorts.map { port ->
-                async { probeRouter(ip, port, timeoutMs) }
+                async { probeRouter(ip, port, timeoutMs, permits) }
             }.mapNotNull { it.await() }
         }
     }
 
-    private suspend fun probeRouter(ip: String, port: Int, timeoutMs: Int): PortInfo? = withContext(Dispatchers.IO) {
+    private suspend fun probeRouter(ip: String, port: Int, timeoutMs: Int, permits: Semaphore): PortInfo? = withContext(Dispatchers.IO) {
+        permits.acquire()
         try {
             val sock = Socket()
             sock.connect(InetSocketAddress(ip, port), timeoutMs)
@@ -50,7 +53,7 @@ class RouterScanner {
 
             if (port in WEB_PORTS) {
                 try {
-                    val req = "GET / HTTP/1.1\r\nHost: $ip\r\n\r\n"
+                    val req = "GET / HTTP/1.1\r\nHost: $ip\r\nConnection: close\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
                     val header = StringBuilder()
@@ -109,6 +112,9 @@ class RouterScanner {
             }
             return@withContext service?.let { PortInfo(port, it) }
         } catch (_: Exception) { null }
+        finally {
+            permits.release()
+        }
     }
 
     private companion object {

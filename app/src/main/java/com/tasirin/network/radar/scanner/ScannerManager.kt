@@ -23,8 +23,8 @@ class ScannerManager {
         target: String,
         speed: ScanSpeed = ScanSpeed.SEDANG
     ): Flow<ScanEvent> = channelFlow {
-        currentJob?.cancel()
-        currentJob = null
+        val oldJob = currentJob
+        oldJob?.cancel()
         ScanPause.resume() // scan baru mulai dalam keadaan tidak paused
 
         val scanJob = launch(Dispatchers.IO) {
@@ -50,6 +50,9 @@ class ScannerManager {
             }
         }
         currentJob = scanJob
+
+        // Tunggu job lama selesai dibatalkan agar tidak ada dua scan paralel
+        oldJob?.join()
 
         try {
             scanJob.join()

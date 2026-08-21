@@ -10,6 +10,7 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.util.concurrent.Semaphore
 
 class CameraScanner {
 
@@ -26,31 +27,33 @@ class CameraScanner {
         }
 
         val arpTable = NetworkUtils.readArpTable()
+        val permits = Semaphore(speed.socketPermits)
 
         // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
         ScanLoop.scanSubnets(subnets, speed, "CCTV scan", scanOne = { ip ->
-            val foundServices = scanCameraPorts(ip, speed.timeoutMs)
+            val foundServices = scanCameraPorts(ip, speed.timeoutMs, permits)
             if (foundServices.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = foundServices)
         }) { ev -> emit(ev) }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.CAMERA, target = target)))
     }
 
-    private suspend fun scanCameraPorts(ip: String, timeoutMs: Int): List<PortInfo> = withContext(Dispatchers.IO) {
+    private suspend fun scanCameraPorts(ip: String, timeoutMs: Int, permits: Semaphore): List<PortInfo> = withContext(Dispatchers.IO) {
         coroutineScope {
             cameraPorts.map { port ->
-                async { probeCamera(ip, port, timeoutMs) }
+                async { probeCamera(ip, port, timeoutMs, permits) }
             }.mapNotNull { it.await() }
         }
     }
 
-    private suspend fun probeCamera(ip: String, port: Int, timeoutMs: Int): PortInfo? = withContext(Dispatchers.IO) {
+    private suspend fun probeCamera(ip: String, port: Int, timeoutMs: Int, permits: Semaphore): PortInfo? = withContext(Dispatchers.IO) {
+        permits.acquire()
+        val sock = Socket()
         try {
-            val sock = Socket()
             sock.connect(InetSocketAddress(ip, port), timeoutMs)
             sock.soTimeout = timeoutMs
 
-            when (port) {
+            val result: PortInfo? = when (port) {
                 554, 8554 -> {
                     val req = "OPTIONS rtsp://$ip RTSP/1.0\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
@@ -58,7 +61,6 @@ class CameraScanner {
                     val resp = StringBuilder()
                     var line: String?
                     while (reader.readLine().also { line = it } != null) resp.append(line).append("\n")
-                    sock.close()
                     if (resp.toString().contains("RTSP", ignoreCase = true)) PortInfo(port, "RTSP Camera")
                     else null
                 }
@@ -66,7 +68,7 @@ class CameraScanner {
                 37777 -> PortInfo(port, "Dahua SDK")
                 37215 -> PortInfo(port, "Hikvision Backdoor")
                 80, 8080, 443, 8443 -> {
-                    val req = "GET / HTTP/1.1\r\nHost: $ip\r\n\r\n"
+                    val req = "GET / HTTP/1.1\r\nHost: $ip\r\nConnection: close\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
                     val header = StringBuilder()
@@ -75,7 +77,6 @@ class CameraScanner {
                         line = reader.readLine() ?: break
                         header.append(line).append(" ")
                     }
-                    sock.close()
                     val h = header.toString().lowercase()
                     when {
                         h.contains("hikvision") -> PortInfo(port, "Hikvision Web")
@@ -88,6 +89,7 @@ class CameraScanner {
                 }
                 8899, 7070 -> PortInfo(port, "Camera Stream")
                 9000 -> {
+                    // Socket hanya untuk cek port terbuka; ONVIF pakai koneksi HTTP terpisah
                     try {
                         val xml = """<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"
@@ -102,15 +104,23 @@ class CameraScanner {
                         conn.setRequestProperty("Content-Type", "application/soap+xml")
                         conn.doOutput = true
                         conn.connectTimeout = timeoutMs
-                        conn.outputStream.write(xml.toByteArray())
-                        val resp = conn.inputStream.bufferedReader().readText()
-                        conn.disconnect()
-                        if (resp.contains("ONVIF", ignoreCase = true) || resp.contains("Device", ignoreCase = true))
-                            PortInfo(port, "ONVIF Camera") else null
+                        try {
+                            conn.outputStream.write(xml.toByteArray())
+                            val resp = conn.inputStream.bufferedReader().readText()
+                            if (resp.contains("ONVIF", ignoreCase = true) || resp.contains("Device", ignoreCase = true))
+                                PortInfo(port, "ONVIF Camera") else null
+                        } finally {
+                            conn.disconnect()
+                        }
                     } catch (_: Exception) { null }
                 }
                 else -> PortInfo(port, "Camera Port")
             }
+            result
         } catch (_: Exception) { null }
+        finally {
+            try { sock.close() } catch (_: Exception) {}
+            permits.release()
+        }
     }
 }

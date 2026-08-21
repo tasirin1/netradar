@@ -4,6 +4,7 @@ import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.util.NetworkUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.util.concurrent.Semaphore
 
 class DiscoverScanner {
 
@@ -19,27 +20,36 @@ class DiscoverScanner {
         }
 
         val arpTable = NetworkUtils.readArpTable()
+        val permits = Semaphore(speed.socketPermits)
 
         // Scan SEMUA IP tanpa gate ping: banyak perangkat tidak membalas ICMP
         // tapi portnya terbuka — port scan jadi penentu host hidup (konsisten dgn PortScanner).
         ScanLoop.scanSubnets(subnets, speed, "Discover", scanOne = { ip ->
-            val services = scanDiscoverPorts(ip, speed.timeoutMs)
+            val services = scanDiscoverPorts(ip, speed.timeoutMs, permits)
             if (services.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = services)
         }) { ev -> send(ev) }
 
         send(ScanEvent.Complete(ScanResult(type = ScanType.DISCOVER, target = target)))
     }
 
-    private suspend fun scanDiscoverPorts(ip: String, timeoutMs: Int): List<PortInfo> = withContext(Dispatchers.IO) {
+    private suspend fun scanDiscoverPorts(ip: String, timeoutMs: Int, permits: Semaphore): List<PortInfo> = withContext(Dispatchers.IO) {
         coroutineScope {
             allPorts.map { port ->
                 async {
                     try {
-                        val sock = java.net.Socket()
-                        sock.connect(java.net.InetSocketAddress(ip, port), timeoutMs)
-                        sock.close()
-                        val service = detectService(port)
-                        if (service != null) PortInfo(port, service) else null
+                        permits.acquire()
+                        try {
+                            val sock = java.net.Socket()
+                            try {
+                                sock.connect(java.net.InetSocketAddress(ip, port), timeoutMs)
+                                val service = detectService(port)
+                                if (service != null) PortInfo(port, service) else null
+                            } finally {
+                                try { sock.close() } catch (_: Exception) {}
+                            }
+                        } finally {
+                            permits.release()
+                        }
                     } catch (_: Exception) { null }
                 }
             }.mapNotNull { it.await() }
