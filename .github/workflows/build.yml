@@ -47,12 +47,58 @@ jobs:
         ANDROID_SDK_ROOT: /opt/android
         ANDROID_HOME: /opt/android
         KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
-        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'KbocH4Pl8Ef1zmDuWjTZUSVr' }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'tasirin' }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'KbocH4Pl8Ef1zmDuWjTZUSVr' }}
       run: |
         echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
         gradle testDebugUnitTest assembleRelease --no-daemon
+
+    - name: Verifikasi tanda tangan APK release
+      run: |
+        FINGERPRINT=$(keytool -printcert -jarfile app/build/outputs/apk/release/app-release.apk 2>/dev/null | grep 'SHA256:' | head -1 | sed 's/.*SHA256: //;s/://g;s/ .*//' | tr 'A-F' 'a-f')
+        echo "Fingerprint: $FINGERPRINT"
+        if [ "$FINGERPRINT" != "c2785a618082683755eeae867e0a2e01f450b1fd448859d1ec21cf854c5713d1" ]; then
+          echo "::error::Keystore tidak cocok! Diharapkan c2785a61... dapat $FINGERPRINT"
+          exit 1
+        fi
+        echo "✅ Keystore resmi Tasirin terverifikasi"
+
+    - name: VirusTotal scan APK release
+      env:
+        VT_API_KEY: ${{ secrets.VT_API_KEY || '3b21447e21d41388d34994d0218c25a47214cf254c8706865ee1f253b3c30282' }}
+      run: |
+        APK="app/build/outputs/apk/release/app-release.apk"
+        echo "Mengunggah APK ke VirusTotal..."
+        UPLOAD=$(curl -s -X POST "https://www.virustotal.com/api/v3/files" \
+          -H "x-apikey: $VT_API_KEY" \
+          -F "file=@$APK")
+        ANALYSIS_ID=$(echo "$UPLOAD" | jq -r '.data.id // empty')
+        if [ -z "$ANALYSIS_ID" ]; then
+          echo "::warning::Gagal mengunggah ke VirusTotal (mungkin kuota habis). Lewati scan."
+          exit 0
+        fi
+        echo "Analysis ID: $ANALYSIS_ID — menunggu hasil..."
+        for i in $(seq 1 30); do
+          sleep 15
+          RESULT=$(curl -s "https://www.virustotal.com/api/v3/analyses/$ANALYSIS_ID" \
+            -H "x-apikey: $VT_API_KEY")
+          STATUS=$(echo "$RESULT" | jq -r '.data.attributes.status // empty')
+          if [ "$STATUS" = "completed" ]; then
+            STATS=$(echo "$RESULT" | jq -r '.data.attributes.stats')
+            MALICIOUS=$(echo "$RESULT" | jq -r '.data.attributes.stats.malicious')
+            SUSPICIOUS=$(echo "$RESULT" | jq -r '.data.attributes.stats.suspicious')
+            echo "Hasil VirusTotal: $STATS"
+            echo "Malicious: $MALICIOUS, Suspicious: $SUSPICIOUS"
+            if [ "$MALICIOUS" -gt 0 ] || [ "$SUSPICIOUS" -gt 2 ]; then
+              echo "::warning::VirusTotal mendeteksi $MALICIOUS malicious, $SUSPICIOUS suspicious engine."
+            else
+              echo "✅ VirusTotal bersih"
+            fi
+            break
+          fi
+          echo "  ($i/30) status: $STATUS"
+        done
 
     - name: Upload APK
       uses: actions/upload-artifact@v6

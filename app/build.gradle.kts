@@ -30,9 +30,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file(System.getenv("KEYSTORE_PATH") ?: "scanner.keystore")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "scanner123"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "scanner"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "scanner123"
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "KbocH4Pl8Ef1zmDuWjTZUSVr"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "tasirin"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "KbocH4Pl8Ef1zmDuWjTZUSVr"
         }
     }
 
