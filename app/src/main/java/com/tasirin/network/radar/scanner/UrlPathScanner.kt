@@ -209,8 +209,9 @@ class UrlPathScanner {
     }
 
     private suspend fun checkPath(url: String): UrlDiscovery? = withContext(Dispatchers.IO) {
+        var conn: HttpURLConnection? = null
         try {
-            val conn = URL(url).openConnection() as HttpURLConnection
+            conn = URL(url).openConnection() as HttpURLConnection
             conn.connectTimeout = 800
             conn.readTimeout = 500
             conn.instanceFollowRedirects = false
@@ -252,6 +253,9 @@ class UrlPathScanner {
                 UrlDiscovery(url = url, statusCode = code, title = title)
             } else null
         } catch (_: Exception) { null }
+        finally {
+            try { conn?.disconnect() } catch (_: Exception) { }
+        }
     }
 
     private fun normalizeTarget(target: String): String? {

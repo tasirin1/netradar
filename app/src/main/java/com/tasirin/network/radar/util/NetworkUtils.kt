@@ -218,16 +218,20 @@ object NetworkUtils {
 
     fun getLocalGateway(): String? {
         // 1) Baca gateway asli dari tabel routing ("default via x.x.x.x")
+        var process: Process? = null
         try {
-            val process = ProcessBuilder("ip", "route").redirectErrorStream(true).start()
-            val out = process.inputStream.bufferedReader().readText()
+            process = ProcessBuilder("ip", "route").redirectErrorStream(true).start()
+            val out = process!!.inputStream.bufferedReader().readText()
             process.waitFor()
             val via = out.lineSequence()
                 .firstOrNull { it.trimStart().startsWith("default") }
                 ?.split("\\s+".toRegex())
                 ?.getOrNull(2)
             if (via != null && via.count { it == '.' } == 3) return via
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+        } finally {
+            process?.destroy()
+        }
         // 2) Fallback /proc/net/route (gateway dalam hex little-endian)
         try {
             val lines = java.io.File("/proc/net/route").readLines()

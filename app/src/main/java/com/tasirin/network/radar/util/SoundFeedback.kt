@@ -29,6 +29,15 @@ object SoundFeedback {
                 else -> ToneGenerator.TONE_PROP_BEEP
             }
             toneGenerator?.startTone(tone, 60)
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+            // ToneGenerator gagal (mis. resource audio habis) — buang agar dibuat ulang nanti
+            releaseGenerator()
+        }
+    }
+
+    @Synchronized
+    private fun releaseGenerator() {
+        try { toneGenerator?.release() } catch (_: Exception) { }
+        toneGenerator = null
     }
 }

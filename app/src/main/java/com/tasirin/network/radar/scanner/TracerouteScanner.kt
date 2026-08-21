@@ -59,13 +59,17 @@ class TracerouteScanner {
     private data class Hop(val ip: String?, val latencyMs: Long?)
 
     private suspend fun probeHop(targetIp: String, ttl: Int): Hop = withContext(Dispatchers.IO) {
+        val process = ProcessBuilder(
+            "ping", "-c", "1", "-t", ttl.toString(), "-W", "1", targetIp
+        ).redirectErrorStream(true).start()
         try {
-            val process = ProcessBuilder(
-                "ping", "-c", "1", "-t", ttl.toString(), "-W", "1", targetIp
-            ).redirectErrorStream(true).start()
             val output = BufferedReader(InputStreamReader(process.inputStream)).readText()
-            process.waitFor()
-            parseHop(output)
+            try {
+                process.waitFor()
+                parseHop(output)
+            } finally {
+                process.destroy()
+            }
         } catch (_: Exception) { Hop(null, null) }
     }
 

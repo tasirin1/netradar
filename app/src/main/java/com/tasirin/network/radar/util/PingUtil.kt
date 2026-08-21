@@ -1,8 +1,5 @@
 package com.tasirin.network.radar.util
 
-import java.io.BufferedReader
-import java.io.InputStreamReader
-
 object PingUtil {
 
     /** Hasil ping lengkap: latency (ms) + TTL. */
@@ -22,16 +19,19 @@ object PingUtil {
             val process = ProcessBuilder(
                 "ping", "-c", "1", "-W", secs, ip
             ).redirectErrorStream(true).start()
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = reader.readText()
-            val exitCode = process.waitFor()
-            if (exitCode == 0) {
-                // Parse: "icmp_seq=1 ttl=64 time=2.34 ms"
-                val latency = LATENCY_REGEX.find(output)
-                    ?.groupValues?.get(1)?.toFloat()?.let { (it * 10).toLong() / 10 } ?: 0L
-                val ttl = TTL_REGEX.find(output)?.groupValues?.get(1)?.toIntOrNull()
-                PingProbe(latency, ttl)
-            } else null
+            try {
+                val output = process.inputStream.bufferedReader().readText()
+                val exitCode = process.waitFor()
+                if (exitCode == 0) {
+                    // Parse: "icmp_seq=1 ttl=64 time=2.34 ms"
+                    val latency = LATENCY_REGEX.find(output)
+                        ?.groupValues?.get(1)?.toFloat()?.let { (it * 10).toLong() / 10 } ?: 0L
+                    val ttl = TTL_REGEX.find(output)?.groupValues?.get(1)?.toIntOrNull()
+                    PingProbe(latency, ttl)
+                } else null
+            } finally {
+                process.destroy()
+            }
         } catch (_: Exception) { null }
     }
 }
