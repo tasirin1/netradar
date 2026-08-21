@@ -54,6 +54,8 @@ Detail kemampuan:
   notifikasi perangkat penting offline / kembali online.
 - **Foreground service** + notifikasi progress; scan tetap jalan saat layar
   terkunci; jeda otomatis saat app di background; batal deep scan.
+- **Tombol Berhenti di notifikasi**, port kustom (`22, 80, 8000-8010`),
+  port aktif pada deep scan, tema AMOLED, serta backup/impor JSON.
 - **Widget layar utama** dengan pembaruan ter-throttle; **Wake-on-LAN**;
   **sonifikasi scan**; visualisasi "rasi bintang jaringan" + **share PNG**.
 - **Riwayat scan**, log crash ber-timestamp, tema sistem/terang/gelap, mode
