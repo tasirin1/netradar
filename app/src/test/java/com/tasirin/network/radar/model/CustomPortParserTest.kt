@@ -9,7 +9,12 @@ class CustomPortParserTest {
     @Test
     fun `input kosong memakai fallback`() {
         assertNull(CustomPortParser.parse(""))
-        assertEquals(listOf(80, 443), CustomPortParser.resolve(" ", listOf(80, 443)))
+        assertEquals(intArrayOf(80, 443), CustomPortParser.resolveArray(" ", intArrayOf(80, 443)))
+    }
+
+    @Test
+    fun `hasil array memakai fallback tanpa alokasi daftar boxed`() {
+        assertEquals(intArrayOf(22, 80), CustomPortParser.resolveArray("80;22", intArrayOf(443)))
     }
 
     @Test

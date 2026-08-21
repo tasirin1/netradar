@@ -23,3 +23,8 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 ### Keamanan
 - CI memverifikasi fingerprint dan masa berlaku keystore rilis.
 - Nilai rahasia tidak lagi menyertakan fallback langsung di workflow.
+
+### Dioptimalkan
+- Deep scan tidak lagi membuat daftar berisi 65.536 objek port untuk rentang penuh.
+- Resume scan melewati subnet selesai tanpa memperluas IP-nya terlebih dahulu.
+- Event retry dipadatkan, lookup vendor MAC dideduplikasi, dan dependensi preview dihapus.

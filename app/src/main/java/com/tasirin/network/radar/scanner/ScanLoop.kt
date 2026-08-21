@@ -30,12 +30,13 @@ object ScanLoop {
     ): HostInfo {
         val mac = arpTable[ip]
         val hostname = hostname(ip) ?: MdnsNameResolver.nameFor(ip)
+        val vendor = NetworkUtils.lookupMacVendor(mac)
         return HostInfo(
             ip = ip,
             hostname = hostname,
-            label = hostname?.takeIf { it != ip } ?: NetworkUtils.lookupMacVendor(mac),
+            label = hostname ?: vendor,
             macAddress = mac,
-            macVendor = NetworkUtils.lookupMacVendor(mac),
+            macVendor = vendor,
             latencyMs = latencyMs,
             osGuess = OsDetector.guess(ttl, openPorts.map { it.port }),
             isAlive = isAlive,
@@ -98,11 +99,11 @@ object ScanLoop {
         val missed = mutableListOf<String>()
         subnets.forEachIndexed { subnetIndex, subnet ->
             ScanPause.checkPause()
-            val ips = NetworkUtils.expandSubnetHosts(subnet)
             if (resume != null && subnetIndex < resume.first) {
                 // Subnet yang sudah tuntas sebelum resume: cukup dihitung, tidak discan ulang
                 return@forEachIndexed
             }
+            val ips = NetworkUtils.expandSubnetHosts(subnet)
             val startOffset = if (resume != null && subnetIndex == resume.first) resume.second else 0
             val subnetLabel = "Subnet ${subnetIndex + 1}/$totalSubnets"
             var subnetDone = 0
@@ -111,7 +112,7 @@ object ScanLoop {
                 "$subnetLabel — ${subnet.prefix}.0/24", completed.toInt(), total.toInt(),
                 subnetIndex, startOffset))
 
-            val toScan = if (startOffset > 0) ips.drop(startOffset) else ips
+            val toScan = ips.subList(startOffset, ips.size)
             scanIps(toScan, batchSize, scanOne) { ip, host ->
                 if (host == null) missed.add(ip)
                 else { found++; onEvent(ScanEvent.HostFound(host)) }
@@ -135,13 +136,11 @@ object ScanLoop {
                 if (host != null) {
                     found++
                     onEvent(ScanEvent.HostFound(host))
-                    onEvent(ScanEvent.Progress(
-                        "Retry · $ip ditemukan · $found total", completed.toInt(), total.toInt(),
-                        subnetIndex = -1))
                 }
                 completed++
                 onEvent(ScanEvent.Progress(
-                    "Retry ${retried}/${missed.size} · $ip", completed.toInt(), total.toInt(),
+                    "Retry ${retried}/${missed.size} · $ip" + if (host != null) " · $found total" else "",
+                    completed.toInt(), total.toInt(),
                     subnetIndex = -1))
             }
         }

@@ -131,7 +131,6 @@ private val PHONE_PORTS = setOf(5555, 4747)
 data class ScanResult(
     val type: ScanType,
     val target: String,
-    val timestamp: Long = System.currentTimeMillis(),
     val hosts: List<HostInfo> = emptyList(),
     val discoveredUrls: List<UrlDiscovery> = emptyList(),
     val summary: ScanSummary = ScanSummary()

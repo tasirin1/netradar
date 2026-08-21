@@ -32,10 +32,10 @@ class PortScanner {
             return@flow
         }
 
-        val ports = CustomPortParser.resolve(
+        val ports = CustomPortParser.resolveArray(
             customPorts,
-            PortRangeParser.defaultPorts.take(speed.portCount).toList()
-        ).toIntArray()
+            PortRangeParser.defaultPorts.copyOfRange(0, minOf(speed.portCount, PortRangeParser.defaultPorts.size))
+        )
         val permits = Semaphore(speed.socketPermits)
         val arpTable = NetworkUtils.readArpTable()
 
@@ -56,13 +56,11 @@ class PortScanner {
         speed: ScanSpeed = ScanSpeed.SEDANG,
         customPorts: String = ""
     ): HostInfo? {
-        val ports = CustomPortParser.resolve(
+        val ports = CustomPortParser.resolveArray(
             customPorts,
-            PortRangeParser.defaultPorts.take(speed.portCount).toList()
-        ).toIntArray()
-        val hostname = try {
-            withTimeout(300) { InetAddress.getByName(ip).hostName }.let { if (it != ip) it else null }
-        } catch (_: Exception) { null }
+            PortRangeParser.defaultPorts.copyOfRange(0, minOf(speed.portCount, PortRangeParser.defaultPorts.size))
+        )
+        val hostname = ScanLoop.hostname(ip)
         val mac = NetworkUtils.readArpTable()[ip]
         val vendor = NetworkUtils.lookupMacVendor(mac)
         val permits = Semaphore(speed.socketPermits)
@@ -91,18 +89,20 @@ class PortScanner {
             val addr = try { InetAddress.getByName(ip) } catch (_: Exception) { null }
             if (addr == null) return@withContext DeepScanResult(emptyList())
 
-            val scanPorts = CustomPortParser.resolve(customPorts, (1..65535).toList())
-            val total = scanPorts.size
+            val customPortList = CustomPortParser.parse(customPorts)?.toIntArray()
+            val total = customPortList?.size ?: 65535
             var done = 0
             var lastReported = -1
             var lastReportAt = 0L
 
             // Chunk kecil membatasi socket serentak (hindari "too many open files" / force close)
-            for (chunk in scanPorts.chunked(DEEP_SCAN_CONCURRENCY)) {
+            for (chunkStart in 0 until total step DEEP_SCAN_CONCURRENCY) {
                 ensureActive()
+                val chunkEndExclusive = minOf(chunkStart + DEEP_SCAN_CONCURRENCY, total)
                 try {
                     coroutineScope {
-                        val found = chunk.map { port ->
+                        val found = (chunkStart until chunkEndExclusive).map { index ->
+                            val port = customPortList?.get(index) ?: index + 1
                             async {
                                 tryConnect(addr, port, speed.timeoutMs)?.let { sock ->
                                     try {
@@ -120,7 +120,7 @@ class PortScanner {
                 } catch (_: Throwable) {
                     // Satu chunk gagal (keterbatasan perangkat) → lanjutkan, jangan crash
                 }
-                done += chunk.size
+                done += chunkEndExclusive - chunkStart
                 val pct = done * 100 / total
                 val now = SystemClock.elapsedRealtime()
                 // Batasi frekuensi laporan progress (maks ~4x/detik): update UI yang
@@ -129,7 +129,7 @@ class PortScanner {
                 if (pct - lastReported >= 2 && now - lastReportAt >= 250) {
                     lastReported = pct
                     lastReportAt = now
-                    onProgress(pct, chunk.last())
+                    onProgress(pct, customPortList?.get(chunkEndExclusive - 1) ?: chunkEndExclusive)
                 }
                 // Jeda kecil antar chunk agar OS sempat menutup socket (hindari crash native di sebagian perangkat)
                 delay(2)

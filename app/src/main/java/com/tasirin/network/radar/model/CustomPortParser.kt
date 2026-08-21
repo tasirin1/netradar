@@ -27,6 +27,6 @@ object CustomPortParser {
         return ports.sorted()
     }
 
-    fun resolve(input: String, fallback: List<Int>): List<Int> =
-        parse(input) ?: fallback
+    fun resolveArray(input: String, fallback: IntArray): IntArray =
+        parse(input)?.toIntArray() ?: fallback
 }

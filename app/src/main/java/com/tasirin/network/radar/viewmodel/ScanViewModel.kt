@@ -211,9 +211,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun startScan(type: ScanType, force: Boolean = false) {
         var target = _state.value.target.trim()
         if (target.isEmpty()) {
-            val subnet = NetworkUtils.getLocalSubnet()
             val localIp = NetworkUtils.getLocalIp()
-            if (subnet != null && localIp != null) {
+            if (localIp != null && NetworkUtils.getLocalNetworkPrefix() != null) {
                 target = localIp; _state.update { it.copy(target = target) }
             }
             if (target.isEmpty()) {

@@ -260,11 +260,6 @@ object NetworkUtils {
         } catch (_: Exception) { null }
     }
 
-    fun getLocalSubnet(): List<String>? {
-        val prefix = getLocalNetworkPrefix() ?: return null
-        return (1..254).map { "$prefix.$it" }
-    }
-
     fun readArpTable(): Map<String, String> {
         val result = mutableMapOf<String, String>()
         try {

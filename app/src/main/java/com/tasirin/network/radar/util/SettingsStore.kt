@@ -32,13 +32,9 @@ object SettingsStore {
                 "dark" -> true
                 else -> null
             },
-            themeMode = p.getString("theme_mode", "system")?.let { mode ->
-                ThemeMode.entries.firstOrNull { it.storageName == mode }
-            } ?: when (p.getString("theme", "system")) {
-                "light" -> ThemeMode.LIGHT
-                "dark" -> ThemeMode.DARK
-                else -> ThemeMode.SYSTEM
-            },
+            themeMode = ThemeMode.from(
+                p.getString("theme_mode", null) ?: p.getString("theme", "system")
+            ),
             customPorts = p.getString("custom_ports", "").orEmpty(),
             notifyNewDevices = p.getBoolean("notify_new", true),
             notifyImportantOffline = p.getBoolean("notify_important", true),
