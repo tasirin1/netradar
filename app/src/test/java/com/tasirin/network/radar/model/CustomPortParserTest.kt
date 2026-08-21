@@ -1,5 +1,6 @@
 package com.tasirin.network.radar.model
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -9,12 +10,12 @@ class CustomPortParserTest {
     @Test
     fun `input kosong memakai fallback`() {
         assertNull(CustomPortParser.parse(""))
-        assertEquals(intArrayOf(80, 443), CustomPortParser.resolveArray(" ", intArrayOf(80, 443)))
+        assertArrayEquals(intArrayOf(80, 443), CustomPortParser.resolveArray(" ", intArrayOf(80, 443)))
     }
 
     @Test
     fun `hasil array memakai fallback tanpa alokasi daftar boxed`() {
-        assertEquals(intArrayOf(22, 80), CustomPortParser.resolveArray("80;22", intArrayOf(443)))
+        assertArrayEquals(intArrayOf(22, 80), CustomPortParser.resolveArray("80;22", intArrayOf(443)))
     }
 
     @Test
