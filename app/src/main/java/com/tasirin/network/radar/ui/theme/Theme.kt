@@ -84,11 +84,3 @@ private val AmoledColorScheme = DarkColorScheme.copy(
     surfaceVariant = Color(0xFF0A0A0A),
     outline = Color(0xFF1F1F1F)
 )
-
-private val AmoledColorScheme = DarkColorScheme.copy(
-    background = Color.Black,
-    surface = Color.Black,
-    surfaceVariant = Color(0xFF0A0A0A),
-    outline = Color(0xFF1F1F1F)
-)
-}

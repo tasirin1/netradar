@@ -15,6 +15,7 @@ import com.tasirin.network.radar.scanner.MdnsNameResolver
 import com.tasirin.network.radar.scanner.ScannerManager
 import com.tasirin.network.radar.util.FavoritesStore
 import com.tasirin.network.radar.util.BackupManager
+import com.tasirin.network.radar.util.NetRadarBackup
 import com.tasirin.network.radar.util.AppForeground
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.PingUtil

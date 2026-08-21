@@ -10,7 +10,7 @@ object CustomPortParser {
         for (part in trimmed.split(',', ';')) {
             val value = part.trim()
             if (value.isEmpty()) continue
-            val range = value.split('-', '..').map { it.trim() }
+            val range = value.split("-", "..").map { it.trim() }
             if (range.size == 2) {
                 val start = range[0].toIntOrNull() ?: return null
                 val end = range[1].toIntOrNull() ?: return null

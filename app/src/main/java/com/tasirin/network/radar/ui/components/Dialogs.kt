@@ -75,6 +75,7 @@ fun SettingsBody(
     onTheme: (Boolean?) -> Unit,
     onThemeMode: (ThemeMode) -> Unit,
     onCustomPorts: (String) -> Unit,
+    onExportBackup: () -> Unit,
     onImportBackup: (String) -> Unit,
     onNotifyNewDevices: (Boolean) -> Unit,
     onNotifyImportantOffline: (Boolean) -> Unit,
