@@ -10,7 +10,7 @@ jobs:
   sync-heading:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Sinkronkan judul utama README
         run: |
           ID_TITLE=$(grep -m1 '^# ' README.md | cut -d' ' -f2-)

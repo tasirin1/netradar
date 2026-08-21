@@ -15,7 +15,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
 
     - name: Cek kesehatan keystore (fingerprint + masa berlaku)
       env:
@@ -65,7 +65,7 @@ jobs:
         echo "ANDROID_HOME=/opt/android" >> $GITHUB_ENV
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v5
+      uses: gradle/actions/setup-gradle@v6
       with:
         gradle-version: 8.9
 
@@ -128,7 +128,7 @@ jobs:
         done
 
     - name: Upload APK
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: NetScan-APK
         path: app/build/outputs/apk/release/*.apk
