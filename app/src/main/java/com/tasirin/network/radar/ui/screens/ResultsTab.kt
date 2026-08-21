@@ -379,7 +379,12 @@ fun ResultsTab(
                 if (state.deepScanning != null) {
                     Column(Modifier.padding(top = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Deep scan ${state.deepScanning}... ${state.deepScanProgress}%",
+                            Text(
+                                if (state.deepScanPort > 0) {
+                                    "Deep scan ${state.deepScanning}... ${state.deepScanProgress}% · port ${state.deepScanPort}"
+                                } else {
+                                    "Deep scan ${state.deepScanning}... ${state.deepScanProgress}%"
+                                },
                                 fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             if (onCancelDeepScan != null) {

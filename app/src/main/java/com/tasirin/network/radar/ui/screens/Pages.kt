@@ -156,6 +156,8 @@ fun HistoryPage(history: List<ScanHistoryEntry>) {
 @Composable
 fun SettingsPage(
     darkTheme: Boolean?,
+    themeMode: ThemeMode,
+    customPorts: String,
     notifyNewDevices: Boolean,
     notifyImportantOffline: Boolean,
     notifyScanDone: Boolean,
@@ -165,6 +167,10 @@ fun SettingsPage(
     compactMode: Boolean,
     monitorFavoritesOnly: Boolean,
     onTheme: (Boolean?) -> Unit,
+    onThemeMode: (ThemeMode) -> Unit,
+    onCustomPorts: (String) -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: (String) -> Unit,
     onNotifyNewDevices: (Boolean) -> Unit,
     onNotifyImportantOffline: (Boolean) -> Unit,
     onNotifyScanDone: (Boolean) -> Unit,
@@ -185,6 +191,8 @@ fun SettingsPage(
         Spacer(Modifier.height(4.dp))
         SettingsBody(
             darkTheme = darkTheme,
+            themeMode = themeMode,
+            customPorts = customPorts,
             notifyNewDevices = notifyNewDevices,
             notifyImportantOffline = notifyImportantOffline,
             notifyScanDone = notifyScanDone,
@@ -194,6 +202,10 @@ fun SettingsPage(
             compactMode = compactMode,
             monitorFavoritesOnly = monitorFavoritesOnly,
             onTheme = onTheme,
+            onThemeMode = onThemeMode,
+            onCustomPorts = onCustomPorts,
+            onExportBackup = onExportBackup,
+            onImportBackup = onImportBackup,
             onNotifyNewDevices = onNotifyNewDevices,
             onNotifyImportantOffline = onNotifyImportantOffline,
             onNotifyScanDone = onNotifyScanDone,

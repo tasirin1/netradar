@@ -6,17 +6,22 @@ import java.net.InetAddress
 
 object WakeOnLan {
 
+    fun buildMagicPacket(mac: String): ByteArray? {
+        val macBytes = try {
+            mac.replace("-", ":").split(":").map { it.toInt(16).toByte() }.toByteArray()
+        } catch (_: Exception) {
+            return null
+        }
+        if (macBytes.size != 6) return null
+        return ByteArray(102).apply {
+            for (i in 0 until 6) this[i] = 0xFF.toByte()
+            for (i in 0 until 16) System.arraycopy(macBytes, 0, this, 6 + i * 6, 6)
+        }
+    }
+
     fun wake(ip: String, mac: String, port: Int = 9): Boolean {
+        val packet = buildMagicPacket(mac) ?: return false
         return try {
-            val macBytes = mac.replace("-", ":").split(":").map { it.toInt(16).toByte() }.toByteArray()
-            if (macBytes.size != 6) return false
-            val packet = ByteArray(102)
-            // 6 bytes of 0xFF
-            for (i in 0 until 6) packet[i] = 0xFF.toByte()
-            // 16 repetitions of MAC
-            for (i in 0 until 16) {
-                System.arraycopy(macBytes, 0, packet, 6 + i * 6, 6)
-            }
             DatagramSocket().use { socket ->
                 socket.broadcast = true
                 // Kirim ke broadcast global dan subnet broadcast agar pasti sampai

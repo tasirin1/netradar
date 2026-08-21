@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.tasirin.network.radar.model.ThemeMode
 import com.tasirin.network.radar.ui.screens.MainScreen
 import com.tasirin.network.radar.ui.theme.NetRadarTheme
 import com.tasirin.network.radar.viewmodel.ScanViewModel
@@ -45,7 +46,7 @@ class MainActivity : AppCompatActivity() {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
 
-            NetRadarTheme(darkThemeOverride = state.isDarkTheme) {
+            NetRadarTheme(darkThemeOverride = state.isDarkTheme, amoled = state.themeMode == ThemeMode.AMOLED) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -62,6 +63,10 @@ class MainActivity : AppCompatActivity() {
                         },
                         onToggleSettings = { viewModel.toggleSettings() },
                         onSetTheme = { dark -> viewModel.setTheme(dark) },
+                        onSetThemeMode = { mode -> viewModel.setThemeMode(mode) },
+                        onSetCustomPorts = { ports -> viewModel.setCustomPorts(ports) },
+                        onExportBackup = { viewModel.exportBackup() },
+                        onImportBackup = { text -> viewModel.importBackup(text) },
                         onSetNotifyNewDevices = { v -> viewModel.setNotifyNewDevices(v) },
                         onSetNotifyImportantOffline = { v -> viewModel.setNotifyImportantOffline(v) },
                         onSetNotifyScanDone = { v -> viewModel.setNotifyScanDone(v) },

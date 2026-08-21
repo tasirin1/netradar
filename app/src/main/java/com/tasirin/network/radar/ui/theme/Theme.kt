@@ -45,6 +45,7 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun NetRadarTheme(
     darkThemeOverride: Boolean? = null,
+    amoled: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -54,7 +55,11 @@ fun NetRadarTheme(
         null -> systemDark
     }
 
-    val colorScheme = if (useDark) DarkColorScheme else LightColorScheme
+    val colorScheme = when {
+        useDark && amoled -> AmoledColorScheme
+        useDark -> DarkColorScheme
+        else -> LightColorScheme
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -71,4 +76,19 @@ fun NetRadarTheme(
         typography = Typography(),
         content = content
     )
+}
+
+private val AmoledColorScheme = DarkColorScheme.copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceVariant = Color(0xFF0A0A0A),
+    outline = Color(0xFF1F1F1F)
+)
+
+private val AmoledColorScheme = DarkColorScheme.copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceVariant = Color(0xFF0A0A0A),
+    outline = Color(0xFF1F1F1F)
+)
 }

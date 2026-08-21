@@ -55,6 +55,19 @@ enum class SortMode(val label: String) {
     UPTIME("Uptime")
 }
 
+/** Mode tampilan aplikasi; AMOLED memakai hitam murni untuk hemat daya. */
+enum class ThemeMode(val label: String, val storageName: String) {
+    SYSTEM("Sistem", "system"),
+    LIGHT("Terang", "light"),
+    DARK("Gelap", "dark"),
+    AMOLED("AMOLED", "amoled");
+
+    companion object {
+        fun from(storageName: String?): ThemeMode =
+            entries.firstOrNull { it.storageName == storageName } ?: SYSTEM
+    }
+}
+
 /** Filter tampilan berdasarkan status terakhir (online/offline). */
 enum class HostStatusFilter(val label: String) {
     ALL("Semua"),

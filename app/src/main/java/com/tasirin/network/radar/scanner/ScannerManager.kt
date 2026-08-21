@@ -21,7 +21,8 @@ class ScannerManager {
     fun scan(
         type: ScanType,
         target: String,
-        speed: ScanSpeed = ScanSpeed.SEDANG
+        speed: ScanSpeed = ScanSpeed.SEDANG,
+        customPorts: String = ""
     ): Flow<ScanEvent> = channelFlow {
         val oldJob = currentJob
         oldJob?.cancel()
@@ -32,7 +33,7 @@ class ScannerManager {
                 // Kumpulkan nama perangkat mDNS/SSDP sekali per scan (best-effort).
                 withTimeoutOrNull(2500) { MdnsNameResolver.refreshIfStale() }
                 val scannerFlow = when (type) {
-                    ScanType.PORT_SCAN -> portScanner.scan(target, speed)
+                    ScanType.PORT_SCAN -> portScanner.scan(target, speed, customPorts)
                     ScanType.CAMERA -> cameraScanner.scan(target, speed)
                     ScanType.ROUTER -> routerScanner.scan(target, speed)
                     ScanType.URL_PATH -> urlPathScanner.scan(target)

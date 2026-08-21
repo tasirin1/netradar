@@ -221,7 +221,8 @@ object NetworkUtils {
         var process: Process? = null
         try {
             process = ProcessBuilder("ip", "route").redirectErrorStream(true).start()
-            val out = process!!.inputStream.bufferedReader().readText()
+            val proc = process ?: return null
+            val out = proc.inputStream.bufferedReader().readText()
             process.waitFor()
             val via = out.lineSequence()
                 .firstOrNull { it.trimStart().startsWith("default") }

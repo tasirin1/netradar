@@ -4,6 +4,8 @@ import android.content.Intent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.graphics.Bitmap
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -60,6 +62,8 @@ import java.util.Locale
 @Composable
 fun SettingsBody(
     darkTheme: Boolean?,
+    themeMode: ThemeMode,
+    customPorts: String,
     notifyNewDevices: Boolean,
     notifyImportantOffline: Boolean,
     notifyScanDone: Boolean,
@@ -69,6 +73,9 @@ fun SettingsBody(
     compactMode: Boolean,
     monitorFavoritesOnly: Boolean,
     onTheme: (Boolean?) -> Unit,
+    onThemeMode: (ThemeMode) -> Unit,
+    onCustomPorts: (String) -> Unit,
+    onImportBackup: (String) -> Unit,
     onNotifyNewDevices: (Boolean) -> Unit,
     onNotifyImportantOffline: (Boolean) -> Unit,
     onNotifyScanDone: (Boolean) -> Unit,
@@ -78,22 +85,40 @@ fun SettingsBody(
     onCompactMode: (Boolean) -> Unit,
     onMonitorFavoritesOnly: (Boolean) -> Unit
 ) {
+    val context = LocalContext.current
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            context.contentResolver.openInputStream(it)?.bufferedReader()?.use { reader ->
+                onImportBackup(reader.readText())
+            }
+        }
+    }
     Column {
         Text("Tampilan", fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
         ) {
-            listOf<Pair<Boolean?, String>>(null to "Sistem", false to "Terang", true to "Gelap")
-                .forEach { (mode, label) ->
+            ThemeMode.entries.forEach { mode ->
                     FilterChip(
-                        selected = darkTheme == mode,
-                        onClick = { onTheme(mode) },
-                        label = { Text(label, fontSize = 10.sp) },
+                        selected = themeMode == mode,
+                        onClick = { onThemeMode(mode) },
+                        label = { Text(mode.label, fontSize = 10.sp) },
                         modifier = Modifier.weight(1f)
                     )
                 }
         }
+        OutlinedTextField(
+            value = customPorts,
+            onValueChange = onCustomPorts,
+            label = { Text("Port kustom") },
+            placeholder = { Text("22, 80, 8000-8010") },
+            supportingText = { Text("Kosongkan untuk memakai port umum sesuai sensitivitas.") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        )
         SettingsSwitch("Mode ringkas (sembunyikan sparkline & detail)", compactMode, onCompactMode)
         SettingsSwitch("Cegah layar mati saat scan", keepScreenOn, onKeepScreenOn)
         SettingsSwitch("Monitor hanya perangkat favorit (⭐)", monitorFavoritesOnly, onMonitorFavoritesOnly)
@@ -104,6 +129,19 @@ fun SettingsBody(
         SettingsSwitch("Ringkasan scan selesai (background)", notifyScanDone, onNotifyScanDone)
         SettingsSwitch("Suara saat perangkat ditemukan", soundEnabled, onSoundEnabled)
         SettingsSwitch("Buka dialog perubahan otomatis setelah scan", autoDiffDialog, onAutoDiffDialog)
+        Spacer(Modifier.height(12.dp))
+        Text("Backup", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            OutlinedButton(onClick = onExportBackup, modifier = Modifier.weight(1f)) {
+                Text("Export", fontSize = 11.sp)
+            }
+            OutlinedButton(
+                onClick = { importLauncher.launch("application/json") },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Impor", fontSize = 11.sp)
+            }
+        }
     }
 }
 

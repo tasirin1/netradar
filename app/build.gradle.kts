@@ -30,9 +30,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file(System.getenv("KEYSTORE_PATH") ?: "scanner.keystore")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "KbocH4Pl8Ef1zmDuWjTZUSVr"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "tasirin"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "KbocH4Pl8Ef1zmDuWjTZUSVr"
+        storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+        keyAlias = System.getenv("KEY_ALIAS") ?: ""
+        keyPassword = System.getenv("KEY_PASSWORD") ?: ""
         }
     }
 
@@ -100,4 +100,6 @@ dependencies {
 
     // Unit test (logika murni JVM)
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }

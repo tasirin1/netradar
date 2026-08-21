@@ -1,10 +1,14 @@
 package com.tasirin.network.radar.util
 
 import android.content.Context
+import android.util.Log
+import com.tasirin.network.radar.model.ThemeMode
 
 /** Preferensi aplikasi yang bisa diubah user dan bertahan antar sesi. */
 data class AppSettings(
     val darkTheme: Boolean? = null,          // null = sistem, false = terang, true = gelap
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val customPorts: String = "",
     val notifyNewDevices: Boolean = true,
     val notifyImportantOffline: Boolean = true,
     val notifyScanDone: Boolean = true,
@@ -28,6 +32,14 @@ object SettingsStore {
                 "dark" -> true
                 else -> null
             },
+            themeMode = p.getString("theme_mode", "system")?.let { mode ->
+                ThemeMode.entries.firstOrNull { it.storageName == mode }
+            } ?: when (p.getString("theme", "system")) {
+                "light" -> ThemeMode.LIGHT
+                "dark" -> ThemeMode.DARK
+                else -> ThemeMode.SYSTEM
+            },
+            customPorts = p.getString("custom_ports", "").orEmpty(),
             notifyNewDevices = p.getBoolean("notify_new", true),
             notifyImportantOffline = p.getBoolean("notify_important", true),
             notifyScanDone = p.getBoolean("notify_done", true),
@@ -42,11 +54,13 @@ object SettingsStore {
     fun save(context: Context, s: AppSettings) {
         try {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString("theme", when (s.darkTheme) {
-                    true -> "dark"
-                    false -> "light"
-                    null -> "system"
+                .putString("theme", when (s.themeMode) {
+                    ThemeMode.LIGHT -> "light"
+                    ThemeMode.DARK, ThemeMode.AMOLED -> "dark"
+                    ThemeMode.SYSTEM -> "system"
                 })
+                .putString("theme_mode", s.themeMode.storageName)
+                .putString("custom_ports", s.customPorts)
                 .putBoolean("notify_new", s.notifyNewDevices)
                 .putBoolean("notify_important", s.notifyImportantOffline)
                 .putBoolean("notify_done", s.notifyScanDone)
@@ -56,6 +70,8 @@ object SettingsStore {
                 .putBoolean("compact_mode", s.compactMode)
                 .putBoolean("monitor_fav_only", s.monitorFavoritesOnly)
                 .apply()
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            Log.w("NetRadarSettings", "Pengaturan gagal disimpan", e)
+        }
     }
 }

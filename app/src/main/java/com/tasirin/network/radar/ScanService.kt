@@ -3,10 +3,12 @@ package com.tasirin.network.radar
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.tasirin.network.radar.scanner.ScanStopSignal
 
 /**
  * Foreground service penjaga proses saat scan berjalan.
@@ -19,6 +21,7 @@ class ScanService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            ScanStopSignal.request()
             stopForegroundCompat()
             stopSelf()
             return START_NOT_STICKY
@@ -45,6 +48,16 @@ class ScanService : Service() {
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setProgress(100, progress, progress == 0)
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                "Berhenti",
+                PendingIntent.getService(
+                    this,
+                    0,
+                    Intent(this, ScanService::class.java).setAction(ACTION_STOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
             .build()
 
     private fun stopForegroundCompat() {
