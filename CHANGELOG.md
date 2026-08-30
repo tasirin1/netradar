@@ -36,6 +36,9 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 - Dokumen `AGENTS.md` kini memuat bagian **Keputusan historis** dan **Pola bug & guard**.
 - Perubahan diharuskan lewat pull request agar status check CodeQL/build terkunci oleh protected branch.
 
+### Diperbaiki (build & workflow)
+- Workflow CI kini mengunggah `mapping.txt` (R8 ProGuard) sebagai aset release bersama APK untuk kemudahan deobfuscation crash.
+
 ### Diperbaiki (lint)
 - Error lint `MissingPermission` pada notifikasi ditangani dengan `@SuppressLint` (guard `hasPermission()` sudah ada).
 - API Compose yang deprecated diperbarui: `Divider` → `HorizontalDivider`,
