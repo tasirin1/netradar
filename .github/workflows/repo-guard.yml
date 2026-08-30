@@ -1,16 +1,15 @@
-name: Docs
+name: Repo Guard
 
 on:
+  push:
   pull_request:
-    paths:
-      - "README.md"
-      - "README.en.md"
 
 jobs:
-  sync-heading:
+  guard:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Periksa struktur heading README (ID vs EN)
+      - name: Cek konsistensi repo
         run: |
+          python3 scripts/check_repo.py
           python3 scripts/check_repo.py --readme

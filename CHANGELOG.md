@@ -28,3 +28,10 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 - Deep scan tidak lagi membuat daftar berisi 65.536 objek port untuk rentang penuh.
 - Resume scan melewati subnet selesai tanpa memperluas IP-nya terlebih dahulu.
 - Event retry dipadatkan, lookup vendor MAC dideduplikasi, dan dependensi preview dihapus.
+
+### Ditambahkan
+- Guard otomatis di CI: setiap perubahan kode/CI tanpa pembaruan `CHANGELOG.md` mengagalkan build.
+- `lintDebug` dengan `abortOnError=true` dan `warningsAsErrors=true` dijalankan pada build resmi.
+- `scripts/check_repo.py` sebagai guard lokal ringan (tanpa Android SDK) untuk struktur README, rahasia, dan aturan.
+- Dokumen `AGENTS.md` kini memuat bagian **Keputusan historis** dan **Pola bug & guard**.
+- Perubahan diharuskan lewat pull request agar status check CodeQL/build terkunci oleh protected branch.

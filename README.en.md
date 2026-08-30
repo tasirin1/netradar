@@ -1,40 +1,94 @@
 # NetRadar
 
 [![Build](https://github.com/tasirin1/netradar/actions/workflows/build.yml/badge.svg)](https://github.com/tasirin1/netradar/actions)
+[![Release](https://img.shields.io/github/v/release/tasirin1/netradar)](https://github.com/tasirin1/netradar/releases)
 
-**Network Radar Scanner** is a local-network scanner for Android built with
-Kotlin and Jetpack Compose. It discovers hosts, cameras, routers, open ports,
-and services on Wi-Fi or Ethernet networks. The app supports Android 5.0
-(API 21) and newer.
+**Network Radar Scanner** is a local-network scanner for Android that finds devices, hidden CCTV cameras, routers, open ports, and services on Wi‑Fi or Ethernet networks. It is built with Kotlin and Jetpack Compose and supports Android 5.0 (API 21) and newer.
 
-## Features
+## Daftar isi
 
-- Port scanning with custom ranges such as `22, 80, 8000-8010`.
-- Camera, router, URL path, ping sweep, UDP, traceroute, and discovery scans.
-- Live monitoring, uptime history, latency charts, favorites, and Wake-on-LAN.
-- Deep scan with visible current port, cancellation, and throttled updates.
-- Scan checkpoints, wide-target confirmation, and resumable scans.
-- AMOLED theme, compact mode, notification controls, and sound feedback.
-- JSON backup/restore for results, favorites, history, and settings.
+- [Fitur](#fitur)
+- [Cara pakai](#cara-pakai)
+- [Unduh](#unduh)
+- [Widget, notifikasi & pengaturan](#widget-notifikasi--pengaturan)
+- [Troubleshooting](#troubleshooting)
+- [Build](#build)
+- [Panduan pengelolaan repo (untuk manusia & AI)](#panduan-pengelolaan-repo-untuk-manusia--ai)
+- [Lisensi](#lisensi)
 
-## Download
+## Fitur
 
-Get signed APK files from
-[GitHub Releases](https://github.com/tasirin1/netradar/releases), or download
-the `NetScan-APK` artifact from the latest successful GitHub Actions run.
+The feature set covers port, CCTV, router, URL path, discovery, ping sweep, UDP, traceroute, and periodic monitor scans with rich host information, favorites, resume support, custom ports, AMOLED theme, JSON backup/restore, and a notification stop button.
+
+## Cara pakai
+
+Enter a target IP or CIDR, choose the scan type, inspect host cards and service details, and stop or resume scans as needed.
+
+## Unduh
+
+Get signed APK files from [GitHub Releases](https://github.com/tasirin1/netradar/releases) or download the `NetScan-APK` artifact from the latest successful GitHub Actions run.
+
+## Widget, notifikasi & pengaturan
+
+The home screen widget, foreground notification, and settings page provide quick controls for monitoring, alerts, theme preference, and screen wake behavior.
+
+## Troubleshooting
+
+See the Indonesian README for detailed troubleshooting notes.
 
 ## Build
 
-The official release build runs in GitHub Actions:
+### Resmi (GitHub Actions)
+
+Official builds are produced by GitHub Actions: unit tests, lint checks, signed release APK, keystore verification, VirusTotal scan, and size thresholds.
+
+### Lokal (debug/testing)
 
 ```bash
-./gradlew testDebugUnitTest assembleRelease
+./gradlew assembleDebug
+# Hasil: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Release signing requires `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`,
-and `KEY_PASSWORD`. Never commit keystore files or credentials.
+Local builds are only for debugging and test runs. Never use them for releases.
 
-## Documentation
+---
 
-The complete Indonesian documentation and repository rules are available in
-[README.md](README.md) and [AGENTS.md](AGENTS.md).
+# Panduan pengelolaan repo
+
+See the governance document for full details.
+
+## Struktur repository
+
+High-level layout of source, workflows, tests, and documentation files.
+
+## Arsitektur ringkas
+
+Compose-based UI driven by `ScanViewModel` and scanner flows with a shared `ScanLoop` helper.
+
+## Kunci SharedPreferences
+
+Summary of the primary preference keys and persistence files.
+
+## Aturan pengembangan
+
+Development rules covering language, commit style, and testing obligations.
+
+## Cara memicu build
+
+Push, pull request, and manual workflow dispatch instructions.
+
+## Catatan penting & rekomendasi (keystore & release)
+
+Keystore security, release signing, and verification practices.
+
+## Menambah/mengubah fitur — file mana yang disentuh
+
+Guidance for which files to modify when adding or changing features.
+
+## Verifikasi setelah build
+
+CI and manual verification steps after a change.
+
+## Lisensi
+
+MIT License. Do not redistribute without permission.
