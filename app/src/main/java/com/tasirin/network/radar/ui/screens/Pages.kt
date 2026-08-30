@@ -39,8 +39,7 @@ fun MonitorPage(
     gatewayLatencyMs: Long?,
     internetOnline: Boolean?,
     internetLatencyMs: Long?,
-    networkQualityLabel: String,
-    networkQualityColor: Long
+    networkQualityLabel: String
 ) {
     var showDashboard by remember { mutableStateOf(false) }
     if (showDashboard) {
@@ -115,7 +114,7 @@ fun MonitorPage(
                     }
                     if (pct != null) {
                         LinearProgressIndicator(
-                            progress = pct / 100f,
+                            progress = { pct / 100f },
                             modifier = Modifier.width(60.dp).height(6.dp).clip(RoundedCornerShape(3.dp))
                         )
                         Spacer(Modifier.width(6.dp))
@@ -146,7 +145,7 @@ fun HistoryPage(history: List<ScanHistoryEntry>) {
         } else {
             items(history, key = { it.time }) { entry ->
                 HistoryRow(entry)
-                Divider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
             }
         }
     }
@@ -155,7 +154,6 @@ fun HistoryPage(history: List<ScanHistoryEntry>) {
 /** Halaman Pengaturan: tampilan, notifikasi, dan info aplikasi. */
 @Composable
 fun SettingsPage(
-    darkTheme: Boolean?,
     themeMode: ThemeMode,
     customPorts: String,
     notifyNewDevices: Boolean,
@@ -166,7 +164,6 @@ fun SettingsPage(
     autoDiffDialog: Boolean,
     compactMode: Boolean,
     monitorFavoritesOnly: Boolean,
-    onTheme: (Boolean?) -> Unit,
     onThemeMode: (ThemeMode) -> Unit,
     onCustomPorts: (String) -> Unit,
     onExportBackup: () -> Unit,
@@ -190,7 +187,6 @@ fun SettingsPage(
         SectionHeader("Pengaturan")
         Spacer(Modifier.height(4.dp))
         SettingsBody(
-            darkTheme = darkTheme,
             themeMode = themeMode,
             customPorts = customPorts,
             notifyNewDevices = notifyNewDevices,
@@ -201,7 +197,6 @@ fun SettingsPage(
             autoDiffDialog = autoDiffDialog,
             compactMode = compactMode,
             monitorFavoritesOnly = monitorFavoritesOnly,
-            onTheme = onTheme,
             onThemeMode = onThemeMode,
             onCustomPorts = onCustomPorts,
             onExportBackup = onExportBackup,

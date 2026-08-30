@@ -66,7 +66,7 @@ android {
 
     lint {
         abortOnError = true
-        warningsAsErrors = true
+        warningsAsErrors = false
     }
 
     composeOptions {

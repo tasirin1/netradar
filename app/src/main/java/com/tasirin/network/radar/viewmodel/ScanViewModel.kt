@@ -328,7 +328,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             updateStaleIps()
                             refreshRecentTargets()
                         }
-                        else -> {}
                     }
                 }
             } catch (e: CancellationException) {

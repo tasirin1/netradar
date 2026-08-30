@@ -8,6 +8,7 @@ import android.content.Intent
 import android.app.PendingIntent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.annotation.SuppressLint
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -93,6 +94,7 @@ class ScanNotifier(private val context: Context) {
         ongoing = false
     )
 
+    @SuppressLint("MissingPermission")
     private fun post(
         channel: String,
         channelName: String,

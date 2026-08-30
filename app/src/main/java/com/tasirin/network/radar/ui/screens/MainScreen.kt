@@ -34,7 +34,6 @@ fun MainScreen(
     onStop: () -> Unit,
     onPauseResume: (() -> Unit)? = null,
     onToggleSettings: (() -> Unit)? = null,
-    onSetTheme: ((Boolean?) -> Unit)? = null,
     onSetThemeMode: ((ThemeMode) -> Unit)? = null,
     onSetCustomPorts: ((String) -> Unit)? = null,
     onExportBackup: (() -> Unit)? = null,
@@ -57,7 +56,6 @@ fun MainScreen(
     onWol: ((String, String) -> Unit)? = null,
     onSortMode: ((SortMode) -> Unit)? = null,
     onAbout: (() -> Unit)? = null,
-    scanSpeed: ScanSpeed = ScanSpeed.SEDANG,
     onSelectScanSpeed: ((ScanSpeed) -> Unit)? = null,
     onSearchChange: ((String) -> Unit)? = null,
     onDeviceFilter: ((DeviceFilter) -> Unit)? = null,
@@ -191,7 +189,6 @@ fun MainScreen(
                     onClearSelection = onClearSelection,
                     onWol = onWol,
                     onSortMode = onSortMode,
-                    scanSpeed = scanSpeed,
                     onSelectScanSpeed = onSelectScanSpeed,
                     onSearchChange = onSearchChange,
                     onDeviceFilter = onDeviceFilter,
@@ -220,12 +217,10 @@ fun MainScreen(
                     gatewayLatencyMs = state.gatewayLatencyMs,
                     internetOnline = state.internetOnline,
                     internetLatencyMs = state.internetLatencyMs,
-                    networkQualityLabel = state.networkQualityLabel,
-                    networkQualityColor = state.networkQualityColor
+                    networkQualityLabel = state.networkQualityLabel
                 )
                 MainTab.RIWAYAT -> HistoryPage(history = state.scanHistory)
                 MainTab.PENGATURAN -> SettingsPage(
-                    darkTheme = state.isDarkTheme,
                     themeMode = state.themeMode,
                     customPorts = state.customPorts,
                     notifyNewDevices = state.notifyNewDevices,
@@ -236,7 +231,6 @@ fun MainScreen(
                     autoDiffDialog = state.autoDiffDialog,
                     compactMode = state.compactMode,
                     monitorFavoritesOnly = state.monitorFavoritesOnly,
-                    onTheme = { onSetTheme?.invoke(it) },
                     onThemeMode = { onSetThemeMode?.invoke(it) },
                     onCustomPorts = { onSetCustomPorts?.invoke(it) },
                     onExportBackup = { onExportBackup?.invoke() },

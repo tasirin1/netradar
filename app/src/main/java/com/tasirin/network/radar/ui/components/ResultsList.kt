@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -171,7 +172,7 @@ fun HostCard(
             if (host.label != null && !compact) {
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Label, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.secondary)
+                    Icon(Icons.AutoMirrored.Filled.Label, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.secondary)
                     Spacer(Modifier.width(4.dp))
                     Text(host.label, fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary,
                         fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -201,7 +202,7 @@ fun HostCard(
             // ─── Ports as inline clickable ip:port chips ───
             if (host.openPorts.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                Divider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
                 Spacer(Modifier.height(4.dp))
 
                 // Show ports as wrapped row of clickable chips
