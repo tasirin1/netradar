@@ -184,8 +184,10 @@ jobs:
         CODE=${GITHUB_RUN_NUMBER}
         OUT="netradar-v${VER}-${CODE}.apk"
         cp app/build/outputs/apk/release/app-release.apk "$OUT"
+        MAPPING="netradar-v${VER}-${CODE}-mapping.txt"
+        cp app/build/outputs/mapping/release/mapping.txt "$MAPPING"
         gh release delete "v${VER}" --yes --cleanup-tag || true
-        gh release create "v${VER}" "$OUT" \
+        gh release create "v${VER}" "$OUT" "$MAPPING" \
           --title "NetRadar v${VER} (build ${CODE})" \
-          --notes "APK rilis terbaru (build ${CODE}). Ditandatangani dengan keystore resmi Tasirin (sama dengan Tasirin Download Manager & Vaultwarden Host) — update-over-install mulus." \
+          --notes "APK rilis terbaru (build ${CODE}) + mapping.txt untuk deobfuscation crash R8. Ditandatangani dengan keystore resmi Tasirin (sama dengan Tasirin Download Manager & Vaultwarden Host) — update-over-install mulus." \
           --latest
