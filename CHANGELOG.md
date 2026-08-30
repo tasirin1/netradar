@@ -52,3 +52,7 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
   `LinearProgressIndicator(Float)` → overload lambda, ikon `Label`/`Sort` → `Icons.AutoMirrored.Filled.*`.
 - Parameter composable yang tidak terpakai dibersihkan (`darkTheme`, `onTheme`, `scanSpeed`,
   `networkQualityColor`) beserta rantai pemanggilnya, dan variabel `deferred` yang menaungi nama dihilangkan.
+
+### Diperbaiki (bug)
+- **Socket leak di `RouterScanner`**: `sock.close()` hanya dipanggil di cabang sukses sehingga socket
+  bocor saat `sock.connect()` gagal/timeout. Kini ditutup lewat `finally` (pola try-finally baku).
