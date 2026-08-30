@@ -79,8 +79,8 @@ def gradle_guard() -> bool:
         return False
     text = build.read_text()
     ok = True
-    if 'minSdk = 21' not in text:
-        print("::error::minSdk harus tetap 21")
+    if 'minSdk = 29' not in text:
+        print("::error::minSdk harus 29 (Android 10)")
         ok = False
     if 'versionName = "2.0"' not in text:
         print("::error::versionName harus tetap \"2.0\"")

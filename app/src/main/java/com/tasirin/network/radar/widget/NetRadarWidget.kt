@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.widget.RemoteViews
 import com.tasirin.network.radar.MainActivity
 import com.tasirin.network.radar.R
@@ -63,7 +62,7 @@ class NetRadarWidget : AppWidgetProvider() {
                 }
 
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+                    PendingIntent.FLAG_IMMUTABLE
                 val openApp = PendingIntent.getActivity(
                     context, 0, Intent(context, MainActivity::class.java), flags)
                 setOnClickPendingIntent(R.id.widget_root, openApp)

@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.app.PendingIntent
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.tasirin.network.radar.scanner.ScanStopSignal
@@ -32,12 +31,10 @@ class ScanService : Service() {
     }
 
     private fun createChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Scan Berjalan", NotificationManager.IMPORTANCE_LOW)
-            )
-        }
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "Scan Berjalan", NotificationManager.IMPORTANCE_LOW)
+        )
     }
 
     private fun buildNotification(text: String, progress: Int) =
@@ -61,12 +58,7 @@ class ScanService : Service() {
             .build()
 
     private fun stopForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     companion object {

@@ -9,7 +9,7 @@ Panduan lengkap yang lain (fitur, cara pakai, troubleshooting) ada di
 ```
 .
 ├── .github/workflows/build.yml       # CI: build APK + unit test + release otomatis
-├── app/build.gradle.kts              # minSdk 21 / targetSdk 35, compileSdk 35, R8
+├── app/build.gradle.kts              # minSdk 29 / targetSdk 36, compileSdk 36, R8
 ├── app/src/main/
 │   ├── AndroidManifest.xml           # permission & komponen (activity, service, widget)
 │   ├── res/                          # layout widget, tema, ikon, string
@@ -82,7 +82,8 @@ Panduan lengkap yang lain (fitur, cara pakai, troubleshooting) ada di
 Hal berikut sengaja dipilih/dilarang — JANGAN diubah tanpa alasan kuat:
 
 - **UI aplikasi Bahasa Indonesia** — sengaja; target pengguna lokal.
-- **minSdk 21** — tetap Android 5+, jangan naikkan.
+- **minSdk 29** — Android 10+, dinaikkan dari 21 demi API yang lebih aman
+  (mis. `forceDarkAllowed` tanpa resource terpisah).
 - **Compose BOM 2024.06.00** — dipilih karena fix bug "pending composition
   has not been applied" saat deep scan; jangan turunkan tanpa pengujian.
 - **Animasi dot di StatusBar hanya saat scanning** — animasi infinite di dalam
@@ -124,10 +125,9 @@ Hal berikut sengaja dipilih/dilarang — JANGAN diubah tanpa alasan kuat:
    `feat`, `fix`, `refactor`, `test`, `perf`, `docs`. Satu commit satu tujuan.
 4. **Jangan ubah `versionName`** (`"2.0"` tetap). `versionCode` otomatis:
    `GITHUB_RUN_NUMBER` di CI, fallback jumlah commit git untuk build lokal.
-5. **Jaga kompatibilitas Android 5 (minSdk 21)**: API baru wajib punya fallback;
-   jangan naikkan minSdk.
-6. **`targetSdk 35`**: pastikan perubahan tetap lolos perilaku storage/target
-   SDK baru tanpa memutus Android 5–10.
+5. **Jaga kompatibilitas Android 10 (minSdk 29)**: API baru wajib punya fallback.
+6. **`targetSdk 36`**: pastikan perubahan tetap lolos perilaku storage/target
+   SDK baru tanpa memutus Android 10+.
 7. **UI Compose**: hindari animasi berat per-item di `LazyColumn` selama deep
    scan; progress UI wajib di-throttle.
 8. **Jangan taruh pekerjaan jaringan di main thread**; pemindaian wajib
@@ -197,7 +197,7 @@ ditetapkan atau mengaktifkan kembali fitur/syarat yang sengaja dipertahankan.
 | UI/commit pakai Bahasa Indonesia | Basis pengguna utama lebih nyaman dengan istilah lokal; komentar dan commit juga konsisten. |
 | Compose BOM 2024.06.00 | Compose Runtime 1.6.8 memperbaiki crash `pending composition has not been applied` saat deep scan memperbarui list beranimasi. |
 | Throttle progress UI maks ~6×/detik | Menghindari kompetisi layout LazyColumn dengan recomposition berulang, terutama saat scan subnet besar. |
-| minSdk tetap 21 & `versionName` tetap `"2.0"` | Dukungan Android 5.0+; `versionCode` diatur otomatis oleh CI (`GITHUB_RUN_NUMBER`). |
+| minSdk 29 (Android 10) & `versionName` tetap `"2.0"` | Dukungan Android 10+; `versionCode` diatur otomatis oleh CI (`GITHUB_RUN_NUMBER`). |
 | Deep scan berbasis indeks/`IntArray` | Menghindari alokasi 65.536 objek port; menurunkan tekanan GC dan waktu scan. |
 | ScanLoop mengekspansi subnet hanya saat benar-benar discan | Saat resume melewati subnet selesai, alokasi IP dihindari agar hemat memori. |
 | Backup/restore menyertakan `ipConflict` & `lastSeenScan` | Menjaga konteks lintas scan agar UI tidak kehilangan status host. |

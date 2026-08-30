@@ -89,7 +89,7 @@ jobs:
         sudo mv /tmp/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest/
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
         $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-          "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1
+          "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1
         echo "ANDROID_SDK_ROOT=/opt/android" >> $GITHUB_ENV
         echo "ANDROID_HOME=/opt/android" >> $GITHUB_ENV
 
@@ -112,7 +112,7 @@ jobs:
 
     - name: Verifikasi tanda tangan APK release
       run: |
-        FINGERPRINT=$(keytool -printcert -jarfile app/build/outputs/apk/release/app-release.apk 2>/dev/null | grep 'SHA256:' | head -1 | sed 's/.*SHA256: //;s/://g;s/ .*//' | tr 'A-F' 'a-f')
+        FINGERPRINT=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk 2>/dev/null | grep 'SHA-256 digest:' | head -1 | sed 's/.*SHA-256 digest: //;s/://g;s/ //g' | tr 'A-F' 'a-f')
         echo "Fingerprint: $FINGERPRINT"
         if [ "$FINGERPRINT" != "c2785a618082683755eeae867e0a2e01f450b1fd448859d1ec21cf854c5713d1" ]; then
           echo "::error::Keystore tidak cocok! Diharapkan c2785a61... dapat $FINGERPRINT"
