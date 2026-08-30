@@ -21,8 +21,7 @@ class ScanNotifier(private val context: Context) {
     fun startScanService() {
         try {
             val intent = Intent(context, ScanService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
-            else context.startService(intent)
+            context.startForegroundService(intent)
         } catch (e: Exception) {
             android.util.Log.w(TAG, "Foreground service gagal dimulai", e)
         }
@@ -108,9 +107,7 @@ class ScanNotifier(private val context: Context) {
         try {
             if (!hasPermission()) return
             val manager = NotificationManagerCompat.from(context)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                manager.createNotificationChannel(NotificationChannel(channel, channelName, importance))
-            }
+            manager.createNotificationChannel(NotificationChannel(channel, channelName, importance))
             val builder = NotificationCompat.Builder(context, channel)
                 .setSmallIcon(android.R.drawable.stat_notify_more)
                 .setContentTitle(title)

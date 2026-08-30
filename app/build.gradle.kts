@@ -14,12 +14,12 @@ val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: maxOf(git
 
 android {
     namespace = "com.tasirin.network.radar"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.tasirin.network.radar"
-        minSdk = 21
-        targetSdk = 35
+        minSdk = 29
+        targetSdk = 36
         versionCode = buildNumber
         versionName = "2.0"
         // Hanya string default (+id) yang dipertahankan — buang resource

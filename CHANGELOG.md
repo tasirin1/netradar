@@ -5,6 +5,13 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ## [2.0] - 2026-08-21
 
+### Diubah (SDK target)
+- `minSdk` dinaikkan dari 21 ke 29 (Android 10); `targetSdk`/`compileSdk` dari 35 ke 36.
+- Guard API `Build.VERSION_CODES.O`/`N`/`M` yang kini selalu benar dihapus dari
+  `ScanNotifier`, `ScanService`, dan `NetRadarWidget` (efficiency cleanup).
+- `forceDarkAllowed` disatukan kembali ke `values/themes.xml` (resource
+  `values-v29` tidak lagi dibutuhkan karena `minSdk 29`).
+
 ### Ditambahkan
 - Tombol **Berhenti** pada notifikasi scan dan pemisahan logika notifikasi
   dari `ScanViewModel`.
