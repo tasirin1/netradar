@@ -48,11 +48,11 @@ class RouterScanner {
         permits.acquire()
         try {
             val sock = Socket()
-            sock.connect(InetSocketAddress(ip, port), timeoutMs)
-            sock.soTimeout = timeoutMs
+            try {
+                sock.connect(InetSocketAddress(ip, port), timeoutMs)
+                sock.soTimeout = timeoutMs
 
-            if (port in WEB_PORTS) {
-                try {
+                if (port in WEB_PORTS) {
                     val req = "GET / HTTP/1.1\r\nHost: $ip\r\nConnection: close\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
@@ -62,7 +62,6 @@ class RouterScanner {
                         line = reader.readLine() ?: break
                         header.append(line).append(" ")
                     }
-                    sock.close()
                     val h = header.toString().lowercase()
                     val service = when {
                         h.contains("mikrotik") || h.contains("routeros") -> "MikroTik RouterOS"
@@ -91,26 +90,24 @@ class RouterScanner {
                         else -> "Web Admin Panel"
                     }
                     return@withContext PortInfo(port, service)
-                } catch (_: Exception) {
-                    sock.close()
-                    return@withContext null
                 }
-            }
 
-            sock.close()
-            val service = when (port) {
-                8291 -> "Winbox (MikroTik)"
-                7547 -> "TR-069 (ISP CWMP)"
-                5000 -> "UPnP Gateway"
-                23 -> "Telnet Router"
-                22 -> "SSH Router"
-                21 -> "FTP Router"
-                161 -> "SNMP Router"
-                2601, 2602 -> "Quagga/FRRouting"
-                1900 -> "UPnP SSDP"
-                else -> null
+                val service = when (port) {
+                    8291 -> "Winbox (MikroTik)"
+                    7547 -> "TR-069 (ISP CWMP)"
+                    5000 -> "UPnP Gateway"
+                    23 -> "Telnet Router"
+                    22 -> "SSH Router"
+                    21 -> "FTP Router"
+                    161 -> "SNMP Router"
+                    2601, 2602 -> "Quagga/FRRouting"
+                    1900 -> "UPnP SSDP"
+                    else -> null
+                }
+                return@withContext service?.let { PortInfo(port, it) }
+            } finally {
+                try { sock.close() } catch (_: Exception) {}
             }
-            return@withContext service?.let { PortInfo(port, it) }
         } catch (_: Exception) { null }
         finally {
             permits.release()
