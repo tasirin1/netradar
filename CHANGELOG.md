@@ -45,6 +45,7 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ### Diperbaiki (build & workflow)
 - Workflow CI kini mengunggah `mapping.txt` (R8 ProGuard) sebagai aset release bersama APK untuk kemudahan deobfuscation crash.
+- VirusTotal scan diberi `--connect-timeout` + `--retry` pada `curl` agar tidak gagal karena gangguan jaringan transient (SSL/connection reset).
 
 ### Diperbaiki (lint)
 - Error lint `MissingPermission` pada notifikasi ditangani dengan `@SuppressLint` (guard `hasPermission()` sudah ada).
