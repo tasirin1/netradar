@@ -62,7 +62,6 @@ class MainActivity : AppCompatActivity() {
                             if (state.isPaused) viewModel.resumeScan() else viewModel.pauseScan()
                         },
                         onToggleSettings = { viewModel.toggleSettings() },
-                        onSetTheme = { dark -> viewModel.setTheme(dark) },
                         onSetThemeMode = { mode -> viewModel.setThemeMode(mode) },
                         onSetCustomPorts = { ports -> viewModel.setCustomPorts(ports) },
                         onExportBackup = { viewModel.exportBackup() },
@@ -88,7 +87,6 @@ class MainActivity : AppCompatActivity() {
                         onWol = { ip, mac -> viewModel.wakeOnLan(ip, mac) },
                         onSortMode = { mode -> viewModel.setSortMode(mode) },
                         onAbout = { viewModel.toggleAbout() },
-                        scanSpeed = state.scanSpeed,
                         onSelectScanSpeed = { speed -> viewModel.setScanSpeed(speed) },
                         onSearchChange = { q -> viewModel.setSearchQuery(q) },
                         onDeviceFilter = { f -> viewModel.setDeviceFilter(f) },

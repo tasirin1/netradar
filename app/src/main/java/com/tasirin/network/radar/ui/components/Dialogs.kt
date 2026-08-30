@@ -61,7 +61,6 @@ import java.util.Locale
 
 @Composable
 fun SettingsBody(
-    darkTheme: Boolean?,
     themeMode: ThemeMode,
     customPorts: String,
     notifyNewDevices: Boolean,
@@ -72,7 +71,6 @@ fun SettingsBody(
     autoDiffDialog: Boolean,
     compactMode: Boolean,
     monitorFavoritesOnly: Boolean,
-    onTheme: (Boolean?) -> Unit,
     onThemeMode: (ThemeMode) -> Unit,
     onCustomPorts: (String) -> Unit,
     onExportBackup: () -> Unit,
@@ -220,7 +218,7 @@ fun NetworkInfoBar(
             localIp = localIp, gateway = gateway, subnet = subnet,
             gatewayOnline = gatewayOnline, gatewayLatencyMs = gatewayLatencyMs,
             internetOnline = internetOnline, internetLatencyMs = internetLatencyMs,
-            networkQualityLabel = networkQualityLabel, networkQualityColor = networkQualityColor,
+            networkQualityLabel = networkQualityLabel,
             interfaces = interfaces, selectedInterface = selectedInterface,
             onSelectInterface = onSelectInterface,
             onDismiss = { showInfo = false }
@@ -239,7 +237,6 @@ private fun NetworkInfoDialog(
     internetOnline: Boolean?,
     internetLatencyMs: Long?,
     networkQualityLabel: String,
-    networkQualityColor: Long,
     interfaces: List<NetworkInterfaceInfo>,
     selectedInterface: String,
     onSelectInterface: ((String) -> Unit)?,
@@ -306,7 +303,7 @@ fun SectionHeader(title: String) {
             letterSpacing = 0.5.sp
         )
         Spacer(Modifier.width(10.dp))
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.weight(1f),
             thickness = 0.5.dp,
             color = MaterialTheme.colorScheme.outline

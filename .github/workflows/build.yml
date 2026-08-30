@@ -2,6 +2,7 @@ name: Build
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -14,8 +15,36 @@ jobs:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
     steps:
-    - name: Checkout
+    - name: Checkout (sejarah penuh untuk guard changelog)
       uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Pastikan CHANGELOG diperbarui
+      env:
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      run: |
+        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          BASE="$PR_BASE_SHA"
+        else
+          BASE="$PUSH_BEFORE"
+        fi
+        if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+          echo "Base SHA tidak tersedia; guard dilewati."
+          exit 0
+        fi
+        CHANGED=$(git diff --name-only "$BASE"...HEAD)
+        echo "File berubah:"
+        echo "$CHANGED"
+        if echo "$CHANGED" | grep -qE '^(app/src|scripts/|\.github/workflows/|app/build\.gradle\.kts)'; then
+          if ! echo "$CHANGED" | grep -q '^CHANGELOG\.md$'; then
+            echo "::error::Ada perubahan kode/CI tanpa pembaruan CHANGELOG.md. Update CHANGELOG.md di PR ini."
+            exit 1
+          fi
+        else
+          echo "Tidak ada perubahan kode/CI — CHANGELOG tidak wajib."
+        fi
 
     - name: Cek kesehatan keystore (fingerprint + masa berlaku)
       env:
@@ -79,7 +108,7 @@ jobs:
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       run: |
         echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
-        gradle testDebugUnitTest assembleRelease --no-daemon
+        gradle testDebugUnitTest lintDebug assembleRelease --no-daemon
 
     - name: Verifikasi tanda tangan APK release
       run: |

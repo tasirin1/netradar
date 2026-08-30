@@ -43,6 +43,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
+@Suppress("DEPRECATION")
 fun NetRadarTheme(
     darkThemeOverride: Boolean? = null,
     amoled: Boolean = false,

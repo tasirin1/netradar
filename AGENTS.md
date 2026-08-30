@@ -186,3 +186,33 @@ keytool -printcert -jarfile app-release.apk
 
 Pastikan conclusion `success` dan artifact `NetScan-APK` ada. Uji manual:
 pasang di HP, scan `192.168.0.0/24`, buka hasil & detail host, tes resume/jeda.
+
+## Keputusan historis (dokumen hidup)
+
+Pencatatannya penting supaya AI berikutnya tidak mengulang keputusan yang sudah
+ditetapkan atau mengaktifkan kembali fitur/syarat yang sengaja dipertahankan.
+
+| Keputusan | Alasan |
+|---|---|
+| UI/commit pakai Bahasa Indonesia | Basis pengguna utama lebih nyaman dengan istilah lokal; komentar dan commit juga konsisten. |
+| Compose BOM 2024.06.00 | Compose Runtime 1.6.8 memperbaiki crash `pending composition has not been applied` saat deep scan memperbarui list beranimasi. |
+| Throttle progress UI maks ~6×/detik | Menghindari kompetisi layout LazyColumn dengan recomposition berulang, terutama saat scan subnet besar. |
+| minSdk tetap 21 & `versionName` tetap `"2.0"` | Dukungan Android 5.0+; `versionCode` diatur otomatis oleh CI (`GITHUB_RUN_NUMBER`). |
+| Deep scan berbasis indeks/`IntArray` | Menghindari alokasi 65.536 objek port; menurunkan tekanan GC dan waktu scan. |
+| ScanLoop mengekspansi subnet hanya saat benar-benar discan | Saat resume melewati subnet selesai, alokasi IP dihindari agar hemat memori. |
+| Backup/restore menyertakan `ipConflict` & `lastSeenScan` | Menjaga konteks lintas scan agar UI tidak kehilangan status host. |
+
+## Pola bug & guard
+
+Catatkan setiap pola bug pernah terjadi supaya AI selalu menambahkan
+pengaman ketika menyentuh area yang sama.
+
+| Pola | Guard / aturan |
+|---|---|
+| Socket leak | Tutup socket, `Process`, `ToneGenerator`, dan `BufferedReader` di blok `finally`. |
+| Kehabisan file descriptor saat scan /24 | Wajib ada `Semaphore` (`speed.socketPermits`) di semua scanner paralel. |
+| Host timeout pada subnet ramai | Retry hanya sekali dan dibatasi `MAX_RETRY_HOSTS` agar scan luas tidak melambat. |
+| Host membalas SYN-ACK semua port | Deep scan dihentikan pada `DEEP_SCAN_MAX_RESULTS` (4000 port) agar penyimpanan & UI tetap stabil. |
+| Compose crash saat progress memperbarui `LazyColumn` | Gunakan throttle kemajuan dan hapus `StateFlow` dari thread komputasi saat recomposition aktif. |
+| Backup kehilangan konteks lintas scan | `BackupManager` harus menuliskan `ipConflict`, `lastSeenScan`, dan `customPorts`. |
+| Input port kustom tidak valid | Parser kembali ke port umum default; UI hanya menerima angka/range; dependensi `CustomPortParser` diuji terpisah. |

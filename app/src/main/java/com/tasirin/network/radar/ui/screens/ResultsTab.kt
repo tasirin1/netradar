@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,7 +43,6 @@ fun ResultsTab(
     onClearSelection: (() -> Unit)? = null,
     onWol: ((String, String) -> Unit)? = null,
     onSortMode: ((SortMode) -> Unit)? = null,
-    scanSpeed: ScanSpeed = ScanSpeed.SEDANG,
     onSelectScanSpeed: ((ScanSpeed) -> Unit)? = null,
     onSearchChange: ((String) -> Unit)? = null,
     onDeviceFilter: ((DeviceFilter) -> Unit)? = null,
@@ -397,7 +397,7 @@ fun ResultsTab(
                             }
                         }
                         LinearProgressIndicator(
-                            progress = state.deepScanProgress / 100f,
+                            progress = { state.deepScanProgress / 100f },
                             modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
                         )
                     }
@@ -496,7 +496,7 @@ fun ResultsTab(
                         }
                         Box {
                             IconButton(onClick = { sortMenuOpen = true }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Sort, null, Modifier.size(18.dp), tint = TextSecondary)
+                                Icon(Icons.AutoMirrored.Filled.Sort, null, Modifier.size(18.dp), tint = TextSecondary)
                             }
                             DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
                                 SortMode.entries.forEach { mode ->

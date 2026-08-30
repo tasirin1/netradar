@@ -186,14 +186,14 @@ class UrlPathScanner {
         withContext(Dispatchers.IO) {
             paths.chunked(30).forEach { batch ->
                 ScanPause.checkPause()
-                val deferred = batch.map { path ->
+                val tasks = batch.map { path ->
                     async {
                         val url = baseUrl.trimEnd('/') + path
                         url to checkPath(url)
                     }
                 }
-                deferred.forEach { deferred ->
-                    val (url, result) = deferred.await()
+                tasks.forEach { task ->
+                    val (url, result) = task.await()
                     completed++
                     send(ScanEvent.Progress(url, completed, total))
                     if (result != null) {
