@@ -10,7 +10,7 @@ jobs:
   sync-heading:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Periksa struktur heading README (ID vs EN)
         run: |
           python3 scripts/check_repo.py --readme
