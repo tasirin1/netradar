@@ -27,6 +27,8 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 - IPv6 ditolak eksplisit; satu IP penuh hanya memindai sisa /24-nya (bukan
   berekor ke /16 ±61rb host); ping menghormati timeout level via `waitFor`;
   traceroute mendukung IPv6 dan selesai tanpa syarat latency target.
+- Cakupan uji ScanLoop: progres retry tak melebihi total, retry dilewati saat
+  host hilang melebihi batas, dan checkpoint basi tidak crash.
 
 ### Diubah
 - Workflow Build: push/PR yang hanya menyentuh docs (`**.md`, `LICENSE`,
