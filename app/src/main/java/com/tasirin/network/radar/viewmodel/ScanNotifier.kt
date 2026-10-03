@@ -47,7 +47,7 @@ class ScanNotifier(private val context: Context) {
             importance = NotificationManager.IMPORTANCE_DEFAULT,
             title = "Perangkat baru: ${host.ip}",
             text = detail.ifBlank { "Host baru terdeteksi di jaringan" },
-            id = host.ip.hashCode(),
+            id = stableId("baru", host.ip),
             ongoing = false
         )
     }
@@ -58,7 +58,7 @@ class ScanNotifier(private val context: Context) {
         importance = NotificationManager.IMPORTANCE_HIGH,
         title = "⚠ Perangkat penting offline: $ip",
         text = "Perangkat favorit tidak merespons ping.",
-        id = ip.hashCode() + 9999,
+        id = stableId("penting-off", ip),
         ongoing = false
     )
 
@@ -68,7 +68,7 @@ class ScanNotifier(private val context: Context) {
         importance = NotificationManager.IMPORTANCE_HIGH,
         title = "📱 $name kembali online",
         text = "$ip merespons ping lagi.",
-        id = ip.hashCode() + 7777,
+        id = stableId("kembali", ip),
         ongoing = false
     )
 
@@ -132,6 +132,11 @@ class ScanNotifier(private val context: Context) {
             android.util.Log.w(TAG, "Notifikasi gagal dikirim", e)
         }
     }
+
+    // ID notifikasi stabil: selalu positif (hashCode bisa negatif) dan memakai
+    // prefix per jenis agar tak saling menimpa atau menimpa ID service (2001/2002).
+    private fun stableId(kind: String, ip: String): Int =
+        ("netradar:$kind:$ip".hashCode() and 0x7FFFFFFF) % 100000 + 10000
 
     private fun hasPermission(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||

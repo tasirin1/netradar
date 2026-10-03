@@ -31,7 +31,11 @@ class UdpScanner {
 
         val udpTimeout = (speed.timeoutMs * 5).coerceIn(800, 1500)
         // Item 10: makin rendah level, makin banyak port UDP yang discan
+        // SSDP (1900) & mDNS (5353) adalah protokol multicast: probe unicast ke
+        // IP target praktis tak pernah dibalas (false negative + buang timeout).
+        // Keduanya sudah dicakup MdnsNameResolver via multicast discovery.
         val udpPorts = UDP_PORTS.take(udpPortCount(speed))
+            .filter { it.first !in MULTICAST_ONLY_PORTS }
         val arpTable = NetworkUtils.readArpTable()
         // Probe UDP memblokir (socket + timeout): batasi paralelisme global agar
         // tidak kehabisan file descriptor/thread saat scan subnet luas.
@@ -58,6 +62,8 @@ class UdpScanner {
     }
 
     companion object {
+        private val MULTICAST_ONLY_PORTS = setOf(1900, 5353)
+
         private val UDP_PORTS = listOf(
             53 to "DNS",
             123 to "NTP",

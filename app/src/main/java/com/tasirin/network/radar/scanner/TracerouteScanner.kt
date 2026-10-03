@@ -62,18 +62,22 @@ class TracerouteScanner {
     private data class Hop(val ip: String?, val latencyMs: Long?)
 
     private suspend fun probeHop(targetIp: String, ttl: Int): Hop = withContext(Dispatchers.IO) {
-        val process = ProcessBuilder(
-            "ping", "-c", "1", "-t", ttl.toString(), "-W", "1", targetIp
-        ).redirectErrorStream(true).start()
+        // waitFor ber-timeout seperti PingUtil: ping yang macet tidak boleh
+        // menggantung coroutine selamanya. Output dibaca SETELAH proses
+        // selesai agar pipe penuh tak deadlock sebelum waitFor kembali.
+        var process: Process? = null
         try {
-            val output = BufferedReader(InputStreamReader(process.inputStream)).readText()
-            try {
-                process.waitFor()
-                parseHop(output)
-            } finally {
-                process.destroy()
-            }
+            process = ProcessBuilder(
+                "ping", "-c", "1", "-t", ttl.toString(), "-W", "1", targetIp
+            ).redirectErrorStream(true).start()
+            val finished = process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            if (!finished) return@withContext Hop(null, null)
+            val output = try {
+                BufferedReader(InputStreamReader(process.inputStream)).readText()
+            } catch (_: Exception) { "" }
+            parseHop(output)
         } catch (_: Exception) { Hop(null, null) }
+        finally { try { process?.destroy() } catch (_: Exception) {} }
     }
 
     /** Baca output ping: balasan akhir "bytes from <ip> ... time=X ms" atau TTL habis "From <ip> ... exceeded". */
@@ -93,6 +97,8 @@ class TracerouteScanner {
     private companion object {
         // Kelas [0-9a-fA-F:.]+ mencakup IPv4 dan IPv6 (mis. "bytes from 2001:db8::1 ...").
         val REPLY_REGEX = Regex("""bytes from ([0-9a-fA-F:.]+)[^\n]*?time[=:]\s*([0-9.]+)\s*ms""")
-        val EXCEEDED_REGEX = Regex("""(?i)\bfrom ([0-9a-fA-F:.]+)\s*:.*(?:exceeded|time to live)""")
+        // Titik-dua setelah IP opsional: sebagian ping menulis
+        // "From 1.2.3.4 icmp_seq=1 Time to live exceeded" tanpa ":".
+        val EXCEEDED_REGEX = Regex("""(?i)\bfrom ([0-9a-fA-F:.]+)\s*:?.*(?:exceeded|time to live)""")
     }
 }

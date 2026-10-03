@@ -66,11 +66,13 @@ class PortScanner {
         val vendor = NetworkUtils.lookupMacVendor(mac)
         val permits = Semaphore(speed.socketPermits)
         val openPorts = scanHostPorts(ip, ports, speed.timeoutMs, permits)
-        val latencyMs = PingUtil.pingProbe(ip)?.latencyMs
-        // Selalu kembalikan info host (hostname/MAC/vendor/latency) walau port kosong,
-        // supaya kartu tidak kehilangan data ARP & DNS saat rescan.
+        val probe = PingUtil.pingProbe(ip)
+        val latencyMs = probe?.latencyMs
+        // Selalu kembalikan info host (hostname/MAC/vendor/latency/OS) walau port
+        // kosong, supaya kartu tidak kehilangan data ARP, DNS & tebakan OS saat rescan.
         return HostInfo(ip = ip, hostname = hostname, macAddress = mac,
             macVendor = vendor, latencyMs = latencyMs,
+            osGuess = com.tasirin.network.radar.util.OsDetector.guess(probe?.ttl, openPorts.map { it.port }),
             isAlive = latencyMs != null || openPorts.isNotEmpty(), openPorts = openPorts)
     }
 
@@ -99,6 +101,7 @@ class PortScanner {
             // Chunk kecil membatasi socket serentak (hindari "too many open files" / force close)
             for (chunkStart in 0 until total step DEEP_SCAN_CONCURRENCY) {
                 ensureActive()
+                ScanPause.checkPause()
                 val chunkEndExclusive = minOf(chunkStart + DEEP_SCAN_CONCURRENCY, total)
                 try {
                     coroutineScope {
@@ -206,6 +209,7 @@ class PortScanner {
                         val sb = StringBuilder()
                         for (i in 0 until 5) {
                             line = r.readLine() ?: break
+                            if (line.isBlank()) break // akhir header: jangan tunggu baris berikut
                             sb.append(line).append(" ")
                         }
                         banner = sb.toString().trim().take(100)

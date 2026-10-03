@@ -71,6 +71,7 @@ class CameraScanner {
                     // menutup koneksi sehingga baca-sampai-EOF menggantung tiap probe.
                     for (i in 0 until 25) {
                         line = reader.readLine() ?: break
+                        if (line.isBlank()) break // akhir header RTSP: jangan tunggu keep-alive
                         resp.append(line).append("\n")
                     }
                     if (resp.toString().contains("RTSP", ignoreCase = true)) PortInfo(port, "RTSP Camera")
@@ -87,6 +88,7 @@ class CameraScanner {
                     var line: String?
                     for (i in 0 until 25) {
                         line = reader.readLine() ?: break
+                        if (line.isBlank()) break // akhir header HTTP: jangan tunggu keep-alive
                         header.append(line).append(" ")
                     }
                     val h = header.toString().lowercase()

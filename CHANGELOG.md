@@ -6,6 +6,22 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 ## [Unreleased]
 
 ### Diperbaiki
+- Scan Ping/Trace tak lagi menghapus port: hasil non-port mewarisi port lama
+  sehingga data tak hilang dan diff tak false "berubah".
+- Traceroute tak lagi berpotensi gantung: `probeHop` memakai `waitFor` ber-timeout
+  + baca output setelah proses selesai; regex TTL-habis longgar (":" opsional).
+- Rescan per-host kini mempertahankan tebakan OS (`scanHost` isi dari TTL) dan
+  menandai `lastSeenScan` agar tak ketandai basi.
+- Probe kamera/RTSP berhenti di baris kosong akhir header (bukan 25 baris penuh)
+  agar tak menahan thread IO saat server keep-alive; sama untuk banner port.
+- Notifikasi favorit offline di-throttle per-IP (sebelumnya satu timestamp global
+  sehingga beberapa favorit offline bareng hanya satu yang dinotif).
+- Deep scan kini menghormati tombol jeda; `onCleared` menulis disk di IO agar
+  tak ANR; ID notifikasi stabil-positif anti-tabrakan.
+- Probe UDP SSDP/mDNS (multicast-only) dilewati di scan unicast per-IP karena
+  praktis tak dibalas — sudah dicakup discovery multicast.
+- Laporan progres per chunk mengikuti urutan selesai (satu host lambat tak
+  menahan laporan host cepat).
 - Race `ScannerManager.stop()`: assignment `currentJob` kini di bawah kunci dan
   `finally` hanya meng-nol-kan job miliknya sendiri agar scan baru tak ter-cancel
   atau menjadi yatim.

@@ -113,7 +113,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var notifyCount = 0
     private var scanGeneration = 0L
     private var lastScanNotifAt = 0L
-    private var lastFavoriteAlertAt = 0L
+    private val lastOfflineAlertAtByIp = mutableMapOf<String, Long>()
     private val lastBackOnlineAtByIp = mutableMapOf<String, Long>()
     private var _favorites = mutableSetOf<String>()
     private var _uptime = emptyMap<String, List<UptimeEvent>>()
@@ -283,12 +283,19 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             updateScanNotification(event)
                         }
                         is ScanEvent.HostFound -> {
-                            _foundThisScanSync[event.host.ip] = event.host.openPorts.map { it.port }
                             val existing = _hosts[event.host.ip]
+                            // Scan non-port (Ping/Trace) tak memindai port: warisi port
+                            // lama agar data tak terhapus dan diff tak false "berubah".
+                            val fresh = if (existing != null &&
+                                (type == ScanType.PING || type == ScanType.TRACE) &&
+                                event.host.openPorts.isEmpty()) {
+                                event.host.copy(openPorts = existing.openPorts)
+                            } else event.host
+                            _foundThisScanSync[fresh.ip] = fresh.openPorts.map { it.port }
                             val isNew = existing == null
                             val host = if (existing != null) {
-                                mergeHost(existing, event.host).copy(isNew = false)
-                            } else event.host.copy(isNew = true)
+                                mergeHost(existing, fresh).copy(isNew = false)
+                            } else fresh.copy(isNew = true)
                             // Gabungkan data lintas scan + tandai scan terakhir terlihat
                             val merged = host.copy(lastSeenScan = _scanCount)
                             _hosts[merged.ip] = merged
@@ -454,7 +461,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         return HostInfo(
             ip = fresh.ip,
             hostname = fresh.hostname ?: existing.hostname,
-            label = existing.label ?: fresh.label,
+            label = existing.label, // label milik pengguna: jangan hidupkan lagi yang dihapus
             macAddress = mac,
             macVendor = fresh.macVendor ?: existing.macVendor ?: mac?.let { NetworkUtils.lookupMacVendor(it) },
             latencyMs = fresh.latencyMs ?: existing.latencyMs,
@@ -550,10 +557,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 statuses.forEach { (ip, online) ->
                     if (online && ip in _favorites && prevStatuses[ip] == false) {
                         notifyFavoriteBackOnline(ip)
-                    } else if (!online && ip in _favorites &&
-                        System.currentTimeMillis() - lastFavoriteAlertAt > 30_000) {
-                        lastFavoriteAlertAt = System.currentTimeMillis()
-                        notifyImportantOffline(ip)
+                    } else if (!online && ip in _favorites) {
+                        val nowAlert = System.currentTimeMillis()
+                        if (nowAlert - (lastOfflineAlertAtByIp[ip] ?: 0L) > 30_000) {
+                            lastOfflineAlertAtByIp[ip] = nowAlert
+                            notifyImportantOffline(ip)
+                        }
                     }
                 }
                 val onlineCount = statuses.values.count { it }
@@ -787,6 +796,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     val conflict = existing?.macAddress != null && host.macAddress != null &&
                         !existing.macAddress.equals(host.macAddress, ignoreCase = true)
                     _hosts[ip] = enrichedHost.copy(label = existing?.label,
+                        osGuess = enrichedHost.osGuess ?: existing?.osGuess,
+                        lastSeenScan = _scanCount,
                         ipConflict = conflict || existing?.ipConflict == true)
                     _state.update {
                         it.copy(hosts = _hosts.values.toList(),
@@ -1349,8 +1360,17 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         gatewayJob?.cancel()
         _deepScanJob?.cancel()
         stopScanService()
-        ScanCheckpointStore.save(getApplication(), _checkpoint)  // sinkron: viewModelScope sudah batal
-        ResultsStore.save(getApplication(), _hosts.values.toList(), _urls.values.toList())
-        ResultsStore.saveScanCount(getApplication(), _scanCount)
+        // Tulis disk di IO (bukan main thread): viewModelScope sudah batal,
+        // jadi pakai scope sekali-pakai — best-effort agar tak ANR saat keluar.
+        val app = getApplication<Application>()
+        val hosts = _hosts.values.toList()
+        val urls = _urls.values.toList()
+        val cp = _checkpoint
+        val count = _scanCount
+        CoroutineScope(Dispatchers.IO).launch {
+            ScanCheckpointStore.save(app, cp)
+            ResultsStore.save(app, hosts, urls)
+            ResultsStore.saveScanCount(app, count)
+        }
     }
 }

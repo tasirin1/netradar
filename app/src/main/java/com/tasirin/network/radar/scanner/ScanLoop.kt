@@ -3,7 +3,7 @@ package com.tasirin.network.radar.scanner
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.util.NetworkUtils
 import com.tasirin.network.radar.util.OsDetector
-import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
 import java.net.InetAddress
@@ -47,7 +47,7 @@ object ScanLoop {
     /**
      * Iterasi daftar IP secara paralel (chunk).
      * [scanOne] mengembalikan null jika host tidak ditemukan; hasilnya diteruskan
-     * ke [onResult] secara berurutan agar progress tetap realtime per-IP.
+     * ke [onResult] sesuai urutan selesai agar progress tetap realtime per-IP.
      */
     suspend fun scanIps(
         ips: List<String>,
@@ -57,9 +57,15 @@ object ScanLoop {
     ) {
         ips.chunked(hostConcurrency).forEach { chunk ->
             coroutineScope {
-                val deferreds = chunk.map { ip -> async { ip to scanOne(ip) } }
-                deferreds.forEach { deferred ->
-                    val (ip, host) = deferred.await()
+                // Lapor sesuai urutan selesai (bukan urutan IP) agar satu host
+                // lambat tidak menahan laporan host cepat di chunk yang sama.
+                // Penghitung checkpoint berbasis jumlah selesai sehingga aman.
+                val channel = Channel<Pair<String, HostInfo?>>(chunk.size)
+                chunk.forEach { ip ->
+                    launch { channel.send(ip to scanOne(ip)) }
+                }
+                repeat(chunk.size) {
+                    val (ip, host) = channel.receive()
                     onResult(ip, host)
                 }
             }
