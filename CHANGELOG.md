@@ -3,6 +3,13 @@
 Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
+## [Unreleased]
+
+### Diubah
+- Workflow Build: push/PR yang hanya menyentuh docs (`**.md`, `LICENSE`,
+  `.gitignore`) tidak lagi memicu build — hemat menit Actions dan nomor versi
+  (selaras repo Tasirin lain).
+
 ## [2.0] - 2026-08-21
 
 ### Diubah (SDK target)

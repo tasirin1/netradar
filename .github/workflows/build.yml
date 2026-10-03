@@ -2,7 +2,16 @@ name: Build
 
 on:
   push:
+    # Push docs-only tak menyentuh APK: hemat menit Actions dan nomor versi.
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".gitignore"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".gitignore"
   workflow_dispatch:
 
 permissions:
