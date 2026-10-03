@@ -95,8 +95,10 @@ Detail kemampuan:
   bergantung ping gate), atau masukkan CIDR penuh `/24`.
 
 **Scan lintas subnet tidak jalan**
-- Sudah didukung otomatis — target IP/prefix dilanjutkan lintas subnet; untuk
-  rentang besar app menampilkan konfirmasi sebelum scan luas.
+- Sudah didukung otomatis — awalan IP/rentang/CIDR dilanjutkan lintas subnet;
+  untuk rentang besar app menampilkan konfirmasi sebelum scan luas.
+- Satu IP penuh (mis. `192.168.15.1`) hanya memindai sisa subnet /24-nya sendiri;
+  pakai rentang (`192.168.15.1-192.168.16.1`) atau CIDR untuk scan lebih luas.
 
 **App crash saat deep scan (Compose)**
 - Sudah ditangani (BOM Compose 1.6.8 + throttle progress di main thread).

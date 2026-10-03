@@ -5,6 +5,29 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ## [Unreleased]
 
+### Diperbaiki
+- Race `ScannerManager.stop()`: assignment `currentJob` kini di bawah kunci dan
+  `finally` hanya meng-nol-kan job miliknya sendiri agar scan baru tak ter-cancel
+  atau menjadi yatim.
+- DNS di thread UI: ekspansi target saat `startScan`, resolve domain monitor
+  tunggal, dan `refreshNetworkInfo` (gateway/`ip route`) kini berjalan di IO.
+- Semaphore blokir (`java.util.concurrent`) di Port/Camera/Router/Discover
+  diganti `kotlinx.coroutines.sync.Semaphore` agar antrean tidak menahan thread IO;
+  `UdpScanner` yang sebelumnya tanpa batas kini memakai semaphore yang sama.
+- Progress retry tidak lagi menghitung ganda (>100%), daftar retry dibatasi
+  2000 IP agar tak OOM, dan offset checkpoint basi dijepit agar resume tak crash.
+- Probe RTSP CCTV dibatasi 25 baris (seperti probe web) agar tak menggantung
+  sampai timeout tiap port.
+- Hasil scan kini otoritatif: port tertutup hilang dan host tak muncul bisa
+  offline (sebelumnya union port menumpuk selamanya).
+- Uptime/ping per host kini append di memori + simpan disk throttle 10 detik
+  (dipaksa saat scan selesai/berhenti) agar tak O(n²) tiap host.
+- Input port kustom selebar >1000 port ditolak (fallback port default) agar tak
+  meledakkan coroutine/OOM — cakupan penuh tetap via deep scan.
+- IPv6 ditolak eksplisit; satu IP penuh hanya memindai sisa /24-nya (bukan
+  berekor ke /16 ±61rb host); ping menghormati timeout level via `waitFor`;
+  traceroute mendukung IPv6 dan selesai tanpa syarat latency target.
+
 ### Diubah
 - Workflow Build: push/PR yang hanya menyentuh docs (`**.md`, `LICENSE`,
   `.gitignore`) tidak lagi memicu build — hemat menit Actions dan nomor versi
