@@ -29,6 +29,7 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
   traceroute mendukung IPv6 dan selesai tanpa syarat latency target.
 - Cakupan uji ScanLoop: progres retry tak melebihi total, retry dilewati saat
   host hilang melebihi batas, dan checkpoint basi tidak crash.
+- Progress pembuka scan ikut dijepit agar tak melebihi total saat resume basi.
 
 ### Diubah
 - Workflow Build: push/PR yang hanya menyentuh docs (`**.md`, `LICENSE`,

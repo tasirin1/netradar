@@ -93,7 +93,7 @@ object ScanLoop {
 
         val intro = if (resume != null) "Lanjut $label dari posisi terakhir"
         else "$label ${subnets.size} subnet — ${subnets.first().prefix} … ${subnets.last().prefix} (${total} IP)"
-        onEvent(ScanEvent.Progress(intro, completed.toInt(), total.toInt()))
+        onEvent(ScanEvent.Progress(intro, completed.coerceAtMost(total).toInt(), total.toInt()))
 
         val totalSubnets = subnets.size
         // Daftar retry dibatasi: scan luas yang mostly-kosong tidak boleh menumpuk
