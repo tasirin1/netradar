@@ -1118,7 +1118,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private fun startGatewayMonitor() {
         gatewayJob?.cancel()
         gatewayJob = viewModelScope.launch {
-            var cycles = 0L
+            var cycles = 0
             while (isActive) {
                 if (AppForeground.isForeground) {
                     checkGateway()
