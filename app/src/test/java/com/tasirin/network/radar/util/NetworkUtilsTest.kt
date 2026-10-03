@@ -43,14 +43,13 @@ class NetworkUtilsTest {
     }
 
     @Test
-    fun `IP penuh lanjut ke subnet berikutnya`() {
+    fun `IP penuh hanya memindai sisa subnet sendiri`() {
+        // Satu IP tidak boleh berekor ke /16 (±61rb host): hanya sisa /24-nya.
         val subnets = NetworkUtils.expandTargetSubnets("192.168.15.1")
-        assertEquals(241, subnets.size)                  // (255-15+1) subnet
+        assertEquals(1, subnets.size)
         assertEquals("192.168.15", subnets.first().prefix)
         assertEquals(1, subnets.first().hostStart)       // mulai dari host .1
         assertEquals(254, subnets.first().hostEnd)
-        assertEquals("192.168.16", subnets[1].prefix)    // lanjut ke 192.168.16.x
-        assertEquals("192.168.255", subnets.last().prefix)
     }
 
     @Test
@@ -101,6 +100,22 @@ class NetworkUtilsTest {
     fun `oktet invalid tidak hang`() {
         assertTrue(NetworkUtils.expandTargetSubnets("300.1").isEmpty())
         assertTrue(NetworkUtils.expandTargetSubnets("").isEmpty())
+    }
+
+    @Test
+    fun `IPv6 ditolak eksplisit`() {
+        assertTrue(NetworkUtils.expandTargetSubnets("2001:db8::1").isEmpty())
+        assertTrue(NetworkUtils.expandTargetSubnets("fe80::1").isEmpty())
+        assertTrue(NetworkUtils.expandTargetSubnets("::1").isEmpty())
+    }
+
+    @Test
+    fun `IP dengan port tetap jalan`() {
+        // Satu titik-dua = port, bukan IPv6 → strip port lalu scan /24 sendiri
+        val subnets = NetworkUtils.expandTargetSubnets("192.168.1.10:8080")
+        assertEquals(1, subnets.size)
+        assertEquals("192.168.1", subnets.first().prefix)
+        assertEquals(10, subnets.first().hostStart)
     }
 
     @Test

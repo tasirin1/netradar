@@ -27,6 +27,14 @@ class CustomPortParserTest {
     }
 
     @Test
+    fun `rentang raksasa ditolak agar tidak OOM`() {
+        assertNull(CustomPortParser.parse("1-65535"))
+        assertNull(CustomPortParser.parse("1-1001"))
+        // Batas pas masih diterima
+        assertEquals(1000, CustomPortParser.parse("1-1000")?.size)
+    }
+
+    @Test
     fun `input tidak valid ditolak`() {
         assertNull(CustomPortParser.parse("abc"))
         assertNull(CustomPortParser.parse("0"))
