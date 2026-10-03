@@ -82,4 +82,14 @@ class MdnsNameResolverTest {
         val text = "HTTP/1.1 404 Not Found\r\n\r\n"
         assertNull(MdnsNameResolver.parseSsdp(text.toByteArray(), text.length))
     }
+
+    @Test
+    fun `bedakan SSDP dari isi paket bukan port pengirim`() {
+        // Balasan SSDP unicast datang dari port ephemeral: deteksi via awalan HTTP.
+        val ssdp = "HTTP/1.1 200 OK".toByteArray()
+        assertTrue(MdnsNameResolver.isSsdpReply(ssdp, ssdp.size))
+        val dns = byteArrayOf(0, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+        assertTrue(!MdnsNameResolver.isSsdpReply(dns, dns.size))
+        assertTrue(!MdnsNameResolver.isSsdpReply(byteArrayOf(1, 2, 3), 3))
+    }
 }

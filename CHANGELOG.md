@@ -6,6 +6,18 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 ## [Unreleased]
 
 ### Diperbaiki
+- Discovery SSDP hidup lagi: balasan dibedakan dari isi paket (bukan port
+  pengirim yang ephemeral); cache mDNS tak di-discovery ulang tiap scan bila
+  kosong; `lastPtr` tak bocor lintas section DNS.
+- Scan Router hanya melaporkan host mirip router (panel web generik milik
+  printer/kamera tak ikut); probe TCP ke port UDP-only 161/1900 dibuang dari
+  Router dan Discover; loop baca header Router berhenti di baris kosong.
+- Prefix CIDR invalid (/33, /99, negatif) ditolak eksplisit, tak lagi diam-diam
+  menjadi scan /24 penuh (ada uji).
+- Widget hanya menghitung favorit yang jelas online (unknown bukan online).
+- Cek internet direnggangkan ke ~30 detik, dua ping paralel, dilewati bila
+  gateway jelas offline — hemat baterai.
+- Posisi resume kedaluwarsa 48 jam agar tak menunjuk ke jaringan DHCP lama.
 - Scan Ping/Trace tak lagi menghapus port: hasil non-port mewarisi port lama
   sehingga data tak hilang dan diff tak false "berubah".
 - Traceroute tak lagi berpotensi gantung: `probeHop` memakai `waitFor` ber-timeout

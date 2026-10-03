@@ -136,6 +136,9 @@ object NetworkUtils {
                 (parts[2].toLong() shl 8) or parts[3].toLong()
 
     private fun expandCidrSubnets(baseIp: String, prefix: Int): List<SubnetTarget> {
+        // Prefix di luar 0..32 (mis. typo "/33", "/99") ditolak eksplisit agar
+        // tak diam-diam menjadi scan /24 penuh.
+        if (prefix !in 0..32) return emptyList()
         try {
             val addr = InetAddress.getByName(baseIp)
             val ipInt = bytesToInt(addr.address)

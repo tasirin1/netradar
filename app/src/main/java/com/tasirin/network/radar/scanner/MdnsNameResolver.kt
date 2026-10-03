@@ -25,10 +25,10 @@ object MdnsNameResolver {
         if (System.currentTimeMillis() - cachedAt < maxAgeMs) return
         try {
             val names = withContext(Dispatchers.IO) { discover(timeoutMs = 1200) }
-            if (names.isNotEmpty()) {
-                cache.putAll(names)
-                cachedAt = System.currentTimeMillis()
-            }
+            if (names.isNotEmpty()) cache.putAll(names)
+            // Selalu segarkan timestamp (walau kosong) agar jaringan tanpa
+            // perangkat mDNS tak membayar discovery 1,2 detik di tiap scan.
+            cachedAt = System.currentTimeMillis()
         } catch (_: Exception) { }
     }
 
@@ -57,13 +57,15 @@ object MdnsNameResolver {
                         val pkt = DatagramPacket(buf, buf.size)
                         socket.receive(pkt)
                         if (pkt.length < 8) continue
-                        when (pkt.port) {
-                            5353 -> parseDns(buf, pkt.length).forEach { (ip, name) ->
+                        // Jangan bedakan dari port pengirim: balasan SSDP unicast
+                        // datang dari port ephemeral perangkat (bukan 1900) sehingga
+                        // cabang port tak pernah cocok. Bedakan dari isi paket.
+                        if (isSsdpReply(buf, pkt.length)) {
+                            val src = pkt.address?.hostAddress ?: continue
+                            parseSsdp(buf, pkt.length)?.let { out[src] = it }
+                        } else {
+                            parseDns(buf, pkt.length).forEach { (ip, name) ->
                                 if (name.isNotEmpty() && ip.isNotEmpty()) out[ip] = name
-                            }
-                            1900 -> {
-                                val src = pkt.address?.hostAddress ?: continue
-                                parseSsdp(buf, pkt.length)?.let { out[src] = it }
                             }
                         }
                     } catch (_: SocketTimeoutException) { /* tunggu sampai deadline */ }
@@ -131,9 +133,11 @@ object MdnsNameResolver {
                     }
                 }
             }
-            parseSection(an)
-            parseSection(ns)
-            parseSection(ar)
+            // lastPtr di-reset tiap section agar PTR satu section tak salah
+            // dipasangkan dengan SRV di section lain.
+            lastPtr = null; parseSection(an)
+            lastPtr = null; parseSection(ns)
+            lastPtr = null; parseSection(ar)
 
             srvs.forEach { srv ->
                 val ip = aRecords[srv.target] ?: return@forEach
@@ -142,6 +146,13 @@ object MdnsNameResolver {
             }
         } catch (_: Exception) { }
         return out
+    }
+
+    /** Balasan SSDP selalu teks HTTP ("HTTP/1.1 200 ..."), jawaban mDNS biner. */
+    internal fun isSsdpReply(data: ByteArray, length: Int): Boolean {
+        if (length < 5) return false
+        return data[0] == 'H'.code.toByte() && data[1] == 'T'.code.toByte() &&
+            data[2] == 'T'.code.toByte() && data[3] == 'P'.code.toByte()
     }
 
     /** Parse balasan SSDP -> nama perangkat dari header SERVER/USN. */

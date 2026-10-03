@@ -131,8 +131,17 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var lastCheckpointSaveAt = 0L
     private var _scanCount = 0L
 
+    /** Posisi resume yang lebih tua dari ini dianggap basi (IP DHCP berganti). */
+    private fun loadFreshCheckpoint(): ScanCheckpointStore.Checkpoint? {
+        val cp = ScanCheckpointStore.load(getApplication()) ?: return null
+        if (System.currentTimeMillis() - cp.updatedAt <= CHECKPOINT_MAX_AGE_MS) return cp
+        ScanCheckpointStore.save(getApplication(), null)
+        return null
+    }
+
     private companion object {
         const val MAX_NOTIFY_PER_SCAN = 20
+        const val CHECKPOINT_MAX_AGE_MS = 48L * 3600 * 1000
         const val WIDE_SCAN_THRESHOLD = 256  // > 256 subnet (≈65 ribu IP) → minta konfirmasi
     }
 
@@ -147,7 +156,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _pingHistory = PingStore.load(getApplication())
         _history = ScanHistoryStore.load(getApplication())
         _scanCount = ResultsStore.loadScanCount(getApplication())
-        _checkpoint = ScanCheckpointStore.load(getApplication())
+        _checkpoint = loadFreshCheckpoint()
         val settings = SettingsStore.load(getApplication())
         val recent = buildRecentTargets(_history, _checkpoint)
         val cp = _checkpoint
@@ -1109,11 +1118,16 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private fun startGatewayMonitor() {
         gatewayJob?.cancel()
         gatewayJob = viewModelScope.launch {
+            var cycles = 0L
             while (isActive) {
                 if (AppForeground.isForeground) {
                     checkGateway()
-                    checkInternet()
+                    // Cek internet (~30 detik) jauh lebih jarang dari gateway (5 detik):
+                    // tiap cek = 2 ping keluar yang boros baterai dan percuma bila
+                    // gateway sendiri offline.
+                    if (cycles % 6 == 0 && _state.value.gatewayOnline != false) checkInternet()
                     updateNetworkQuality()
+                    cycles++
                     delay(5_000)
                 } else {
                     // App di background: jeda lama biar hemat baterai
@@ -1147,7 +1161,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     /** Cek koneksi internet: ping 1.1.1.1 lalu 8.8.8.8 (online jika salah satu membalas). */
     private suspend fun checkInternet() {
         val probe = withContext(Dispatchers.IO) {
-            listOf("1.1.1.1", "8.8.8.8").firstNotNullOfOrNull { PingUtil.pingProbe(it) }
+            coroutineScope {
+                listOf("1.1.1.1", "8.8.8.8").map { ip -> async { PingUtil.pingProbe(ip) } }
+                    .firstNotNullOfOrNull { it.await() }
+            }
         }
         val st = _state.value
         if (probe != null) {

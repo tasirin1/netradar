@@ -142,4 +142,12 @@ class NetworkUtilsTest {
         assertEquals("10.0.0", subnets.first().prefix)
         assertEquals("10.255.255", subnets.last().prefix)
     }
+
+    @Test
+    fun `CIDR prefix invalid ditolak bukan jadi 24 penuh`() {
+        // Typo prefix (33, 99) sebelumnya diam-diam menjadi scan /24 penuh.
+        assertTrue(NetworkUtils.expandTargetSubnets("192.168.1.0/33").isEmpty())
+        assertTrue(NetworkUtils.expandTargetSubnets("192.168.1.0/99").isEmpty())
+        assertTrue(NetworkUtils.expandTargetSubnets("192.168.1.0/-1").isEmpty())
+    }
 }

@@ -30,7 +30,7 @@ class NetRadarWidget : AppWidgetProvider() {
             val favorites = FavoritesStore.load(context)
             val uptime = UptimeStore.load(context)
             val favHosts = hosts.filter { it.ip in favorites }
-            val online = favHosts.count { h -> uptime[h.ip]?.lastOrNull()?.online != false }
+            val online = favHosts.count { h -> uptime[h.ip]?.lastOrNull()?.online == true }
 
             val views = RemoteViews(context.packageName, R.layout.widget_netradar).apply {
                 val text = if (favorites.isEmpty())

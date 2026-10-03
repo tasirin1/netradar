@@ -10,8 +10,10 @@ import kotlinx.coroutines.sync.withPermit
 class DiscoverScanner {
 
     private val sharePorts = intArrayOf(21, 445, 139, 2049, 111, 135)
+    // 161 (SNMP) & 1900 (SSDP) UDP-only: tak di-connect TCP (tak pernah sukses).
+    // Keduanya tetap dikenali via klasifikasi deviceKinds dari hasil scan UDP.
     private val allPorts = (intArrayOf(80, 554, 34567, 37777, 37215, 8080, 8899, 8554) +
-        intArrayOf(8291, 7547, 5000, 23, 22, 161, 1900) + sharePorts).distinct().toList()
+        intArrayOf(8291, 7547, 5000, 23, 22) + sharePorts).distinct().toList()
 
     fun scan(target: String, speed: ScanSpeed = ScanSpeed.SEDANG): Flow<ScanEvent> = channelFlow {
         val subnets = NetworkUtils.expandTargetSubnets(target)
@@ -68,8 +70,6 @@ class DiscoverScanner {
         5000 -> "UPnP"
         23 -> "Telnet"
         22 -> "SSH"
-        161 -> "SNMP"
-        1900 -> "UPnP SSDP"
         21 -> "FTP"
         445 -> "SMB (File Sharing)"
         139 -> "NetBIOS"

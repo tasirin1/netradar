@@ -13,9 +13,11 @@ import kotlinx.coroutines.sync.withPermit
 
 class RouterScanner {
 
+    // 161 (SNMP) & 1900 (SSDP) sengaja tak ada di sini: keduanya UDP-only
+    // sehingga connect TCP tak pernah sukses — dicakup scan UDP.
     private val routerPorts = intArrayOf(
         80, 443, 8080, 8443, 8291, 7547, 5000,
-        23, 22, 21, 161, 2601, 2602, 1900
+        23, 22, 21, 2601, 2602
     )
 
     fun scan(target: String, speed: ScanSpeed = ScanSpeed.SEDANG): Flow<ScanEvent> = flow {
@@ -31,7 +33,9 @@ class RouterScanner {
         // Scan SEMUA IP — tanpa live-host filter agar tidak ada host yang ke-skip
         ScanLoop.scanSubnets(subnets, speed, "Router scan", scanOne = { ip ->
             val foundServices = scanRouterPorts(ip, speed.timeoutMs, permits)
-            if (foundServices.isEmpty()) null else ScanLoop.hostInfo(ip, arpTable, openPorts = foundServices)
+            if (foundServices.isEmpty()) null
+            else if (foundServices.none { it.service !in GENERIC_WEB }) null
+            else ScanLoop.hostInfo(ip, arpTable, openPorts = foundServices)
         }) { ev -> emit(ev) }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.ROUTER, target = target)))
@@ -67,6 +71,7 @@ class RouterScanner {
                     var line: String?
                     for (i in 0 until 25) {
                         line = reader.readLine() ?: break
+                        if (line.isBlank()) break // akhir header: jangan tunggu keep-alive
                         header.append(line).append(" ")
                     }
                     val h = header.toString().lowercase()
@@ -106,9 +111,7 @@ class RouterScanner {
                     23 -> "Telnet Router"
                     22 -> "SSH Router"
                     21 -> "FTP Router"
-                    161 -> "SNMP Router"
                     2601, 2602 -> "Quagga/FRRouting"
-                    1900 -> "UPnP SSDP"
                     else -> null
                 }
                 return service?.let { PortInfo(port, it) }
@@ -120,5 +123,7 @@ class RouterScanner {
 
     private companion object {
         val WEB_PORTS = setOf(80, 443, 8080, 8443)
+        // Label generik: bukan bukti perangkat router.
+        val GENERIC_WEB = setOf("Web Admin Panel", "Generic Web Server")
     }
 }
