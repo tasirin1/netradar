@@ -115,7 +115,7 @@ class RouterScanner {
             } finally {
                 try { sock.close() } catch (_: Exception) {}
             }
-        } catch (_: Exception) { null }
+        } catch (_: Exception) { return null }
     }
 
     private companion object {

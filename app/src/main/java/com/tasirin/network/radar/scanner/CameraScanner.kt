@@ -128,8 +128,8 @@ class CameraScanner {
                 }
                 else -> PortInfo(port, "Camera Port")
             }
-            result
-        } catch (_: Exception) { null }
+            return result
+        } catch (_: Exception) { return null }
         finally {
             try { sock.close() } catch (_: Exception) {}
         }
