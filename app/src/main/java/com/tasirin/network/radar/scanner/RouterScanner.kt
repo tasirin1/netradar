@@ -8,7 +8,8 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.util.concurrent.Semaphore
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 class RouterScanner {
 
@@ -45,7 +46,13 @@ class RouterScanner {
     }
 
     private suspend fun probeRouter(ip: String, port: Int, timeoutMs: Int, permits: Semaphore): PortInfo? = withContext(Dispatchers.IO) {
-        permits.acquire()
+        // withPermit (suspend) agar antrean tidak memblokir thread IO.
+        permits.withPermit {
+            probeRouterLocked(ip, port, timeoutMs)
+        }
+    }
+
+    private fun probeRouterLocked(ip: String, port: Int, timeoutMs: Int): PortInfo? {
         try {
             val sock = Socket()
             try {
@@ -89,7 +96,7 @@ class RouterScanner {
                         h.contains("apache") || h.contains("nginx") || h.contains("iis") -> "Generic Web Server"
                         else -> "Web Admin Panel"
                     }
-                    return@withContext PortInfo(port, service)
+                    return PortInfo(port, service)
                 }
 
                 val service = when (port) {
@@ -104,14 +111,11 @@ class RouterScanner {
                     1900 -> "UPnP SSDP"
                     else -> null
                 }
-                return@withContext service?.let { PortInfo(port, it) }
+                return service?.let { PortInfo(port, it) }
             } finally {
                 try { sock.close() } catch (_: Exception) {}
             }
         } catch (_: Exception) { null }
-        finally {
-            permits.release()
-        }
     }
 
     private companion object {

@@ -30,6 +30,12 @@ object PingStore {
         }
     } catch (_: Exception) { emptyMap() }
 
+    /** Tambah event di memori saja (tanpa simpan) — untuk jalur cepat per-host. */
+    fun append(current: Map<String, List<PingEvent>>, ip: String, latencyMs: Long): Map<String, List<PingEvent>> {
+        val events = ((current[ip] ?: emptyList()) + PingEvent(System.currentTimeMillis(), latencyMs)).takeLast(MAX_PER_HOST)
+        return current + (ip to events)
+    }
+
     /** Tambah event lalu simpan; kembalikan data terbaru. */
     fun record(context: Context, current: Map<String, List<PingEvent>>, ip: String, latencyMs: Long): Map<String, List<PingEvent>> {
         val events = ((current[ip] ?: emptyList()) + PingEvent(System.currentTimeMillis(), latencyMs)).takeLast(MAX_PER_HOST)

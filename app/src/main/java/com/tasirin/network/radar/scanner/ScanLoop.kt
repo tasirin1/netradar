@@ -96,7 +96,10 @@ object ScanLoop {
         onEvent(ScanEvent.Progress(intro, completed.toInt(), total.toInt()))
 
         val totalSubnets = subnets.size
+        // Daftar retry dibatasi: scan luas yang mostly-kosong tidak boleh menumpuk
+        // jutaan string IP di memori (OOM). Kelebihan dihitung tapi tidak disimpan.
         val missed = mutableListOf<String>()
+        var missedCount = 0
         subnets.forEachIndexed { subnetIndex, subnet ->
             ScanPause.checkPause()
             if (resume != null && subnetIndex < resume.first) {
@@ -109,27 +112,33 @@ object ScanLoop {
             var subnetDone = 0
 
             onEvent(ScanEvent.Progress(
-                "$subnetLabel — ${subnet.prefix}.0/24", completed.toInt(), total.toInt(),
+                "$subnetLabel — ${subnet.prefix}.0/24", completed.coerceAtMost(total).toInt(), total.toInt(),
                 subnetIndex, startOffset))
 
-            val toScan = ips.subList(startOffset, ips.size)
+            // Checkpoint basi (mis. target beda ukuran) dijepit agar tidak crash
+            // IndexOutOfBoundsException saat resume.
+            val safeOffset = startOffset.coerceIn(0, ips.size)
+            val toScan = if (safeOffset >= ips.size) emptyList() else ips.subList(safeOffset, ips.size)
             scanIps(toScan, batchSize, scanOne) { ip, host ->
-                if (host == null) missed.add(ip)
-                else { found++; onEvent(ScanEvent.HostFound(host)) }
+                if (host == null) {
+                    missedCount++
+                    if (missed.size < MAX_RETRY_HOSTS) missed.add(ip)
+                } else { found++; onEvent(ScanEvent.HostFound(host)) }
                 completed++; subnetDone++
                 val elapsed = (System.currentTimeMillis() - startMs) / 1000
                 onEvent(ScanEvent.Progress(
                     "$subnetLabel · $ip · $found ditemukan · ${elapsed}s",
-                    completed.toInt(), total.toInt(), subnetIndex, startOffset + subnetDone))
+                    completed.coerceAtMost(total).toInt(), total.toInt(), subnetIndex, startOffset + subnetDone))
             }
         }
 
         // Retry sekali host yang tidak merespons (mis. timeout karena paralel padat).
-        // Batasi jumlahnya agar scan luas tidak melambat berlebihan.
-        if (missed.isNotEmpty() && missed.size <= MAX_RETRY_HOSTS) {
+        // Retry TIDAK menambah completed (host sudah dihitung di loop utama) agar
+        // progress tidak melebihi 100%. Dilewati bila host hilang melebihi batas.
+        if (missedCount in 1..MAX_RETRY_HOSTS) {
             ScanPause.checkPause()
             onEvent(ScanEvent.Progress("Retry ${missed.size} host yang tidak merespons...",
-                completed.toInt(), total.toInt()))
+                completed.coerceAtMost(total).toInt(), total.toInt()))
             var retried = 0
             scanIps(missed, batchSize, scanOne) { ip, host ->
                 retried++
@@ -137,10 +146,9 @@ object ScanLoop {
                     found++
                     onEvent(ScanEvent.HostFound(host))
                 }
-                completed++
                 onEvent(ScanEvent.Progress(
                     "Retry ${retried}/${missed.size} · $ip" + if (host != null) " · $found total" else "",
-                    completed.toInt(), total.toInt(),
+                    completed.coerceAtMost(total).toInt(), total.toInt(),
                     subnetIndex = -1))
             }
         }

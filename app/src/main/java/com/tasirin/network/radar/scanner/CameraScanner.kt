@@ -10,7 +10,8 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
-import java.util.concurrent.Semaphore
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 class CameraScanner {
 
@@ -47,7 +48,13 @@ class CameraScanner {
     }
 
     private suspend fun probeCamera(ip: String, port: Int, timeoutMs: Int, permits: Semaphore): PortInfo? = withContext(Dispatchers.IO) {
-        permits.acquire()
+        // withPermit (suspend) agar antrean tidak memblokir thread IO.
+        permits.withPermit {
+            probeCameraLocked(ip, port, timeoutMs)
+        }
+    }
+
+    private fun probeCameraLocked(ip: String, port: Int, timeoutMs: Int): PortInfo? {
         val sock = Socket()
         try {
             sock.connect(InetSocketAddress(ip, port), timeoutMs)
@@ -60,7 +67,12 @@ class CameraScanner {
                     val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
                     val resp = StringBuilder()
                     var line: String?
-                    while (reader.readLine().also { line = it } != null) resp.append(line).append("\n")
+                    // Batasi 25 baris seperti probe web/router: server RTSP tidak
+                    // menutup koneksi sehingga baca-sampai-EOF menggantung tiap probe.
+                    for (i in 0 until 25) {
+                        line = reader.readLine() ?: break
+                        resp.append(line).append("\n")
+                    }
                     if (resp.toString().contains("RTSP", ignoreCase = true)) PortInfo(port, "RTSP Camera")
                     else null
                 }
@@ -120,7 +132,6 @@ class CameraScanner {
         } catch (_: Exception) { null }
         finally {
             try { sock.close() } catch (_: Exception) {}
-            permits.release()
         }
     }
 }

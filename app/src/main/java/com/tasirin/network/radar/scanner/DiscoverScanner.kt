@@ -4,7 +4,8 @@ import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.util.NetworkUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import java.util.concurrent.Semaphore
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 class DiscoverScanner {
 
@@ -36,9 +37,9 @@ class DiscoverScanner {
         coroutineScope {
             allPorts.map { port ->
                 async {
+                    // withPermit (suspend) agar antrean tidak memblokir thread IO.
                     try {
-                        permits.acquire()
-                        try {
+                        permits.withPermit {
                             val sock = java.net.Socket()
                             try {
                                 sock.connect(java.net.InetSocketAddress(ip, port), timeoutMs)
@@ -47,8 +48,6 @@ class DiscoverScanner {
                             } finally {
                                 try { sock.close() } catch (_: Exception) {}
                             }
-                        } finally {
-                            permits.release()
                         }
                     } catch (_: Exception) { null }
                 }

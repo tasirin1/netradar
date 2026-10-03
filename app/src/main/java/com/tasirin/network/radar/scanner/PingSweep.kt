@@ -16,7 +16,7 @@ class PingSweep {
 
         val arpTable = NetworkUtils.readArpTable()
         ScanLoop.scanSubnets(subnets, speed, "Ping", scanOne = { ip ->
-            PingUtil.pingProbe(ip)?.let { probe ->
+            PingUtil.pingProbe(ip, speed.timeoutMs)?.let { probe ->
                 ScanLoop.hostInfo(ip, arpTable, latencyMs = probe.latencyMs, ttl = probe.ttl)
             }
         }) { ev -> emit(ev) }

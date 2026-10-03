@@ -3,6 +3,11 @@ package com.tasirin.network.radar.model
 /** Parser input port kustom: contoh `22, 80, 8000-8010`. */
 object CustomPortParser {
 
+    /** Batas port kustom sekali scan biasa: input selebar 1-65535 (65rb port,
+     * 65rb coroutine sekaligus) ditolak agar tidak OOM — pakai deep scan
+     * untuk cakupan penuh 1..65535 yang sudah di-chunk + dibatasi. */
+    const val MAX_CUSTOM_PORTS = 1000
+
     fun parse(input: String): List<Int>? {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return null
@@ -23,7 +28,10 @@ object CustomPortParser {
                 if (port !in 1..65535) return null
                 ports.add(port)
             }
+            // Cek dini tiap bagian agar input raksasa berhenti sebelum alokasi penuh
+            if (ports.size > MAX_CUSTOM_PORTS) return null
         }
+        if (ports.isEmpty()) return null
         return ports.sorted()
     }
 

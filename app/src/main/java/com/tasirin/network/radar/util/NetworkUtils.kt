@@ -26,16 +26,22 @@ object NetworkUtils {
      * Expand target ke daftar [SubnetTarget].
      * Mendukung: IP penuh, domain, CIDR, rentang (192.168.0.1-254,
      * 192.168.15.1-192.168.16.1 lintas subnet), dan awalan parsial
-     * ("192", "192.168.", "192.168.5", "192.168.15.1").
-     * Semua input numerik LANJUT dari titik yang diketik sampai 255, jadi
-     * "192.168.15.1" otomatis meneruskan ke 192.168.16.x … 192.168.255.x
-     * (tidak berhenti di 192.168.15.255).
+     * ("192", "192.168.", "192.168.5").
+     * Awalan 1–3 oktet LANJUT dari titik yang diketik sampai 255. Sebaliknya
+     * satu IP penuh (4 oktet, mis. "192.168.15.1") hanya memindai sisa subnet
+     * /24-nya sendiri agar tidak tanpa sadar memindai ±61 ribu host.
+     * Rentang eksplisit/CIDR tetap dipakai untuk scan luas (dengan konfirmasi).
+     * IPv6 belum didukung dan selalu ditolak (daftar kosong).
      */
     fun expandTargetSubnets(input: String): List<SubnetTarget> {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return emptyList()
 
         var cleaned = trimmed.replaceFirst("^https?://".toRegex(), "")
+
+        // IPv6 (dua titik-dua atau lebih) belum didukung: tolak eksplisit agar
+        // tidak terpotong menjadi prefix raksasa oleh substringBefore(":").
+        if (cleaned.count { it == ':' } >= 2) return emptyList()
 
         // CIDR → pecah menjadi /24
         if (cleaned.contains("/")) {
@@ -78,9 +84,10 @@ object NetworkUtils {
                 2 -> expandSubnets(octets[0], octets[1], 255)      // "192.16" → 192.16.x … 192.255.x
                 3 -> expandSubnets(octets[0], octets[1], octets[1], octets[2], 255)
                     // "192.168.5" → 192.168.5 … 192.168.255
-                4 -> expandSubnets(octets[0], octets[1], octets[1], octets[2], 255)
-                    .mapIndexed { i, t -> if (i == 0) t.copy(hostStart = octets[3]) else t }
-                    // "192.168.15.1" → 192.168.15.1 … 192.168.255.254
+                4 -> listOf(SubnetTarget(
+                    "${octets[0]}.${octets[1]}.${octets[2]}",
+                    hostStart = octets[3], hostEnd = 254))
+                    // "192.168.15.1" → hanya sisa 192.168.15.1 … 192.168.15.254
                 else -> emptyList()
             }
         }

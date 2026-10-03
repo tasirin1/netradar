@@ -124,6 +124,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var gatewayJob: Job? = null
     private val gatewayLatencies = ArrayDeque<Long>()
     private var lastMonitorSaveAt = 0L
+    private var lastUptimeSaveAt = 0L
+    private var lastPingSaveAt = 0L
     private var lastWidgetAt = 0L
     private var _checkpoint: ScanCheckpointStore.Checkpoint? = null
     private var lastCheckpointSaveAt = 0L
@@ -185,14 +187,18 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshNetworkInfo() {
-        val localIp = NetworkUtils.getLocalIp() ?: ""
-        val gateway = NetworkUtils.getLocalGateway() ?: ""
-        val prefix = NetworkUtils.getLocalNetworkPrefix()
-        val subnet = if (prefix != null) "$prefix.0/24" else ""
-        val interfaces = NetworkUtils.getAvailableInterfaces()
-        val selected = NetworkUtils.selectedInterfaceName
-        _state.update {
-            it.copy(networkInfo = NetworkInfo(localIp, gateway, subnet, interfaces, selected))
+        // getLocalGateway() menjalankan `ip route` + waitFor dan enumerasi interface:
+        // wajib di IO agar tidak ANR di thread UI.
+        viewModelScope.launch {
+            val localIp = withContext(Dispatchers.IO) { NetworkUtils.getLocalIp() } ?: ""
+            val gateway = withContext(Dispatchers.IO) { NetworkUtils.getLocalGateway() } ?: ""
+            val prefix = withContext(Dispatchers.IO) { NetworkUtils.getLocalNetworkPrefix() }
+            val subnet = if (prefix != null) "$prefix.0/24" else ""
+            val interfaces = withContext(Dispatchers.IO) { NetworkUtils.getAvailableInterfaces() }
+            val selected = NetworkUtils.selectedInterfaceName
+            _state.update {
+                it.copy(networkInfo = NetworkInfo(localIp, gateway, subnet, interfaces, selected))
+            }
         }
     }
 
@@ -222,18 +228,29 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
         if (type == ScanType.MONITOR) { startMonitor(target); return }
 
-        // Scan area luas (banyak subnet) butuh konfirmasi dulu + estimasi
+        // Scan area luas (banyak subnet) butuh konfirmasi dulu + estimasi.
+        // expandTargetSubnets() me-resolve DNS (InetAddress.getByName) sehingga
+        // wajib di IO — di thread UI berisiko ANR.
         if (!force) {
-            val subnets = NetworkUtils.expandTargetSubnets(target)
-            if (subnets.size > WIDE_SCAN_THRESHOLD) {
-                _state.update {
-                    it.copy(pendingWideTarget = target, pendingWideScanType = type,
-                        pendingWideCount = subnets.sumOf { (it.hostEnd - it.hostStart + 1).toLong() })
+            viewModelScope.launch {
+                val subnets = withContext(Dispatchers.IO) { NetworkUtils.expandTargetSubnets(target) }
+                if (subnets.size > WIDE_SCAN_THRESHOLD) {
+                    _state.update {
+                        it.copy(pendingWideTarget = target, pendingWideScanType = type,
+                            pendingWideCount = subnets.sumOf { (it.hostEnd - it.hostStart + 1).toLong() })
+                    }
+                    return@launch
                 }
-                return
+                launchScan(type, target)
             }
+            return
         }
 
+        launchScan(type, target)
+    }
+
+    /** Badan scan: dipanggil setelah cek konfirmasi wide-scan selesai. */
+    private fun launchScan(type: ScanType, target: String) {
         _startTime = System.currentTimeMillis()
         lastNotifyAt = 0L; notifyCount = 0; _lastDeleted = emptyList()
         lastScanNotifAt = 0L
@@ -284,8 +301,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                                 _uptime[merged.ip]?.lastOrNull()?.online == false) {
                                 notifyFavoriteBackOnline(merged.ip)
                             }
-                            recordUptime(event.host.ip, true)
-                            event.host.latencyMs?.let { recordPing(merged.ip, it) }
+                            recordUptimeFast(event.host.ip, true)
+                            event.host.latencyMs?.let { recordPingFast(merged.ip, it) }
                             persistResults()
                         }
                         is ScanEvent.UrlFound -> {
@@ -298,6 +315,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             val duration = System.currentTimeMillis() - _startTime
                             computeDiff()
                             refreshHostsUi(force = true)
+                            persistUptimeThrottled(force = true)
+                            persistPingThrottled(force = true)
                             persistResults(force = true)
                             val result = event.result.copy(hosts = _hosts.values.toList(),
                                 discoveredUrls = _urls.values.toList(),
@@ -369,6 +388,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _deepScanJob?.cancel(); _deepScanJob = null
         stopScanService()
         persistCheckpoint(force = true)  // simpan posisi agar bisa dilanjutkan nanti
+        persistUptimeThrottled(force = true)
+        persistPingThrottled(force = true)
         persistResults(force = true)
         refreshHostsUi(force = true)
         _state.update { it.copy(isScanning = false, isPaused = false, deepScanning = null,
@@ -425,10 +446,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) { ScanCheckpointStore.save(app, cp) }
     }
 
-    /** Gabungkan data host lama + baru lintas scan agar tidak ada data yang hilang. */
+    /** Gabungkan data host lama + baru: port & status dari hasil fresh (otoritatif
+     *  untuk scan ini) agar port yang sudah tertutup hilang dan host yang tak
+     *  muncul bisa offline; metadata (nama/MAC/label) diwarisi bila fresh kosong. */
     private fun mergeHost(existing: HostInfo, fresh: HostInfo): HostInfo {
         val mac = fresh.macAddress ?: existing.macAddress
-        val mergedPorts = (fresh.openPorts + existing.openPorts).distinctBy { it.port }
         return HostInfo(
             ip = fresh.ip,
             hostname = fresh.hostname ?: existing.hostname,
@@ -437,8 +459,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             macVendor = fresh.macVendor ?: existing.macVendor ?: mac?.let { NetworkUtils.lookupMacVendor(it) },
             latencyMs = fresh.latencyMs ?: existing.latencyMs,
             osGuess = fresh.osGuess ?: existing.osGuess,
-            isAlive = fresh.isAlive || existing.isAlive,
-            openPorts = mergedPorts,
+            isAlive = fresh.isAlive,
+            openPorts = fresh.openPorts,
             isNew = false,
             ipConflict = existing.ipConflict || (fresh.macAddress != null && existing.macAddress != null &&
                 !fresh.macAddress.equals(existing.macAddress, ignoreCase = true)),
@@ -561,12 +583,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(error = "Masukkan IP target untuk monitor") }
             return
         }
-        val ip = NetworkUtils.resolveDomain(target) ?: target
         _state.update { it.copy(isScanning = true, scanType = ScanType.MONITOR, error = null,
-            summary = "Monitoring $ip...", summaryColor = 0xFF00695C, isSummaryOk = true,
+            summary = "Monitoring $target...", summaryColor = 0xFF00695C, isSummaryOk = true,
             monitor = MonitorState(isRunning = true)) }
         monitorJob?.cancel()
         monitorJob = viewModelScope.launch {
+            // resolveDomain() memakai DNS blokir → wajib di IO, bukan thread UI.
+            val ip = withContext(Dispatchers.IO) { NetworkUtils.resolveDomain(target) } ?: target
             while (isActive) {
                 val probe = withContext(Dispatchers.IO) { PingUtil.pingProbe(ip) }
                 val online = probe != null
@@ -633,6 +656,22 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private fun recordPing(ip: String, latencyMs: Long) {
         _pingHistory = PingStore.record(getApplication(), _pingHistory, ip, latencyMs)
         _state.update { it.copy(pingHistory = _pingHistory) }
+    }
+
+    /** Varian cepat untuk hot path HostFound: simpan disk di-throttle tiap 10 detik. */
+    private fun recordPingFast(ip: String, latencyMs: Long) {
+        _pingHistory = PingStore.append(_pingHistory, ip, latencyMs)
+        _state.update { it.copy(pingHistory = _pingHistory) }
+        persistPingThrottled()
+    }
+
+    private fun persistPingThrottled(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastPingSaveAt < 10_000) return
+        lastPingSaveAt = now
+        val snapshot = _pingHistory
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) { PingStore.save(app, snapshot) }
     }
 
     /** Cari nama host via reverse DNS (PTR) untuk host yang hostname-nya kosong. */
@@ -1247,6 +1286,22 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private fun recordUptime(ip: String, online: Boolean) {
         _uptime = UptimeStore.record(getApplication(), _uptime, ip, online)
         _state.update { it.copy(uptime = _uptime) }
+    }
+
+    /** Varian cepat untuk hot path HostFound: simpan disk di-throttle tiap 10 detik. */
+    private fun recordUptimeFast(ip: String, online: Boolean) {
+        _uptime = UptimeStore.append(_uptime, ip, online)
+        _state.update { it.copy(uptime = _uptime) }
+        persistUptimeThrottled()
+    }
+
+    private fun persistUptimeThrottled(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastUptimeSaveAt < 10_000) return
+        lastUptimeSaveAt = now
+        val snapshot = _uptime
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) { UptimeStore.save(app, snapshot) }
     }
 
     /** Notifikasi saat perangkat penting (favorit) offline. */

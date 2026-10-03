@@ -2,10 +2,14 @@ package com.tasirin.network.radar.scanner
 
 import com.tasirin.network.radar.model.*
 import com.tasirin.network.radar.util.NetworkUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -29,13 +33,20 @@ class UdpScanner {
         // Item 10: makin rendah level, makin banyak port UDP yang discan
         val udpPorts = UDP_PORTS.take(udpPortCount(speed))
         val arpTable = NetworkUtils.readArpTable()
+        // Probe UDP memblokir (socket + timeout): batasi paralelisme global agar
+        // tidak kehabisan file descriptor/thread saat scan subnet luas.
+        val permits = Semaphore(speed.socketPermits)
 
         ScanLoop.scanSubnets(subnets, speed, "UDP scan", scanOne = { ip ->
             val open = coroutineScope {
                 udpPorts.map { (port, service) ->
                     async {
-                        if (UdpProbe.probe(ip, port, udpTimeout)) PortInfo(port = port, service = "$service (UDP)")
-                        else null
+                        withContext(Dispatchers.IO) {
+                            permits.withPermit {
+                                if (UdpProbe.probe(ip, port, udpTimeout)) PortInfo(port = port, service = "$service (UDP)")
+                                else null
+                            }
+                        }
                     }
                 }.mapNotNull { it.await() }
             }

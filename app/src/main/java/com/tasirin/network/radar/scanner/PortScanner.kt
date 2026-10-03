@@ -11,7 +11,8 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import android.os.SystemClock
-import java.util.concurrent.Semaphore
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /** Hasil deep scan: daftar port terbuka + penanda kalau dibatasi. */
 data class DeepScanResult(
@@ -184,8 +185,15 @@ class PortScanner {
         return tryConnect(timeoutMs) ?: tryConnect(timeoutMs * 2)
     }
 
-    private fun scanPort(ip: String, port: Int, timeoutMs: Int, permits: Semaphore): PortInfo? {
-        permits.acquire()
+    private suspend fun scanPort(ip: String, port: Int, timeoutMs: Int, permits: Semaphore): PortInfo? {
+        // withPermit (suspend) dipakai agar thread IO tidak terblokir saat antre:
+        // acquire() blokir menahan puluhan thread pool saat scan /24.
+        return permits.withPermit {
+            scanPortLocked(ip, port, timeoutMs)
+        }
+    }
+
+    private fun scanPortLocked(ip: String, port: Int, timeoutMs: Int): PortInfo? {
         try {
             val sock = connectWithRetry(ip, port, timeoutMs)
             if (sock == null) return null
@@ -210,8 +218,6 @@ class PortScanner {
             }
         } catch (_: Exception) {
             return null
-        } finally {
-            permits.release()
         }
     }
 

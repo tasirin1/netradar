@@ -50,7 +50,10 @@ class TracerouteScanner {
             val hostname = reverseLookup(hop.ip)
             emit(ScanEvent.HostFound(HostInfo(ip = hop.ip, hostname = hostname, latencyMs = hop.latencyMs)))
 
-            if (hop.latencyMs != null && hop.ip == targetIp) break  // target tercapai
+            // Target tercapai bila hop == target, tanpa syarat latency: target yang
+            // memfilter ping/firewall tidak membalas sehingga balasan akhir tak
+            // pernah ber-latency — tanpa ini trace selalu jalan penuh 30 hop.
+            if (hop.ip == targetIp || hop.ip == target) break  // target tercapai
         }
 
         emit(ScanEvent.Complete(ScanResult(type = ScanType.TRACE, target = target)))
@@ -88,7 +91,8 @@ class TracerouteScanner {
     } catch (_: Exception) { null }
 
     private companion object {
-        val REPLY_REGEX = Regex("""bytes from ([0-9.]+)[^\n]*?time[=:]\s*([0-9.]+)\s*ms""")
-        val EXCEEDED_REGEX = Regex("""(?i)\bfrom ([0-9.]+)\s*:.*(?:exceeded|time to live)""")
+        // Kelas [0-9a-fA-F:.]+ mencakup IPv4 dan IPv6 (mis. "bytes from 2001:db8::1 ...").
+        val REPLY_REGEX = Regex("""bytes from ([0-9a-fA-F:.]+)[^\n]*?time[=:]\s*([0-9.]+)\s*ms""")
+        val EXCEEDED_REGEX = Regex("""(?i)\bfrom ([0-9a-fA-F:.]+)\s*:.*(?:exceeded|time to live)""")
     }
 }

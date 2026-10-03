@@ -15,6 +15,9 @@ class ScannerManager {
     private val udpScanner = UdpScanner()
     private val tracerouteScanner = TracerouteScanner()
 
+    /** Kunci untuk assignment currentJob agar scan/stop yang bersamaan tidak saling menimpa. */
+    private val jobLock = Any()
+
     @Volatile
     private var currentJob: Job? = null
 
@@ -24,7 +27,13 @@ class ScannerManager {
         speed: ScanSpeed = ScanSpeed.SEDANG,
         customPorts: String = ""
     ): Flow<ScanEvent> = channelFlow {
-        val oldJob = currentJob
+        // Ambil dan batalkan job lama di bawah kunci agar tidak ada dua scan yang
+        // menganggap dirinya pemilik currentJob secara bersamaan.
+        val oldJob: Job? = synchronized(jobLock) {
+            val previous = currentJob
+            currentJob = null
+            previous
+        }
         oldJob?.cancel()
         ScanPause.resume() // scan baru mulai dalam keadaan tidak paused
 
@@ -50,7 +59,7 @@ class ScannerManager {
                 send(ScanEvent.Error(e.message ?: "Scan error"))
             }
         }
-        currentJob = scanJob
+        synchronized(jobLock) { currentJob = scanJob }
 
         // Tunggu job lama selesai dibatalkan agar tidak ada dua scan paralel
         oldJob?.join()
@@ -61,12 +70,24 @@ class ScannerManager {
             scanJob.cancel()
             throw e
         } finally {
-            currentJob = null
+            // Hanya nol-kan bila masih milik scan ini: stop()/scan baru yang
+            // datang belakangan tidak boleh dibuat yatim (tak bisa di-cancel).
+            synchronized(jobLock) { if (currentJob === scanJob) currentJob = null }
             ScanPause.resume()
         }
     }
 
     fun pause() { ScanPause.pause() }
     fun resume() { ScanPause.resume() }
-    fun stop() { currentJob?.cancel(); currentJob = null; ScanPause.resume() }
+
+    /** Batalkan scan berjalan tanpa membuat scan baru yang sedang start jadi yatim. */
+    fun stop() {
+        val job: Job? = synchronized(jobLock) {
+            val running = currentJob
+            currentJob = null
+            running
+        }
+        job?.cancel()
+        ScanPause.resume()
+    }
 }
