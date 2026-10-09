@@ -8,7 +8,7 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Cek konsistensi repo
         run: |
           python3 scripts/check_repo.py
