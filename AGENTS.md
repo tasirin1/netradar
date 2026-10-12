@@ -120,6 +120,9 @@ Hal berikut sengaja dipilih/dilarang — JANGAN diubah tanpa alasan kuat:
 
 1. **Build resmi HANYA via GitHub Actions** — jangan build lokal untuk rilis.
    Build lokal (`./gradlew assembleDebug`) hanya untuk debugging cepat.
+   Dilarang menginstal apa pun yang berat di mesin lokal (emulator/system-image,
+   NDK, dan sejenisnya) — jangan unduh ratusan MB–GB ke mesin kerja untuk alasan
+   apa pun; debug lokal cukup memakai SDK yang sudah ada, tanpa emulator.
 2. **Bahasa**: kode, komentar, string UI, dan commit memakai **Bahasa Indonesia**
    (beberapa label scan memakai istilah teknis bahasa Inggris seperti
    "Port Scan"/"Discover" — itu disengaja).
@@ -145,6 +148,13 @@ Hal berikut sengaja dipilih/dilarang — JANGAN diubah tanpa alasan kuat:
     bocor saat exception.
 12. **Semaphore wajib di semua scanner** yang membuka socket TCP/UDP —
     batasi dengan `speed.socketPermits` agar tidak kehabisan file descriptor.
+13. **Cek program lokal dulu, manfaatkan semaksimal mungkin** — di awal tiap
+    pekerjaan, cek program lokal yang terinstal (`command -v` + `--version`;
+    mis. `rg`, `fd`, `fzf`, `bat`, `eza`, `jq`, `file`, `lsof`, `htop`,
+    `git`, `python3`, `bash`, `gh`) lalu pakai yang paling tepat semaksimal
+    mungkin: `rg` untuk cari teks, `fd` untuk cari berkas, `jq` untuk JSON,
+    sisanya sesuai kebutuhan. Build rilis tetap hanya via GitHub Actions
+    (aturan No. 1).
 
 ## Menambah/mengubah fitur — file mana yang disentuh
 
