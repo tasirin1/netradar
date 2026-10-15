@@ -26,7 +26,7 @@ class TracerouteScanner {
 
     suspend fun scan(target: String): Flow<ScanEvent> = flow {
         val targetIp = try {
-            InetAddress.getByName(target.substringBefore(":")).hostAddress
+            InetAddress.getByName(stripPort(target)).hostAddress
         } catch (_: Exception) { null }
         if (targetIp == null) {
             emit(ScanEvent.Error("Cannot resolve target: $target"))
@@ -73,11 +73,18 @@ class TracerouteScanner {
             val finished = process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
             if (!finished) return@withContext Hop(null, null)
             val output = try {
-                BufferedReader(InputStreamReader(process.inputStream)).readText()
+                BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
             } catch (_: Exception) { "" }
             parseHop(output)
         } catch (_: Exception) { Hop(null, null) }
         finally { try { process?.destroy() } catch (_: Exception) {} }
+    }
+
+    /** Buang `:port` hanya bila satu titik-dua; literal IPv6 dibiarkan utuh. */
+    internal fun stripPort(target: String): String {
+        val t = target.trim().removePrefix("[").substringBefore("]")
+        if (t.count { it == ':' } > 1) return t
+        return t.substringBefore(":")
     }
 
     /** Baca output ping: balasan akhir "bytes from <ip> ... time=X ms" atau TTL habis "From <ip> ... exceeded". */

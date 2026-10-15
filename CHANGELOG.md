@@ -6,6 +6,14 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 ## [Unreleased]
 
 ### Diperbaiki
+- Service foreground pakai tipe eksplisit `dataSync` (aman API 34+).
+- Reader jaringan selalu ditutup (`.use`): probe RTSP/HTTP kamera, router, traceroute, ONVIF.
+- Scan URL_PATH dibatasi Semaphore seperti scanner lain.
+- Progress UI di-throttle ±150 mdtk; jeda dicek per chunk; scan baru tunggu job lama selesai.
+- Cache mDNS buang entri basi (IP reuse DHCP).
+- Target traceroute dukung IPv6 literal + `[ip]:port` (ada unit test).
+- Riwayat scan ditulis atomik (tmp+rename).
+- Izin notifikasi diberi penjelasan bila pernah ditolak.
 - CI disederhanakan: `repo-guard.yml` digabung jadi job pertama `build.yml`.
 - Perbaikan kompilasi: tambah `import launch` di ScanLoop dan jadikan penghitung
   siklus monitor integer.

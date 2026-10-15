@@ -57,6 +57,7 @@ object ScanLoop {
         onResult: suspend (ip: String, host: HostInfo?) -> Unit
     ) {
         ips.chunked(hostConcurrency).forEach { chunk ->
+            ScanPause.checkPause()
             coroutineScope {
                 // Lapor sesuai urutan selesai (bukan urutan IP) agar satu host
                 // lambat tidak menahan laporan host cepat di chunk yang sama.

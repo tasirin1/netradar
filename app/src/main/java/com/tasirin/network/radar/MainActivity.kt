@@ -30,6 +30,13 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
+            if (shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+                android.widget.Toast.makeText(
+                    this,
+                    "Aktifkan notifikasi agar tahu saat scan selesai",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
         }
 

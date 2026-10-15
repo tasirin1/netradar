@@ -37,6 +37,12 @@ class ScannerManager {
         oldJob?.cancel()
         ScanPause.resume() // scan baru mulai dalam keadaan tidak paused
 
+        // Tunggu job lama selesai dibatalkan SEBELUM launch baru agar tidak
+        // ada dua scan paralel walau sesaat.
+        try {
+            oldJob?.join()
+        } catch (_: Exception) { }
+
         val scanJob = launch(Dispatchers.IO) {
             try {
                 // Kumpulkan nama perangkat mDNS/SSDP sekali per scan (best-effort).
@@ -60,9 +66,6 @@ class ScannerManager {
             }
         }
         synchronized(jobLock) { currentJob = scanJob }
-
-        // Tunggu job lama selesai dibatalkan agar tidak ada dua scan paralel
-        oldJob?.join()
 
         try {
             scanJob.join()

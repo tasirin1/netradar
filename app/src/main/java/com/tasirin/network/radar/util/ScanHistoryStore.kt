@@ -2,6 +2,7 @@ package com.tasirin.network.radar.util
 
 import android.content.Context
 import com.tasirin.network.radar.model.ScanHistoryEntry
+import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -43,8 +44,18 @@ object ScanHistoryStore {
                         .put("durationMs", e.durationMs)
                 )
             }
-            context.openFileOutput(FILE, Context.MODE_PRIVATE).use { out ->
+            // Tulis atomik via tmp+rename agar kill di tengah tulis
+            // tidak menyisakan file setengah (riwayat hilang total).
+            val tmp = File(context.filesDir, "$FILE.tmp")
+            tmp.outputStream().use { out ->
                 out.write(arr.toString().toByteArray())
+            }
+            val dest = File(context.filesDir, FILE)
+            if (!tmp.renameTo(dest)) {
+                context.openFileOutput(FILE, Context.MODE_PRIVATE).use { out ->
+                    out.write(arr.toString().toByteArray())
+                }
+                try { tmp.delete() } catch (_: Exception) { }
             }
         } catch (_: Exception) { }
     }

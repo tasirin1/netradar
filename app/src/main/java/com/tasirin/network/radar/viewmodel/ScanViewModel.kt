@@ -121,6 +121,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private var _history = emptyList<ScanHistoryEntry>()
     private var _previousScanHosts: Map<String, List<Int>>? = null
     private var lastHostUiAt = 0L
+    private var lastProgressUiAt = 0L
     private var gatewayJob: Job? = null
     private val gatewayLatencies = ArrayDeque<Long>()
     private var lastMonitorSaveAt = 0L
@@ -286,7 +287,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                             val pct = if (event.total > 0) event.current.toFloat() / event.total else 0f
                             val pctText = if (event.total > 0) " (${event.current}/${event.total})" else ""
                             val eta = estimateEta(event.current, event.total)
-                            _state.update { it.copy(progress = "${event.ip}$pctText$eta", progressPercent = pct) }
+                            // Throttle update UI (±150 mdtk) agar ratusan event/detik
+                            // tak memicu recomposition beruntun (jank/crash).
+                            val nowUi = System.currentTimeMillis()
+                            if (nowUi - lastProgressUiAt >= 150 || event.current >= event.total) {
+                                lastProgressUiAt = nowUi
+                                _state.update { it.copy(progress = "${event.ip}$pctText$eta", progressPercent = pct) }
+                            }
                             // Simpan posisi terakhir (subnet + host) untuk fitur lanjutkan scan
                             if (event.subnetIndex >= 0) saveCheckpoint(type, target, event)
                             updateScanNotification(event)

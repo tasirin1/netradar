@@ -66,13 +66,14 @@ class RouterScanner {
                 if (port in WEB_PORTS) {
                     val req = "GET / HTTP/1.1\r\nHost: $ip\r\nConnection: close\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
-                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
                     val header = StringBuilder()
-                    var line: String?
-                    for (i in 0 until 25) {
-                        line = reader.readLine() ?: break
-                        if (line.isBlank()) break // akhir header: jangan tunggu keep-alive
-                        header.append(line).append(" ")
+                    BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1")).use { reader ->
+                        var line: String?
+                        for (i in 0 until 25) {
+                            line = reader.readLine() ?: break
+                            if (line.isBlank()) break // akhir header: jangan tunggu keep-alive
+                            header.append(line).append(" ")
+                        }
                     }
                     val h = header.toString().lowercase()
                     val service = when {

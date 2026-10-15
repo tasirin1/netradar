@@ -64,15 +64,16 @@ class CameraScanner {
                 554, 8554 -> {
                     val req = "OPTIONS rtsp://$ip RTSP/1.0\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
-                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
                     val resp = StringBuilder()
-                    var line: String?
-                    // Batasi 25 baris seperti probe web/router: server RTSP tidak
-                    // menutup koneksi sehingga baca-sampai-EOF menggantung tiap probe.
-                    for (i in 0 until 25) {
-                        line = reader.readLine() ?: break
-                        if (line.isBlank()) break // akhir header RTSP: jangan tunggu keep-alive
-                        resp.append(line).append("\n")
+                    BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1")).use { reader ->
+                        var line: String?
+                        // Batasi 25 baris seperti probe web/router: server RTSP tidak
+                        // menutup koneksi sehingga baca-sampai-EOF menggantung tiap probe.
+                        for (i in 0 until 25) {
+                            line = reader.readLine() ?: break
+                            if (line.isBlank()) break // akhir header RTSP: jangan tunggu keep-alive
+                            resp.append(line).append("\n")
+                        }
                     }
                     if (resp.toString().contains("RTSP", ignoreCase = true)) PortInfo(port, "RTSP Camera")
                     else null
@@ -83,13 +84,14 @@ class CameraScanner {
                 80, 8080, 443, 8443 -> {
                     val req = "GET / HTTP/1.1\r\nHost: $ip\r\nConnection: close\r\n\r\n"
                     sock.getOutputStream().write(req.toByteArray())
-                    val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
                     val header = StringBuilder()
-                    var line: String?
-                    for (i in 0 until 25) {
-                        line = reader.readLine() ?: break
-                        if (line.isBlank()) break // akhir header HTTP: jangan tunggu keep-alive
-                        header.append(line).append(" ")
+                    BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1")).use { reader ->
+                        var line: String?
+                        for (i in 0 until 25) {
+                            line = reader.readLine() ?: break
+                            if (line.isBlank()) break // akhir header HTTP: jangan tunggu keep-alive
+                            header.append(line).append(" ")
+                        }
                     }
                     val h = header.toString().lowercase()
                     when {
@@ -120,7 +122,7 @@ class CameraScanner {
                         conn.connectTimeout = timeoutMs
                         try {
                             conn.outputStream.write(xml.toByteArray())
-                            val resp = conn.inputStream.bufferedReader().readText()
+                            val resp = conn.inputStream.bufferedReader().use { it.readText() }
                             if (resp.contains("ONVIF", ignoreCase = true) || resp.contains("Device", ignoreCase = true))
                                 PortInfo(port, "ONVIF Camera") else null
                         } finally {

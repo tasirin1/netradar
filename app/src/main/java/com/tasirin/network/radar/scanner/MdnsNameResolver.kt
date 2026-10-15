@@ -25,7 +25,12 @@ object MdnsNameResolver {
         if (System.currentTimeMillis() - cachedAt < maxAgeMs) return
         try {
             val names = withContext(Dispatchers.IO) { discover(timeoutMs = 1200) }
-            if (names.isNotEmpty()) cache.putAll(names)
+            if (names.isNotEmpty()) {
+                // Buang entri yang tak terlihat lagi agar IP reuse DHCP
+                // tidak menampilkan nama pemilik lama.
+                cache.keys.retainAll(names.keys)
+                cache.putAll(names)
+            }
             // Selalu segarkan timestamp (walau kosong) agar jaringan tanpa
             // perangkat mDNS tak membayar discovery 1,2 detik di tiap scan.
             cachedAt = System.currentTimeMillis()

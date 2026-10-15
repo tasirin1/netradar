@@ -3,6 +3,8 @@ package com.tasirin.network.radar.scanner
 import com.tasirin.network.radar.model.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -165,7 +167,7 @@ class UrlPathScanner {
         }
     }
 
-    fun scan(target: String): Flow<ScanEvent> = channelFlow {
+    fun scan(target: String, speed: ScanSpeed = ScanSpeed.SEDANG): Flow<ScanEvent> = channelFlow {
         val baseUrl = normalizeTarget(target)
         if (baseUrl == null) {
             send(ScanEvent.Error("Invalid target: $target"))
@@ -182,14 +184,18 @@ class UrlPathScanner {
 
         send(ScanEvent.Progress(baseUrl, 0, total))
 
-        // Parallel scanning: process paths in batches of 30
+        // Parallel scanning: process paths in batches of 30.
+        // Semaphore batas koneksi paralel agar tak kehabisan file descriptor.
+        val permits = Semaphore(speed.socketPermits)
         withContext(Dispatchers.IO) {
             paths.chunked(30).forEach { batch ->
                 ScanPause.checkPause()
                 val tasks = batch.map { path ->
                     async {
-                        val url = baseUrl.trimEnd('/') + path
-                        url to checkPath(url)
+                        permits.withPermit {
+                            val url = baseUrl.trimEnd('/') + path
+                            url to checkPath(url)
+                        }
                     }
                 }
                 tasks.forEach { task ->
