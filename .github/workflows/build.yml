@@ -18,7 +18,18 @@ permissions:
   contents: write
 
 jobs:
+  guard:
+    name: Repo Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cek konsistensi repo
+        run: |
+          python3 scripts/check_repo.py
+          python3 scripts/check_repo.py --readme
+
   build:
+    needs: [guard]
     runs-on: ubuntu-latest
     env:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}

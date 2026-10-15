@@ -6,6 +6,7 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 ## [Unreleased]
 
 ### Diperbaiki
+- CI disederhanakan: `repo-guard.yml` digabung jadi job pertama `build.yml`.
 - Perbaikan kompilasi: tambah `import launch` di ScanLoop dan jadikan penghitung
   siklus monitor integer.
 - Discovery SSDP hidup lagi: balasan dibedakan dari isi paket (bukan port
