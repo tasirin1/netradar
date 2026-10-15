@@ -6,7 +6,7 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 ## [Unreleased]
 
 ### Diperbaiki
-- Service foreground pakai tipe eksplisit `dataSync` (aman API 34+).
+- Smart cast reader di lambda `.use` (val lokal per iterasi).
 - Reader jaringan selalu ditutup (`.use`): probe RTSP/HTTP kamera, router, traceroute, ONVIF.
 - Scan URL_PATH dibatasi Semaphore seperti scanner lain.
 - Progress UI di-throttle ±150 mdtk; jeda dicek per chunk; scan baru tunggu job lama selesai.
