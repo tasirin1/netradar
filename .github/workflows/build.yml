@@ -7,6 +7,8 @@ on:
       - "**.md"
       - "LICENSE"
       - ".gitignore"
+    tags:
+      - "v*"
   pull_request:
     paths-ignore:
       - "**.md"
@@ -196,18 +198,19 @@ jobs:
         echo "✅ Ukuran APK dalam batas aman"
 
     - name: Publish GitHub Release
-      if: github.ref == 'refs/heads/master'
+      if: startsWith(github.ref, 'refs/tags/v')
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
         CODE=${GITHUB_RUN_NUMBER}
-        OUT="netradar-v${VER}-${CODE}.apk"
+        TAG="${GITHUB_REF_NAME}"
+        OUT="netradar-${TAG}.apk"
         cp app/build/outputs/apk/release/app-release.apk "$OUT"
-        MAPPING="netradar-v${VER}-${CODE}-mapping.txt"
+        MAPPING="netradar-${TAG}-mapping.txt"
         cp app/build/outputs/mapping/release/mapping.txt "$MAPPING"
-        gh release delete "v${VER}" --yes --cleanup-tag || true
-        gh release create "v${VER}" "$OUT" "$MAPPING" \
-          --title "NetRadar v${VER} (build ${CODE})" \
-          --notes "APK rilis terbaru (build ${CODE}) + mapping.txt untuk deobfuscation crash R8. Ditandatangani dengan keystore resmi Tasirin (sama dengan Tasirin Download Manager & Vaultwarden Host) — update-over-install mulus." \
-          --latest
+        gh release view "$TAG" >/dev/null 2>&1 || \
+          gh release create "$TAG" \
+            --title "NetRadar ${TAG} (build ${CODE})" \
+            --notes "APK rilis (build ${CODE}) + mapping.txt untuk deobfuscation crash R8. Ditandatangani dengan keystore resmi Tasirin (sama dengan Tasirin Download Manager & Vaultwarden Host) — update-over-install mulus."
+        gh release upload "$TAG" "$OUT" "$MAPPING" --clobber

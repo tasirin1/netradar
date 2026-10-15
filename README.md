@@ -73,7 +73,7 @@ Detail kemampuan:
 ## Unduh
 
 - **GitHub Release** → halaman [Release](https://github.com/tasirin1/netradar/releases)
-  → APK `netradar-v2.0-<build>.apk` (rilis otomatis tiap push ke `master`).
+  → APK `netradar-vX.Y.Z.apk` (terbit tiap push tag `v*`).
 - Alternatif: GitHub Actions → run terbaru → artifact `NetScan-APK`.
 - APK di-build & ditandatangani otomatis oleh CI dengan **keystore resmi
   Tasirin** (sama dengan Tasirin Download Manager & Vaultwarden Host) —
@@ -120,7 +120,7 @@ Tasirin Download Manager): AGP `8.5.2`, Kotlin `1.9.24`, Compose Compiler
 Workflow `.github/workflows/build.yml` berjalan otomatis **setiap push** ke
 branch mana pun: install Android SDK, jalankan unit test
 (`testDebugUnitTest`), `assembleRelease` (signed), unggah APK sebagai artifact
-`NetScan-APK`, lalu publish GitHub Release `v2.0` untuk push ke `master`.
+`NetScan-APK`. Push tag `vX.Y.Z` sekaligus publish GitHub Release.
 
 APK release ditandatangani dengan **keystore resmi Tasirin** yang sama dengan
 Tasirin Download Manager & Vaultwarden Host — tanda tangan konsisten sehingga

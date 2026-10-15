@@ -82,8 +82,9 @@ def gradle_guard() -> bool:
     if 'minSdk = 29' not in text:
         print("::error::minSdk harus 29 (Android 10)")
         ok = False
-    if 'versionName = "2.0"' not in text:
-        print("::error::versionName harus tetap \"2.0\"")
+    m = re.search(r'versionName = "(\d+\.\d+\.\d+)"', text)
+    if not m:
+        print('::error::versionName harus semantic manual "X.Y.Z"')
         ok = False
     if 'lint {' not in text:
         print("::error::Blok lint { abortOnError = true } harus ada")

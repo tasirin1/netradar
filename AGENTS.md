@@ -128,7 +128,7 @@ Hal berikut sengaja dipilih/dilarang — JANGAN diubah tanpa alasan kuat:
    "Port Scan"/"Discover" — itu disengaja).
 3. **Gaya commit**: `type: deskripsi` — tipe yang dipakai di repo ini:
    `feat`, `fix`, `refactor`, `test`, `perf`, `docs`. Satu commit satu tujuan.
-4. **Jangan ubah `versionName`** (`"2.0"` tetap). `versionCode` otomatis:
+4. **`versionName` semantic manual** (mis. `"2.1.0"`, naikkan tiap rilis). `versionCode` otomatis:
    `GITHUB_RUN_NUMBER` di CI, fallback jumlah commit git untuk build lokal.
 5. **Jaga kompatibilitas Android 10 (minSdk 29)**: API baru wajib punya fallback.
 6. **`targetSdk 36`**: pastikan perubahan tetap lolos perilaku storage/target
@@ -178,14 +178,15 @@ Hal berikut sengaja dipilih/dilarang — JANGAN diubah tanpa alasan kuat:
   `MainScreen.kt`/halaman Pengaturan.
 - **Widget** → `widget/NetRadarWidget.kt` + `res/layout/widget_netradar.xml`.
 - **Notifikasi/service** → `ScanService.kt` + `ScanViewModel.kt`.
-- **Versi app** → jangan manual; `versionCode` diatur CI.
+- **Versi app** → `versionName` semantic manual di `app/build.gradle.kts`; `versionCode` diatur CI.
 
 ## Cara memicu build
 
 - **Push ke branch mana pun** → workflow `build.yml` jalan (trigger `on: push`).
+- **Rilis**: naikkan `versionName` + catat CHANGELOG, commit, push, lalu `git push origin vX.Y.Z` → terbit GitHub Release `vX.Y.Z`.
 - **Manual**: GitHub → Actions → *Build* → *Run workflow*.
 - Hasil: unit test + APK release signed → artifact `NetScan-APK`;
-  push ke `master` sekaligus publish GitHub Release `v2.0`.
+  push tag sekaligus publish GitHub Release.
 
 ## Verifikasi setelah build
 
@@ -209,7 +210,7 @@ ditetapkan atau mengaktifkan kembali fitur/syarat yang sengaja dipertahankan.
 | UI/commit pakai Bahasa Indonesia | Basis pengguna utama lebih nyaman dengan istilah lokal; komentar dan commit juga konsisten. |
 | Compose BOM 2024.06.00 | Compose Runtime 1.6.8 memperbaiki crash `pending composition has not been applied` saat deep scan memperbarui list beranimasi. |
 | Throttle progress UI maks ~6×/detik | Menghindari kompetisi layout LazyColumn dengan recomposition berulang, terutama saat scan subnet besar. |
-| minSdk 29 (Android 10) & `versionName` tetap `"2.0"` | Dukungan Android 10+; `versionCode` diatur otomatis oleh CI (`GITHUB_RUN_NUMBER`). |
+| minSdk 29 (Android 10) & `versionName` semantic | Dukungan Android 10+; `versionName` manual (`2.1.0`, …), `versionCode` otomatis CI; rilis via tag `v*`. |
 | Deep scan berbasis indeks/`IntArray` | Menghindari alokasi 65.536 objek port; menurunkan tekanan GC dan waktu scan. |
 | ScanLoop mengekspansi subnet hanya saat benar-benar discan | Saat resume melewati subnet selesai, alokasi IP dihindari agar hemat memori. |
 | Backup/restore menyertakan `ipConflict` & `lastSeenScan` | Menjaga konteks lintas scan agar UI tidak kehilangan status host. |

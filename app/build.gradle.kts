@@ -10,6 +10,7 @@ fun gitCommitCount(): Int = try {
 } catch (_: Exception) { 1 }
 
 // VersionCode otomatis: pakai run number CI (monotonik) atau jumlah commit git.
+// VersionName semantic manual (mis. "2.1.0") — naikkan tiap rilis via tag v*.
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: maxOf(gitCommitCount(), 3)
 
 android {
@@ -21,7 +22,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = buildNumber
-        versionName = "2.0"
+        versionName = "2.1.0"
         // Hanya string default (+id) yang dipertahankan — buang resource
         // locale library (appcompat/material) yang tidak dipakai.
         resConfigs("id")

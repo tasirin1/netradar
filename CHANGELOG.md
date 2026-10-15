@@ -5,6 +5,9 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ## [Unreleased]
 
+### Diubah
+- Skema versi + rilis: `versionName` semantic manual (`2.1.0`, …), rilis via tag `v*` (ganti rilis-menimpa `v2.0` tiap push).
+
 ### Diperbaiki
 - Smart cast reader di lambda `.use` (val lokal per iterasi).
 - Reader jaringan selalu ditutup (`.use`): probe RTSP/HTTP kamera, router, traceroute, ONVIF.
