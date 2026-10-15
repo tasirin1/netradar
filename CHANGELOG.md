@@ -7,6 +7,7 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ### Diubah
 - Skema versi + rilis: `versionName` semantic manual (`2.1.0`, …), rilis via tag `v*` (ganti rilis-menimpa `v2.0` tiap push).
+- Dependabot: naikkan 6 GitHub Actions (checkout, setup-java, gradle, upload-artifact, codeql, labeler, stale).
 
 ### Diperbaiki
 - Pin runner CI ke `ubuntu-24.04` (antisipasi migrasi `ubuntu-latest` → Ubuntu 26 mulai 2026-10-19).
