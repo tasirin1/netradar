@@ -68,9 +68,8 @@ class RouterScanner {
                     sock.getOutputStream().write(req.toByteArray())
                     val header = StringBuilder()
                     BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1")).use { reader ->
-                        var line: String?
                         for (i in 0 until 25) {
-                            line = reader.readLine() ?: break
+                            val line = reader.readLine() ?: break
                             if (line.isBlank()) break // akhir header: jangan tunggu keep-alive
                             header.append(line).append(" ")
                         }

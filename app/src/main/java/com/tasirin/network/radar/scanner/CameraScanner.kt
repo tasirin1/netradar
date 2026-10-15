@@ -66,11 +66,10 @@ class CameraScanner {
                     sock.getOutputStream().write(req.toByteArray())
                     val resp = StringBuilder()
                     BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1")).use { reader ->
-                        var line: String?
                         // Batasi 25 baris seperti probe web/router: server RTSP tidak
                         // menutup koneksi sehingga baca-sampai-EOF menggantung tiap probe.
                         for (i in 0 until 25) {
-                            line = reader.readLine() ?: break
+                            val line = reader.readLine() ?: break
                             if (line.isBlank()) break // akhir header RTSP: jangan tunggu keep-alive
                             resp.append(line).append("\n")
                         }
@@ -86,9 +85,8 @@ class CameraScanner {
                     sock.getOutputStream().write(req.toByteArray())
                     val header = StringBuilder()
                     BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1")).use { reader ->
-                        var line: String?
                         for (i in 0 until 25) {
-                            line = reader.readLine() ?: break
+                            val line = reader.readLine() ?: break
                             if (line.isBlank()) break // akhir header HTTP: jangan tunggu keep-alive
                             header.append(line).append(" ")
                         }
