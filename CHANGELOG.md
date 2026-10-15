@@ -5,6 +5,9 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ## [Unreleased]
 
+### Diubah
+- Dependabot: naikkan grup kotlinx (3 update).
+
 ### Diperbaiki
 - Perbaikan kompilasi: tambah `import launch` di ScanLoop dan jadikan penghitung
   siklus monitor integer.
