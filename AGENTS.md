@@ -156,6 +156,18 @@ Hal berikut sengaja dipilih/dilarang — JANGAN diubah tanpa alasan kuat:
     sisanya sesuai kebutuhan. Build rilis tetap hanya via GitHub Actions
     (aturan No. 1).
 
+14. **Mode perbaiki = maraton**: perintah "perbaiki/fix/lanjutkan" atas temuan
+    audit dikerjakan sampai habis — satu temuan satu perbaikan akar masalah,
+    tiap perbaikan selesai langsung commit + push (`feat:`/`fix:` + entri
+    `CHANGELOG.md`), tidak berhenti di tengah, tidak menumpuk perubahan.
+    Bila build gagal, perbaiki itu dulu sebelum lanjut ke temuan berikutnya.
+15. **Audit menyeluruh = sub-agen paralel + verifikasi mandiri**: pecah jadi
+    2–5 sub-agen per area (mis. scanner / UI-Compose / worker-service /
+    manifest), lalu verifikasi sendiri tiap klaim berat langsung ke kode
+    (`rg`/`sed`) sebelum masuk laporan atau patch — klaim sub-agen bukan fakta
+    sampai terbukti. Temuan wajib memuat `file:baris` + kenapa berbahaya +
+    skenario pemicu + level bahaya (Kritikal/Tinggi/Sedang/Rendah).
+
 ## Menambah/mengubah fitur — file mana yang disentuh
 
 - **Jenis scan baru** → `model/ScanModels.kt` (enum `ScanType`) + file baru di
