@@ -167,6 +167,15 @@ Hal berikut sengaja dipilih/dilarang — JANGAN diubah tanpa alasan kuat:
     (`rg`/`sed`) sebelum masuk laporan atau patch — klaim sub-agen bukan fakta
     sampai terbukti. Temuan wajib memuat `file:baris` + kenapa berbahaya +
     skenario pemicu + level bahaya (Kritikal/Tinggi/Sedang/Rendah).
+16. **Setiap temuan audit dicatat sebagai issue dulu**: hasil audit (mode
+    baca-saja) tidak langsung diperbaiki — tiap temuan yang lolos verifikasi
+    dibuatkan satu issue GitHub (`gh issue create`, satu issue = satu temuan)
+    berisi `file:baris`, kenapa berbahaya, skenario pemicu, level, dan ronde
+    audit. Perintah "perbaiki/lanjut" mengambil antrean dari issue terbuka
+    (level terberat dulu, lalu nomor tertua); commit menyebut `Closes #N` dan
+    issue ditutup setelah perbaikan di-push (temuan yang digugurkan ditutup
+    dengan alasan). Bila Issues dimatikan/`gh` tak ada, catat daftar bernomor
+    di file memori repo. Versi kanonik: `SOUL.md` memori agen.
 
 ## Menambah/mengubah fitur — file mana yang disentuh
 
