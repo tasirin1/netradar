@@ -4,7 +4,7 @@ Baca file ini SEBELUM mengubah, memperbaiki, atau mengelola repository ini.
 Panduan lengkap yang lain (fitur, cara pakai, troubleshooting) ada di
 `README.md`.
 
-Kontinuitas antar-sesi: di awal sesi jalankan `git -C /root/memori-agents-ai pull --ff-only`, lalu baca `/root/memori-agents-ai/SOUL.md` + `/root/memori-agents-ai/netradar.md` + `git status --short` + `git log --oneline -5` di repo ini; di akhir sesi update file memori itu, lalu commit + push ke repo memori (`memory: ...`).
+**Memori terpusat:** repo ini terhubung ke repo memori pusat `tasirin1/memori-agents-ai` (privat — https://github.com/tasirin1/memori-agents-ai), sumber kebenaran antar-sesi semua repo Tasirin. Awal sesi: `git pull --ff-only` di clone lokal repo memori (path menyesuaikan mesin; di mesin Muse: `~/workspace/memori-agents-ai`), lalu baca `SOUL.md` + `netradar.md` di sana, plus `git status --short` + `git log --oneline -5` di repo ini. Akhir sesi: update `netradar.md`, jalankan `python3 scripts/check_memory.py` di repo memori, lalu commit + push (`memory: netradar - <ringkasan>`). `AGENTS.md` ini mengatur pekerjaan di repo ini; aturan lintas repo versi kanoniknya di `SOUL.md` repo memori.
 
 ## Struktur repository
 
