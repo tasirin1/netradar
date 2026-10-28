@@ -26,9 +26,14 @@ rapi dan rilis selalu hijau. **Untuk AI yang mengelola repo: baca
 
 ## Dependabot
 
-Dependabot **sengaja dimatikan** di repo ini (keputusan tercatat di
-CHANGELOG): tidak ada PR update otomatis. Update dependensi dilakukan
-manual dan bertahap lewat CI.
+Dependabot aktif lagi sejak 2026-10-28 (keputusan owner, demi pemerataan
+pengelolaan repo; sebelumnya sempat dimatikan):
+
+- Update GitHub Actions di-auto-merge setelah CI hijau (workflow
+  Auto-merge).
+- Update dependensi Gradle **tidak** di-auto-merge — ditangani manual
+  setelah build CI hijau. Major AGP/Kotlin dan Compose BOM dikecualikan
+  dari PR otomatis (lihat `.github/dependabot.yml`).
 
 ## Label otomatis & issue/PR lama
 

@@ -7,6 +7,7 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ### Ditambah
 - Pemerataan sistem pengelolaan repo dengan repo Tasirin lain (pola tasirin-download-manager): workflow `Gitleaks` (deteksi secret ter-commit), `.github/CODEOWNERS`, `SECURITY.md`, `CONTRIBUTING.md`, `.editorconfig`, `scripts/cek-cepat.sh`, `tools/pasang-hook.sh` (kait pre-push), dan `tools/bekas-hapusan.txt` (daftar nama metode yang dihapus, dilarang dipakai lagi). Dependabot dan auto-merge TIDAK ditambahkan — Dependabot sengaja dimatikan di repo ini (lihat entri Diubah di bawah) dan keputusan itu dipertahankan.
+- Dependabot dihidupkan lagi + workflow Auto-merge (keputusan owner 2026-10-28, membalik entri pematian di bawah demi pemerataan penuh): Dependabot memantau gradle (berkelompok androidx/kotlinx; major AGP/Kotlin dan Compose BOM dikecualikan) dan github-actions (berkelompok); PR non-Gradle di-auto-merge sesudah CI hijau dengan deteksi berkas gagal-tertutup, PR Gradle tetap manual.
 
 ### Diubah
 - Dependabot dimatikan (hapus `dependabot.yml`): tak ada lagi PR update otomatis.

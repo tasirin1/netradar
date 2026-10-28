@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+    groups:
+      androidx:
+        patterns:
+          - "androidx*"
+      kotlinx:
+        patterns:
+          - "org.jetbrains.kotlinx*"
+    ignore:
+      # Major AGP/Kotlin ditangani manual bertahap, bukan PR otomatis.
+      - dependency-name: "com.android.application"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.jetbrains.kotlin.android"
+        update-types: ["version-update:semver-major"]
+      # Compose BOM 2024.06.00 dipilih karena fix bug komposisi; jangan
+      # diturunkan/dinaikkan otomatis tanpa pengujian (lihat AGENTS.md).
+      - dependency-name: "androidx.compose:compose-bom"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns:
+          - "*"
