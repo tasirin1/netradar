@@ -5,6 +5,9 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ## [Unreleased]
 
+### Ditambah
+- Pemerataan sistem pengelolaan repo dengan repo Tasirin lain (pola tasirin-download-manager): workflow `Gitleaks` (deteksi secret ter-commit), `.github/CODEOWNERS`, `SECURITY.md`, `CONTRIBUTING.md`, `.editorconfig`, `scripts/cek-cepat.sh`, `tools/pasang-hook.sh` (kait pre-push), dan `tools/bekas-hapusan.txt` (daftar nama metode yang dihapus, dilarang dipakai lagi). Dependabot dan auto-merge TIDAK ditambahkan — Dependabot sengaja dimatikan di repo ini (lihat entri Diubah di bawah) dan keputusan itu dipertahankan.
+
 ### Diubah
 - Dependabot dimatikan (hapus `dependabot.yml`): tak ada lagi PR update otomatis.
 - Skema versi + rilis: `versionName` semantic manual (`2.1.0`, …), rilis via tag `v*` (ganti rilis-menimpa `v2.0` tiap push).

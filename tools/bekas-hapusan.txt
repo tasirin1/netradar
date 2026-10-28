@@ -1,0 +1,5 @@
+# Daftar nama fungsi/metode yang sengaja dihapus dari repo ini.
+# Nama di daftar ini tidak boleh dipakai lagi untuk metode baru
+# (mencegah regresi hapusan hidup kembali). Tambahkan satu nama per baris
+# setiap kali menghapus metode. Berkas ini ditiru dari pola repo Tasirin
+# lain (tasirin-download-manager, tasirin-vaultwarden-host, Red-Eye-Mobile).
