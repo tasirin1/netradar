@@ -68,7 +68,20 @@ jobs:
           echo "Tidak ada perubahan kode/CI — CHANGELOG tidak wajib."
         fi
 
+    - name: Deteksi ketersediaan keystore
+      id: ks
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      run: |
+        if [ -n "$KEYSTORE_BASE64" ]; then
+          echo "ada=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ada=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::Secret keystore tidak tersedia di konteks ini (mis. PR Dependabot) - langkah khusus rilis dilewati; build debug + test + lint tetap jalan."
+        fi
+
     - name: Cek kesehatan keystore (fingerprint + masa berlaku)
+      if: steps.ks.outputs.ada == 'true'
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
       run: |
@@ -129,10 +142,16 @@ jobs:
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       run: |
+        if [ -z "$KEYSTORE_BASE64" ]; then
+          echo "Tanpa keystore resmi (konteks PR): build debug + test + lint saja."
+          gradle testDebugUnitTest lintDebug assembleDebug --no-daemon
+          exit 0
+        fi
         echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
         gradle testDebugUnitTest lintDebug assembleRelease --no-daemon
 
     - name: Verifikasi tanda tangan APK release
+      if: steps.ks.outputs.ada == 'true'
       run: |
         FINGERPRINT=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk 2>/dev/null | grep 'SHA-256 digest:' | head -1 | sed 's/.*SHA-256 digest: //;s/://g;s/ //g' | tr 'A-F' 'a-f')
         echo "Fingerprint: $FINGERPRINT"
@@ -143,6 +162,7 @@ jobs:
         echo "✅ Keystore resmi Tasirin terverifikasi"
 
     - name: VirusTotal scan APK release
+      if: steps.ks.outputs.ada == 'true'
       env:
         VT_API_KEY: ${{ secrets.VT_API_KEY }}
       run: |
@@ -182,9 +202,12 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: NetScan-APK
-        path: app/build/outputs/apk/release/*.apk
+        path: |
+          app/build/outputs/apk/release/*.apk
+          app/build/outputs/apk/debug/*.apk
 
     - name: Cek ukuran APK (maks 5 MB)
+      if: steps.ks.outputs.ada == 'true'
       run: |
         APK="app/build/outputs/apk/release/app-release.apk"
         SIZE=$(stat -c%s "$APK")

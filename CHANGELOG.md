@@ -16,6 +16,7 @@ Semua perubahan penting proyek ini dicatat di file ini. Format mengikuti
 
 ### Diperbaiki
 - Pin runner CI ke `ubuntu-24.04` (antisipasi migrasi `ubuntu-latest` → Ubuntu 26 mulai 2026-10-19).
+- Workflow Build kini ramah PR Dependabot: di konteks PR, secret repo (termasuk `KEYSTORE_BASE64`) tidak diteruskan GitHub sehingga langkah "Cek kesehatan keystore" selalu gagal dan menyembunyikan hasil build sebenarnya (semua PR Dependabot tampak merah di langkah yang sama). Kini ada langkah deteksi ketersediaan keystore — tanpa keystore, langkah khusus rilis (cek kesehatan keystore, verifikasi tanda tangan, VirusTotal, cek ukuran) dilewati dan build menjalankan `testDebugUnitTest lintDebug assembleDebug`; dengan keystore (push/tag) perilaku rilis tidak berubah.
 
 ### Diperbaiki
 - Smart cast reader di lambda `.use` (val lokal per iterasi).
